@@ -1,0 +1,78 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model SimUser {
+  id          String   @id @default(cuid())
+  name        String
+  birthDate   String
+  phone       String
+  address     String?
+  cardType    String?  @default("mobile")
+  cardNumber  String?  @unique
+  cardIssued  String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  loans       SimLoan[]
+  progress    LearningProgress[]
+}
+
+model Book {
+  id              String   @id @default(cuid())
+  isbn            String   @unique
+  title           String
+  author          String
+  publisher       String?
+  publishYear     Int?
+  category        String?
+  coverUrl        String?
+  totalCopies     Int      @default(3)
+  availableCopies Int      @default(3)
+  shelfLocation   String?
+  loans           SimLoan[]
+}
+
+model SimLoan {
+  id          String   @id @default(cuid())
+  userId      String
+  bookId      String
+  loanDate    String
+  dueDate     String
+  returnDate  String?
+  status      String   @default("active")
+  method      String?  @default("counter")
+  extended    Boolean  @default(false)
+  user        SimUser  @relation(fields: [userId], references: [id])
+  book        Book     @relation(fields: [bookId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model LearningProgress {
+  id            String   @id @default(cuid())
+  userId        String
+  scenarioId    String
+  stepIndex     Int      @default(0)
+  completed     Boolean  @default(false)
+  attempts      Int      @default(0)
+  bestTimeSec   Int?
+  stars         Int      @default(0)
+  updatedAt     DateTime @updatedAt
+  user          SimUser  @relation(fields: [userId], references: [id])
+}
+
+model Scenario {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  difficulty  String   @default("beginner")
+  stepsJson   String
+  category    String?
+  orderIndex  Int      @default(0)
+}

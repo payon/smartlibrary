@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { userId, bookId, method } = body
+    const { userId, bookId, method, pin } = body
 
     if (!userId || !bookId) {
       return NextResponse.json(
@@ -57,6 +57,28 @@ export async function POST(request: NextRequest) {
         { error: '사용자를 찾을 수 없습니다.' },
         { status: 404 },
       )
+    }
+
+    // For kiosk method, verify PIN
+    if (method === 'kiosk') {
+      if (!pin) {
+        return NextResponse.json(
+          { error: '비밀번호를 입력해주세요.' },
+          { status: 400 },
+        )
+      }
+      if (!user.pin) {
+        return NextResponse.json(
+          { error: '비밀번호가 설정되지 않았습니다. 도서증 발급 시 비밀번호를 설정해주세요.' },
+          { status: 400 },
+        )
+      }
+      if (user.pin !== pin) {
+        return NextResponse.json(
+          { error: '비밀번호가 일치하지 않습니다.' },
+          { status: 401 },
+        )
+      }
     }
 
     // Check overdue loans

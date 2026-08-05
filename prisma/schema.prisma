@@ -16,6 +16,7 @@ model SimUser {
   cardType    String?  @default("mobile")
   cardNumber  String?  @unique
   cardIssued  String?
+  pin         String?  @unique
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

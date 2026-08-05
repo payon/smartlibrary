@@ -10,6 +10,7 @@ export interface SimUser {
   cardType: string
   cardNumber: string
   cardIssued: string
+  pin: string
   isActive: boolean
   createdAt: string
 }

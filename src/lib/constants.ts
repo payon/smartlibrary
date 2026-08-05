@@ -180,7 +180,8 @@ export const SCENARIOS = [
       { step: 2, title: '생년월일 입력하기', description: '주민등록상 생년월일 8자리를 입력해주세요.' },
       { step: 3, title: '전화번호 입력하기', description: '휴대전화 번호를 입력해주세요.' },
       { step: 4, title: '주소 입력하기', description: '현재 거주하시는 주소를 입력해주세요.' },
-      { step: 5, title: '가입 완료하기', description: '모든 정보를 확인하고 가입을 완료합니다.' },
+      { step: 5, title: '비밀번호 설정하기', description: '키오스크 대여용 4자리 비밀번호를 설정합니다.' },
+      { step: 6, title: '가입 완료하기', description: '모든 정보를 확인하고 가입을 완료합니다.' },
     ]),
   },
   {
@@ -245,10 +246,11 @@ export const SCENARIOS = [
     category: 'kiosk',
     orderIndex: 5,
     stepsJson: JSON.stringify([
-      { step: 1, title: '키오스크 시작하기', description: '키오스크 화면을 터치하여 시작합니다.' },
-      { step: 2, title: '도서증 스캔하기', description: '모바일 도서증의 QR코드를 스캔합니다.' },
-      { step: 3, title: '빌릴 책 바코드 스캔', description: '빌리고 싶은 책의 바코드를 스캔합니다.' },
-      { step: 4, title: '대여 완료 확인', description: '대여 내역을 확인하고 완료를 누릅니다.' },
+      { step: 1, title: '키오스크 시작하기', description: '키오스크 화면을 터치하여 도서 대여를 선택합니다.' },
+      { step: 2, title: '책 선택하기', description: '빌릴 책을 최대 5권까지 선택합니다. 자동으로 바코드가 스캔됩니다.' },
+      { step: 3, title: '도서증 바코드 스캔', description: '모바일 도서증 또는 실물 도서증의 바코드를 스캔합니다.' },
+      { step: 4, title: '비밀번호 입력', description: '설정한 4자리 비밀번호를 입력합니다.' },
+      { step: 5, title: '대여 완료 확인', description: '대여 내역을 확인하고 완료를 누릅니다.' },
     ]),
   },
   {

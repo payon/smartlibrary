@@ -11,11 +11,27 @@ export const dynamic = 'force-dynamic'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { name, birthDate, phone, address } = body
+    const { name, birthDate, phone, address, pin } = body
 
     if (!name || !birthDate || !phone) {
       return NextResponse.json(
         { error: '이름, 생년월일, 전화번호는 필수 항목입니다.' },
+        { status: 400 },
+      )
+    }
+
+    if (!pin || !/^\d{4}$/.test(pin)) {
+      return NextResponse.json(
+        { error: '4자리 비밀번호를 입력해주세요.' },
+        { status: 400 },
+      )
+    }
+
+    // Check if PIN is already in use
+    const existingPin = await db.simUser.findUnique({ where: { pin } })
+    if (existingPin) {
+      return NextResponse.json(
+        { error: '이미 사용 중인 비밀번호입니다. 다른 번호를 선택해주세요.' },
         { status: 400 },
       )
     }
@@ -32,6 +48,7 @@ export async function POST(request: NextRequest) {
         cardType: 'mobile',
         cardNumber,
         cardIssued: today,
+        pin,
       },
     })
 

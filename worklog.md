@@ -249,4 +249,35 @@ Stage Summary:
 - Critical AnimatePresence bug fixed across all 8 view components
 - All P0 features verified working through browser automation
 - Kiosk exit mechanism added
-- Application is fully functional for M1 prototype delivery
+- Application is fully functional for M1 prototype delivery---
+Task ID: 4
+Agent: Main Orchestrator
+Task: 무인키오스크 PIN 인증 시스템 도입
+
+Work Log:
+- Prisma 스키마에 SimUser 모델에 pin 필드 추가 (String?, @unique)
+- db push로 스키마 적용, Prisma Client 재생성
+- Zustand Store SimUser 인터페이스에 pin 필드 추가
+- /api/users POST: PIN 4자리 필수 검증, 중복 PIN 체크, 저장
+- /api/users/[id]/card POST: PIN 설정 지원 (기존 유저가 PIN 없을 때)
+- /api/users/[id]/pin POST: PIN 설정(set) 및 검증(verify) 엔드포인트 신규 생성
+- /api/loans POST: kiosk method 시 PIN 필수 검증 로직 추가
+- RegistrationView 전면 수정: 8스텝으로 변경, 스텝 5에 PIN 설정 단계 추가
+  - 숫자 패드 UI (1-9, 0, 삭제), PIN 입력 4칸 + 확인 4칸 디스플레이
+  - 자동 전환 (입력 완료→확인), 일치/불일치 실시간 피드백
+  - 단순 PIN 거부 (0000, 1111, 1234, 4321, 0123)
+- CardIssuanceView 수정: PIN 미설정 유저에게 set-pin 페이즈 추가
+  - 숫자 패드, 2단계 (입력→확인), 완료 후 카드 타입 선택으로 이동
+- KioskLoanView 전면 개편: 새로운 키오스크 대여 플로우
+  - 기존: 시작→도서증 QR스캔→책 바코드 개별 스캔→확인→완료 (5스텝)
+  - 신규: 시작→책 5권 자동 스캔(체크박스 선택→자동스캔 버튼)→도서증 바코드 스캔→비밀번호 4자리 입력→확인→완료 (6스텝)
+  - 스텝 진행 표시 바 추가 (시각적 단계 인디케이터)
+  - PIN 입력 시 숫자 패드, ● 마스킹 디스플레이
+  - PIN 검증 실패 시 에러 표시 후 재입력 유도
+- 시나리오 stepsJson 업데이트: 회원가입에 PIN 설정 스텝, 키오스크 대여에 책 선택/비밀번호 스텝 추가
+
+Stage Summary:
+- 8개 파일 수정: schema.prisma, useAppStore.ts, users/route.ts, users/[id]/card/route.ts, users/[id]/pin/route.ts(신규), loans/route.ts, RegistrationView.tsx, CardIssuanceView.tsx, KioskLoanView.tsx, constants.ts
+- 4자리 PIN이 회원가입 또는 도서증 발급 시 필수 설정
+- 무인키오스크 대여 시: 책 자동 스캔→바코드 스캔→PIN 입력→대출
+- Lint 0 에러, 브라우저에서 PIN 입력 단계 및 API 동작 확인

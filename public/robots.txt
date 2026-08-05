@@ -1,14 +1,11 @@
-User-agent: Googlebot
-Allow: /
-
-User-agent: Bingbot
-Allow: /
-
-User-agent: Twitterbot
-Allow: /
-
-User-agent: facebookexternalhit
-Allow: /
+# 스마트 도서관 시뮬레이터 - robots.txt
+# 검색 엔진 크롤링 정책
 
 User-agent: *
 Allow: /
+
+# API 엔드포인트 크롤링 차단 (보안)
+Disallow: /api/
+
+# Sitemap (필요 시 활성화)
+# Sitemap: https://yourdomain.com/sitemap.xml

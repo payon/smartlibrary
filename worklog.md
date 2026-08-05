@@ -336,3 +336,47 @@ Stage Summary:
 - 대출 규정: 거주지 기반 전 도서관 이용, 최대 10권, 15일 대출, 연장 불가, 연체=대여 정지
 - 기존 연체료(100원/일) 시스템 완전 제거, 대여 정지 기간 시스템으로 대체
 - Lint 0 에러, 브라우저에서 약관 내용(10권/15일/연장 불가) 시각 확인 완료
+
+---
+Task ID: 7
+Agent: Main Orchestrator
+Task: PWA 구현, TWA 지원, 시큐어코딩, 한글 주석
+
+Work Log:
+- PWA 아이콘 6종 생성 (AI 이미지 생성 → sharp 리사이징): icon-192, icon-512, icon-1024, icon-180, favicon-32, maskable-192, maskable-512
+- manifest.json 생성 (스탠드얼론, 한국어, display_override, shortcuts, screenshots, TWA 호환 related_applications)
+- sw.js 서비스 워커 생성 (Cache First/Network First/Stale-While-Revalidate 3단계 캐싱 전략, 버전관리, 오프라인 폴백)
+- .well-known/assetlinks.json TWA Digital Asset Links 생성 (배포 시 package_name/sha256 교체 필요)
+- next.config.ts: poweredByHeader 제거, SW/manifest/icons/assetlinks 캐시 정책, 전체 경로에 OWASP/KISA 보안 헤더 적용
+- src/lib/security.ts 시큐어코딩 유틸리티 생성:
+  - XSS 방지 sanitizeString/sanitizeInput
+  - 입력 검증: validateCuid, validatePhoneNumber, validateBirthDate, validatePin, validateIsbn, validateDateRange, validateName
+  - 레이트 리미팅: checkRateLimit, checkPinRateLimit (메모리 기반, 자동 정리)
+  - 보안 헤더: SECURITY_HEADERS, getSecurityHeaders
+  - 요청 검증: validateRequestBodySize, validateJsonContentType
+  - 클라이언트 IP 추출: getClientIp
+- API 라우트 전면 보안 강화 (8개 파일):
+  - /api/users POST: 레이트 리미팅, Content-Type 검증, 본문 크기 제한, 입력값 검증(이름/전화번호/생년월일/PIN), XSS sanitization, PIN 유일성, 암호학적 난수 카드번호, 응답에서 PIN 제거
+  - /api/users/[id] GET: CUID 검증, 레이트 리미팅, 응답에서 PIN 제거
+  - /api/users/[id]/pin POST: CUID 검증, PIN 브루트포스 레이트 리미팅(5분당 5회), 타이밍 어택 방지(일정 응답 지연), 더미 비교(존재하지 않는 사용자)
+  - /api/users/[id]/card POST: CUID 검증, 화이트리스트 cardType 검증, PIN 검증 및 유일성, 응답에서 PIN 제거
+  - /api/loans POST: CUID 검증, PIN 브루트포스 레이트 리미팅, 연체/페널티 검사, 최대 10권 제한, 15일 고정 기간
+  - /api/loans/[id]/return POST: CUID 검증, 반납일 형식 검증
+  - /api/loans/[id]/extend POST: 항상 거부 (연장 불가 정책)
+  - /api/books GET: 검색어 길이 제한, XSS sanitization, 레이트 리미팅
+  - /api/progress GET/POST/PUT: CUID 검증, 타입 검증, 레이트 리미팅
+  - /api/progress/certificate GET: CUID 검증, 레이트 리미팅
+  - /api/seed POST: 레이트 리미팅 (1분당 1회)
+- layout.tsx PWA 지원 업데이트: manifest 링크, 다중 아이콘, apple-touch-icon, appleWebApp 메타데이터, 테마 컬러
+- src/hooks/use-pwa.ts PWA 훅 생성: 서비스 워커 등록, 업데이트 감지, 설치 프롬프트, 오프라인 감지
+- src/components/PwaStatus.tsx PWA 상태 UI 생성: 오프라인 배너, 업데이트 알림, 설치 FAB 버튼
+- page.tsx에 PwaStatus 컴포넌트 통합
+- 전체 소스코드에 한글 주석 추가 (API 라우트, 라이브러리, 훅, 스토어, 설정 파일)
+- robots.txt API 경로 크롤링 차단
+
+Stage Summary:
+- PWA: manifest.json, sw.js, 아이콘 6종, TWA assetlinks.json, use-pwa 훅, PwaStatus UI
+- 보안: OWASP/KISA 기반 보안 헤더(CSP/X-Frame-Options/HSTS 등), XSS 방지, SQL Injection 방지(Prisma), 입력 검증, 레이트 리미팅, PIN 브루트포스/타이밍 어택 방지
+- 데이터베이스 보안: 파라미터화 쿼리(Prisma ORM), 프로덕션 로그 비활성화, 응답에서 PIN 제거
+- 전체 소스 한글 주석 완료
+- 브라우저 검증: 온보딩 정상 렌더링, PWA 메타태그 확인(manifest/icon/theme-color), 보안 헤더 확인, API 보안 테스트 통과

@@ -1,4 +1,18 @@
-// Book seed data for the simulation
+/**
+ * 애플리케이션 상수 정의 모듈
+ *
+ * [내용]
+ * - 시드 도서 데이터 (15권)
+ * - 학습 시나리오 정의 (7개)
+ * - 대출 규정 상수 (최대 권수, 대출 기간, 연체 배수)
+ * - 타입 정의 (글꼴 크기, 뷰 이름)
+ */
+
+// ============================================================================
+// 시드 도서 데이터
+// ============================================================================
+
+/** 도서관 시뮬레이션용 시드 도서 데이터 */
 export const SEED_BOOKS = [
   {
     isbn: '9788932917245',
@@ -165,8 +179,13 @@ export const SEED_BOOKS = [
     totalCopies: 4,
     availableCopies: 2,
   },
-]
+];
 
+// ============================================================================
+// 학습 시나리오 데이터
+// ============================================================================
+
+/** 도서관 이용 학습 시나리오 정의 */
 export const SCENARIOS = [
   {
     id: 'scenario-signup',
@@ -267,13 +286,29 @@ export const SCENARIOS = [
       { step: 4, title: '반납 완료하기', description: '반납을 완료합니다.' },
     ]),
   },
-]
+];
 
-export const MAX_LOAN_COUNT = 10
-export const LOAN_PERIOD_DAYS = 15
-export const OVERDUE_BLOCK_MULTIPLIER = 1 // 연체일수 × 이 배수만큼 대여 정지
+// ============================================================================
+// 대출 규정 상수
+// ============================================================================
 
-export type FontSize = 'normal' | 'large' | 'xlarge'
+/** 최대 대출 가능 권수 (거주지 기반, 모든 도서관 합산) */
+export const MAX_LOAN_COUNT = 10;
+
+/** 대출 기간 (일) - 연장 불가, 고정 15일 */
+export const LOAN_PERIOD_DAYS = 15;
+
+/** 연체 정지 배수 - 연체일수 × 이 값만큼 대여 정지 (1 = 1:1 동일) */
+export const OVERDUE_BLOCK_MULTIPLIER = 1;
+
+// ============================================================================
+// 타입 정의
+// ============================================================================
+
+/** 글꼴 크기 옵션 타입 */
+export type FontSize = 'normal' | 'large' | 'xlarge';
+
+/** 뷰 이름 타입 (SPA 라우팅에 사용) */
 export type ViewName =
   | 'onboarding'
   | 'home'
@@ -286,4 +321,4 @@ export type ViewName =
   | 'kiosk-return'
   | 'learning-progress'
   | 'settings'
-  | 'completion'
+  | 'completion';

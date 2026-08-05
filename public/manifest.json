@@ -1,0 +1,72 @@
+{
+  "name": "스마트 도서관 시뮬레이터",
+  "short_name": "SmartLib",
+  "description": "시니어 친화적인 스마트 도서관 이용 연습 시뮬레이터",
+  "start_url": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "window-controls-overlay"],
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "16a34a",
+  "scope": "/",
+  "lang": "ko",
+  "dir": "ltr",
+  "prefer_related_applications": false,
+  "related_applications": [],
+  "categories": ["education", "lifestyle"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-1024.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/maskable-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/maskable-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "스마트 도서관 시뮬레이터 메인 화면"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "도서 검색",
+      "short_name": "검색",
+      "url": "/?action=book-search",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "대출 현황",
+      "short_name": "대출",
+      "url": "/?action=counter-loan",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

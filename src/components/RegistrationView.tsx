@@ -84,6 +84,7 @@ export default function RegistrationView() {
   const [scrollProgress, setScrollProgress] = useState(0)
   const [scanning, setScanning] = useState(false)
   const [scanComplete, setScanComplete] = useState(false)
+  const [pinMode, setPinMode] = useState<'pin' | 'confirm'>('pin')
   const [creating, setCreating] = useState(false)
   const [showConfetti, setShowConfetti] = useState(false)
   const [createdUser, setCreatedUser] = useState<any>(null)
@@ -123,6 +124,7 @@ export default function RegistrationView() {
       setView('home')
       return
     }
+    if (step === 6) setPinMode('pin')
     setStep((s) => s - 1)
   }, [step, setView])
 
@@ -292,7 +294,7 @@ export default function RegistrationView() {
   )
 
   // Number pad for PIN
-  const NumberPad = ({ onInput, maxLength, value, field }: { onInput: (val: string) => void; maxLength: number; value: string; field: 'pin' | 'pinConfirm' }) => (
+  const NumberPad = ({ onInput, onDeleteBack, maxLength, value }: { onInput: (val: string) => void; onDeleteBack?: () => void; maxLength: number; value: string }) => (
     <div className="grid grid-cols-3 gap-3 w-full max-w-xs mx-auto">
       {[1, 2, 3, 4, 5, 6, 7, 8, 9, null, 0, 'delete'].map((num) => {
         if (num === null) return <div key="empty" />
@@ -303,7 +305,11 @@ export default function RegistrationView() {
             whileTap={{ scale: 0.92 }}
             onClick={() => {
               if (isDelete) {
-                onInput(value.slice(0, -1))
+                if (value.length === 0 && onDeleteBack) {
+                  onDeleteBack()
+                } else {
+                  onInput(value.slice(0, -1))
+                }
               } else if (value.length < maxLength) {
                 onInput(value + String(num))
               }
@@ -471,38 +477,40 @@ export default function RegistrationView() {
                       <PinDigitBox
                         key={i}
                         value={formData.pin[i] || ''}
-                        active={formData.pin.length === i}
+                        active={pinMode === 'pin' && formData.pin.length === i}
                         index={i}
                       />
                     ))}
                   </div>
                 </div>
 
-                <div>
-                  <p className="text-body text-muted-foreground text-center mb-3">비밀번호 확인</p>
-                  <div className="flex items-center justify-center gap-3">
-                    {[0, 1, 2, 3].map((i) => {
-                      const isMatch = formData.pinConfirm.length > i
-                        && formData.pin[i] === formData.pinConfirm[i]
-                      const isMismatch = formData.pinConfirm.length > i
-                        && formData.pin[i] !== formData.pinConfirm[i]
-                      return (
-                        <div
-                          key={i}
-                          className={cn(
-                            'flex h-16 w-16 items-center justify-center rounded-2xl border-3 text-heading font-bold transition-all duration-200 sm:h-20 sm:w-20',
-                            formData.pinConfirm.length === i && 'border-primary bg-primary/10 scale-105',
-                            isMatch && formData.pinConfirm.length > i && 'border-emerald-500 bg-emerald-500/10 text-emerald-600',
-                            isMismatch && 'border-destructive bg-destructive/10 text-destructive',
-                            !isMatch && !isMismatch && formData.pinConfirm.length !== i && 'border-border bg-card'
-                          )}
-                        >
-                          {formData.pinConfirm[i] || <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />}
-                        </div>
-                      )
-                    })}
+                {pinMode === 'confirm' && (
+                  <div>
+                    <p className="text-body text-muted-foreground text-center mb-3">비밀번호 확인</p>
+                    <div className="flex items-center justify-center gap-3">
+                      {[0, 1, 2, 3].map((i) => {
+                        const isMatch = formData.pinConfirm.length > i
+                          && formData.pin[i] === formData.pinConfirm[i]
+                        const isMismatch = formData.pinConfirm.length > i
+                          && formData.pin[i] !== formData.pinConfirm[i]
+                        return (
+                          <div
+                            key={i}
+                            className={cn(
+                              'flex h-16 w-16 items-center justify-center rounded-2xl border-3 text-heading font-bold transition-all duration-200 sm:h-20 sm:w-20',
+                              formData.pinConfirm.length === i && 'border-primary bg-primary/10 scale-105',
+                              isMatch && formData.pinConfirm.length > i && 'border-emerald-500 bg-emerald-500/10 text-emerald-600',
+                              isMismatch && 'border-destructive bg-destructive/10 text-destructive',
+                              !isMatch && !isMismatch && formData.pinConfirm.length !== i && 'border-border bg-card'
+                            )}
+                          >
+                            {formData.pinConfirm[i] || <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />}
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
 
               {errors.pin && (
@@ -511,27 +519,37 @@ export default function RegistrationView() {
               {errors.pinConfirm && (
                 <motion.p initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="text-caption text-destructive text-center">{errors.pinConfirm}</motion.p>
               )}
-              {formData.pin.length === 4 && formData.pinConfirm.length === 4 && formData.pin === formData.pinConfirm && !errors.pin && (
+              {pinMode === 'confirm' && formData.pinConfirm.length === 4 && formData.pin === formData.pinConfirm && !errors.pin && (
                 <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-body text-emerald-600 font-semibold text-center">
                   ✓ 비밀번호가 일치합니다
                 </motion.p>
               )}
 
-              {/* Number pad - auto switches between pin and pinConfirm */}
+              {/* Number pad */}
               <NumberPad
                 onInput={(val) => {
-                  const field = formData.pin.length < 4 ? 'pin' : 'pinConfirm'
-                  if (field === 'pin') {
+                  if (pinMode === 'pin') {
                     setFormData({ ...formData, pin: val, pinConfirm: '' })
                     if (errors.pin) setErrors({ ...errors, pin: undefined })
+                    if (val.length === 4) {
+                      const err = validatePin(val)
+                      if (err) {
+                        setErrors({ ...errors, pin: err })
+                        if (ttsEnabled) speak(err)
+                      } else {
+                        setPinMode('confirm')
+                      }
+                    }
                   } else {
                     setFormData({ ...formData, pinConfirm: val })
                     if (errors.pinConfirm) setErrors({ ...errors, pinConfirm: undefined })
                   }
                 }}
+                onDeleteBack={pinMode === 'confirm' ? () => {
+                  setPinMode('pin')
+                } : undefined}
                 maxLength={4}
-                value={formData.pin.length < 4 ? formData.pin : formData.pinConfirm}
-                field={formData.pin.length < 4 ? 'pin' : 'pinConfirm'}
+                value={pinMode === 'pin' ? formData.pin : formData.pinConfirm}
               />
 
               <div className="flex items-center gap-2 text-muted-foreground">

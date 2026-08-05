@@ -250,6 +250,30 @@ Stage Summary:
 - All P0 features verified working through browser automation
 - Kiosk exit mechanism added
 - Application is fully functional for M1 prototype delivery---
+Task ID: 5-fix
+Agent: Main Orchestrator
+Task: 비밀번호 일치 표시 후 다음 버튼 비활성화 버그 수정
+
+Work Log:
+- RegistrationView.tsx PIN 스텝(스텝 5)에서 "✓ 비밀번호가 일치합니다" 메시지가 표시되어도 다음 버튼이 disabled 상태로 유지되는 버그 수정
+- 원인: canProceed()는 validatePin(formData.pin)을 호출해 단순 PIN(1234, 1111 등)을 거부하지만, 화면의 일치 메시지는 !errors.pin만 체크(초기값 undefined=falsy)하여 불일치 발생
+- 수정 내용:
+  1. NumberPad 컴포넌트에 onDeleteBack prop 추가 (pinConfirm이 비었을 때 삭제 시 pin 입력 모드로 복귀)
+  2. pinMode 상태('pin' | 'confirm') 추가하여 PIN 입력/확인 모드 명확히 구분
+  3. PIN 4자리 입력 즉시 validatePin 실행하여 에러 실시간 표시
+  4. PIN이 유효한 경우에만 확인 모드로 전환 (setPinMode('confirm'))
+  5. "✓ 비밀번호가 일치합니다" 조건에 pinValid 체크 추가
+  6. 스텝 6에서 뒤로가기 시 pinMode를 'pin'으로 리셋
+- CardIssuanceView.tsx는 이미 PIN 유효성 검사 후 확인 단계로 전환하는 로직이 있어 동일 문제 없음 (확인 완료)
+
+Stage Summary:
+- RegistrationView.tsx 수정: NumberPad onDeleteBack prop, pinMode 상태, 실시간 PIN 검증
+- 단순 PIN(1234 등) 입력 시 즉시 에러 메시지 표시, 확인 모드 진입 불가
+- 유효 PIN 입력 후 확인까지 완료하면 다음 버튼 정상 활성화
+- 브라우저 검증 완료: 1234 입력→에러 표시 / 5678 입력→확인 모드 전환 / 5678 확인→일치 메시지+다음 버튼 활성화→스텝 6 진행 확인
+- Lint 0 에러
+
+---
 Task ID: 4
 Agent: Main Orchestrator
 Task: 무인키오스크 PIN 인증 시스템 도입

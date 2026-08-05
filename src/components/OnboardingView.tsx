@@ -223,7 +223,7 @@ export default function OnboardingView() {
             <motion.div
               initial={{ scale: 0 }}
               animate={{ scale: 1, rotate: [0, 10, -10, 0] }}
-              transition={{ duration: 0.8, type: 'spring' }}
+              transition={{ duration: 0.8, ease: 'easeInOut' }}
               className="flex h-28 w-28 items-center justify-center rounded-full bg-primary/10"
             >
               <BookOpen className="h-16 w-16 text-primary" />

@@ -1,0 +1,870 @@
+     1→'use client'
+     2→
+     3→import { useState, useEffect } from 'react'
+     4→import { motion, AnimatePresence } from 'framer-motion'
+     5→import {
+     6→  BookOpen,
+     7→  CheckCircle,
+     8→  CreditCard,
+     9→  AlertTriangle,
+    10→  Clock,
+    11→  UserCheck,
+    12→  Star,
+    13→  ChevronRight,
+    14→  Library,
+    15→  Search,
+    16→  X,
+    17→  ArrowRight,
+    18→} from 'lucide-react'
+    19→import { useAppStore, type BookItem, type LoanItem } from '@/stores/useAppStore'
+    20→import { cn } from '@/lib/utils'
+    21→import { speak } from '@/lib/tts'
+    22→import TopBar from '@/components/TopBar'
+    23→import { Badge } from '@/components/ui/badge'
+    24→import { Checkbox } from '@/components/ui/checkbox'
+    25→import { Separator } from '@/components/ui/separator'
+    26→import {
+    27→  AlertDialog,
+    28→  AlertDialogAction,
+    29→  AlertDialogCancel,
+    30→  AlertDialogContent,
+    31→  AlertDialogDescription,
+    32→  AlertDialogFooter,
+    33→  AlertDialogHeader,
+    34→  AlertDialogTitle,
+    35→} from '@/components/ui/alert-dialog'
+    36→import { toast } from 'sonner'
+    37→import { MAX_LOAN_COUNT, LOAN_PERIOD_DAYS, EXTEND_DAYS } from '@/lib/constants'
+    38→
+    39→type LoanStep = 1 | 2 | 3 | 4 | 5 | 6
+    40→
+    41→// Format date to Korean
+    42→function formatDate(dateStr: string): string {
+    43→  const d = new Date(dateStr)
+    44→  return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`
+    45→}
+    46→
+    47→// Add days to date
+    48→function addDays(date: Date, days: number): Date {
+    49→  const result = new Date(date)
+    50→  result.setDate(result.getDate() + days)
+    51→  return result
+    52→}
+    53→
+    54→// Step progress bar
+    55→function StepProgress({ current, total }: { current: number; total: number }) {
+    56→  return (
+    57→    <div className="mb-4">
+    58→      <div className="flex items-center gap-1">
+    59→        {Array.from({ length: total }).map((_, i) => (
+    60→          <div
+    61→            key={i}
+    62→            className={cn(
+    63→              'h-2 flex-1 rounded-full transition-colors',
+    64→              i + 1 <= current ? 'bg-primary' : 'bg-muted'
+    65→            )}
+    66→          />
+    67→        ))}
+    68→      </div>
+    69→      <p className="mt-1 text-center text-caption text-muted-foreground">
+    70→        {current} / {total}단계
+    71→      </p>
+    72→    </div>
+    73→  )
+    74→}
+    75→
+    76→// Category-based colors
+    77→const CATEGORY_COLORS: Record<string, { bg: string; icon: string }> = {
+    78→  소설: { bg: 'bg-rose-100', icon: 'text-rose-600' },
+    79→  인문: { bg: 'bg-amber-100', icon: 'text-amber-700' },
+    80→  과학: { bg: 'bg-teal-100', icon: 'text-teal-700' },
+    81→  시: { bg: 'bg-violet-100', icon: 'text-violet-700' },
+    82→  역사: { bg: 'bg-sky-100', icon: 'text-sky-700' },
+    83→}
+    84→
+    85→export default function CounterLoanView() {
+    86→  const {
+    87→    currentUser,
+    88→    setView,
+    89→    ttsEnabled,
+    90→    isMissionMode,
+    91→    completeMissionStep,
+    92→    currentMissionStep,
+    93→  } = useAppStore()
+    94→
+    95→  const [step, setStep] = useState<LoanStep>(1)
+    96→  const [cardPresented, setCardPresented] = useState(false)
+    97→  const [books, setBooks] = useState<BookItem[]>([])
+    98→  const [activeLoans, setActiveLoans] = useState<LoanItem[]>([])
+    99→  const [selectedBooks, setSelectedBooks] = useState<BookItem[]>([])
+   100→  const [loading, setLoading] = useState(false)
+   101→  const [confirmOpen, setConfirmOpen] = useState(false)
+   102→  const [loansCreated, setLoansCreated] = useState(false)
+   103→  const [loanResults, setLoanResults] = useState<{ book: BookItem; dueDate: string }[]>([])
+   104→  const [librarianMessage, setLibrarianMessage] = useState('')
+   105→  const [cardAnimation, setCardAnimation] = useState(false)
+   106→
+   107→  // Fetch available books and active loans
+   108→  const refreshData = async () => {
+   109→    if (!currentUser) return
+   110→    try {
+   111→      const [booksRes, loansRes] = await Promise.all([
+   112→        fetch('/api/books'),
+   113→        fetch(`/api/loans?userId=${currentUser.id}`),
+   114→      ])
+   115→      if (booksRes.ok) {
+   116→        const booksData = await booksRes.json()
+   117→        setBooks(booksData.filter((b: BookItem) => b.availableCopies > 0))
+   118→      }
+   119→      if (loansRes.ok) {
+   120→        const loansData = await loansRes.json()
+   121→        const active = loansData.filter((l: LoanItem) => l.status === 'active')
+   122→        setActiveLoans(active)
+   123→      }
+   124→    } catch {
+   125→      // ignore
+   126→    }
+   127→  }
+   128→
+   129→  useEffect(() => {
+   130→    let cancelled = false
+   131→    async function loadData() {
+   132→      if (!currentUser) return
+   133→      try {
+   134→        const [booksRes, loansRes] = await Promise.all([
+   135→          fetch('/api/books'),
+   136→          fetch(`/api/loans?userId=${currentUser.id}`),
+   137→        ])
+   138→        if (cancelled) return
+   139→        if (booksRes.ok) {
+   140→          const booksData = await booksRes.json()
+   141→          setBooks(booksData.filter((b: BookItem) => b.availableCopies > 0))
+   142→        }
+   143→        if (loansRes.ok) {
+   144→          const loansData = await loansRes.json()
+   145→          const active = loansData.filter((l: LoanItem) => l.status === 'active')
+   146→          setActiveLoans(active)
+   147→        }
+   148→      } catch {
+   149→        // ignore
+   150→      }
+   151→    }
+   152→    loadData()
+   153→    return () => { cancelled = true }
+   154→  }, [currentUser])
+   155→
+   156→  // TTS on step change
+   157→  useEffect(() => {
+   158→    if (!ttsEnabled) return
+   159→    const messages: Record<LoanStep, string> = {
+   160→      1: '사서님께 도서증을 제시해주세요.',
+   161→      2: '빌리고 싶은 책을 선택해주세요. 최대 5권까지 빌릴 수 있습니다.',
+   162→      3: '대여 권수를 확인해주세요.',
+   163→      4: '연체된 도서가 있는지 확인해주세요.',
+   164→      5: '대여할 책과 반납일을 확인해주세요.',
+   165→      6: '대여가 완료되었습니다.',
+   166→    }
+   167→    speak(messages[step])
+   168→  }, [step, ttsEnabled])
+   169→
+   170→  // Pre-requisite check
+   171→  if (!currentUser) {
+   172→    return (
+   173→      <div className="flex min-h-screen flex-col bg-background">
+   174→        <TopBar title="창구 대여" />
+   175→        <main className="mx-auto flex w-full max-w-lg flex-1 flex-col items-center justify-center gap-6 px-4">
+   176→          <CreditCard className="h-16 w-16 text-muted-foreground/50" />
+   177→          <h2 className="text-title text-foreground">회원가입이 필요합니다</h2>
+   178→          <p className="text-body text-muted-foreground text-center">
+   179→            먼저 회원가입을 해주세요
+   180→          </p>
+   181→          <button
+   182→            onClick={() => setView('registration')}
+   183→            className="btn-senior bg-primary text-primary-foreground rounded-xl"
+   184→          >
+   185→            <UserCheck className="h-6 w-6" />
+   186→            회원가입하기
+   187→          </button>
+   188→        </main>
+   189→      </div>
+   190→    )
+   191→  }
+   192→
+   193→  // Toggle book selection
+   194→  const toggleBook = (book: BookItem) => {
+   195→    setSelectedBooks((prev) => {
+   196→      const exists = prev.find((b) => b.id === book.id)
+   197→      if (exists) {
+   198→        return prev.filter((b) => b.id !== book.id)
+   199→      }
+   200→      if (prev.length >= MAX_LOAN_COUNT) {
+   201→        toast.warning(`최대 ${MAX_LOAN_COUNT}권까지 선택할 수 있습니다.`)
+   202→        return prev
+   203→      }
+   204→      return [...prev, book]
+   205→    })
+   206→  }
+   207→
+   208→  // Step 1: Present card
+   209→  const handlePresentCard = () => {
+   210→    setCardAnimation(true)
+   211→    setLibrarianMessage('네, 확인했습니다')
+   212→    setTimeout(() => {
+   213→      setCardPresented(true)
+   214→      if (ttsEnabled) speak('네, 확인했습니다. 도서증을 확인했습니다.')
+   215→      if (isMissionMode) completeMissionStep()
+   216→    }, 1500)
+   217→  }
+   218→
+   219→  // Go to next step after selection
+   220→  const handleNextFromSelection = () => {
+   221→    if (selectedBooks.length === 0) {
+   222→      toast.warning('최소 1권 이상 선택해주세요.')
+   223→      return
+   224→    }
+   225→
+   226→    // Check if already at max loans
+   227→    const totalLoans = activeLoans.length + selectedBooks.length
+   228→    if (totalLoans > MAX_LOAN_COUNT) {
+   229→      setStep(3)
+   230→      return
+   231→    }
+   232→
+   233→    // Check for overdue loans
+   234→    const today = new Date()
+   235→    const hasOverdue = activeLoans.some((loan) => new Date(loan.dueDate) < today)
+   236→    if (hasOverdue) {
+   237→      setStep(4)
+   238→      return
+   239→    }
+   240→
+   241→    setStep(5)
+   242→    if (isMissionMode) completeMissionStep()
+   243→  }
+   244→
+   245→  // Step 5: Confirm loan
+   246→  const handleConfirmLoan = async () => {
+   247→    setConfirmOpen(false)
+   248→    setLoading(true)
+   249→
+   250→    const today = new Date()
+   251→    const results: { book: BookItem; dueDate: string }[] = []
+   252→
+   253→    for (const book of selectedBooks) {
+   254→      try {
+   255→        const res = await fetch('/api/loans', {
+   256→          method: 'POST',
+   257→          headers: { 'Content-Type': 'application/json' },
+   258→          body: JSON.stringify({
+   259→            userId: currentUser.id,
+   260→            bookId: book.id,
+   261→            method: 'counter',
+   262→          }),
+   263→        })
+   264→        if (res.ok) {
+   265→          const dueDate = addDays(today, LOAN_PERIOD_DAYS)
+   266→          results.push({
+   267→            book,
+   268→            dueDate: dueDate.toISOString().split('T')[0],
+   269→          })
+   270→        } else {
+   271→          const data = await res.json()
+   272→          toast.error(data.error || `${book.title} 대출에 실패했습니다.`)
+   273→        }
+   274→      } catch {
+   275→        toast.error('네트워크 오류가 발생했습니다.')
+   276→      }
+   277→    }
+   278→
+   279→    setLoanResults(results)
+   280→    setLoansCreated(true)
+   281→    setStep(6)
+   282→    setLoading(false)
+   283→
+   284→    if (results.length > 0) {
+   285→      if (ttsEnabled) {
+   286→        speak(`대여가 완료되었습니다. ${results.length}권을 빌렸습니다.`)
+   287→      }
+   288→      if (isMissionMode) completeMissionStep()
+   289→    }
+   290→
+   291→    // Refresh active loans
+   292→    refreshData()
+   293→  }
+   294→
+   295→  return (
+   296→    <div className="flex min-h-screen flex-col bg-background">
+   297→      <TopBar
+   298→        title="창구 대여"
+   299→        helpText="창구 대여 화면입니다. 사서님께 도서증을 보여주고 책을 빌리는 연습을 합니다."
+   300→      />
+   301→
+   302→      <main className="mx-auto w-full max-w-lg flex-1 px-4 py-6">
+   303→        <StepProgress current={step} total={6} />
+   304→
+   305→        <AnimatePresence mode="wait">
+   306→          {/* Step 1: Present Card */}
+   307→          {step === 1 && (
+   308→            <motion.div
+   309→              key="step1"
+   310→              initial={{ opacity: 0, x: 50 }}
+   311→              animate={{ opacity: 1, x: 0 }}
+   312→              exit={{ opacity: 0, x: -50 }}
+   313→              className="flex flex-col gap-6"
+   314→            >
+   315→              <h2 className="text-title text-foreground text-center">
+   316→                도서증 제시
+   317→              </h2>
+   318→
+   319→              {/* Counter desk scene */}
+   320→              <div className="card-senior flex flex-col items-center gap-4">
+   321→                {/* Desk illustration */}
+   322→                <div className="w-full rounded-xl bg-amber-100/60 p-6">
+   323→                  <div className="flex items-center gap-4">
+   324→                    {/* Librarian avatar */}
+   325→                    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-emerald-500">
+   326→                      <span className="text-heading text-white font-bold">사</span>
+   327→                    </div>
+   328→                    <div className="flex-1">
+   329→                      <p className="text-body font-bold text-foreground">사서님</p>
+   330→                      <p className="text-caption text-muted-foreground">
+   331→                        도서증을 보여주세요
+   332→                      </p>
+   333→                    </div>
+   334→                    <Library className="h-8 w-8 text-emerald-600" />
+   335→                  </div>
+   336→                </div>
+   337→
+   338→                {/* User's card */}
+   339→                <motion.div
+   340→                  animate={cardAnimation ? { y: [0, -20, -60], opacity: [1, 1, 0] } : {}}
+   341→                  transition={{ duration: 1.2 }}
+   342→                  className={cn(
+   343→                    'w-full rounded-xl border-2 bg-gradient-to-br from-emerald-600 to-teal-500 p-4 text-white shadow-lg',
+   344→                    cardAnimation && 'opacity-0'
+   345→                  )}
+   346→                >
+   347→                  <div className="flex items-center justify-between">
+   348→                    <div>
+   349→                      <p className="text-caption text-white/70">스마트 도서관</p>
+   350→                      <p className="text-heading font-bold">{currentUser.name}</p>
+   351→                      <p className="text-body mt-1 font-mono">{currentUser.cardNumber}</p>
+   352→                    </div>
+   353→                    <CreditCard className="h-10 w-10 text-white/60" />
+   354→                  </div>
+   355→                </motion.div>
+   356→
+   357→                {/* Librarian message */}
+   358→                {librarianMessage && (
+   359→                  <motion.div
+   360→                    initial={{ opacity: 0, scale: 0.9 }}
+   361→                    animate={{ opacity: 1, scale: 1 }}
+   362→                    className="w-full rounded-xl bg-emerald-50 border-2 border-emerald-200 p-4"
+   363→                  >
+   364→                    <div className="flex items-center gap-3">
+   365→                      <CheckCircle className="h-6 w-6 text-emerald-600" />
+   366→                      <p className="text-body font-bold text-emerald-800">
+   367→                        {librarianMessage}
+   368→                      </p>
+   369→                    </div>
+   370→                  </motion.div>
+   371→                )}
+   372→
+   373→                {!cardPresented && (
+   374→                  <button
+   375→                    onClick={handlePresentCard}
+   376→                    className="btn-senior w-full bg-primary text-primary-foreground rounded-xl"
+   377→                  >
+   378→                    <CreditCard className="h-6 w-6" />
+   379→                    도서증을 제시합니다
+   380→                  </button>
+   381→                )}
+   382→
+   383→                {cardPresented && (
+   384→                  <button
+   385→                    onClick={() => {
+   386→                      setStep(2)
+   387→                      if (isMissionMode) completeMissionStep()
+   388→                    }}
+   389→                    className="btn-senior w-full bg-primary text-primary-foreground rounded-xl"
+   390→                  >
+   391→                    <ChevronRight className="h-6 w-6" />
+   392→                    다음 단계로
+   393→                  </button>
+   394→                )}
+   395→              </div>
+   396→            </motion.div>
+   397→          )}
+   398→
+   399→          {/* Step 2: Select books */}
+   400→          {step === 2 && (
+   401→            <motion.div
+   402→              key="step2"
+   403→              initial={{ opacity: 0, x: 50 }}
+   404→              animate={{ opacity: 1, x: 0 }}
+   405→              exit={{ opacity: 0, x: -50 }}
+   406→              className="flex flex-col gap-6"
+   407→            >
+   408→              <h2 className="text-title text-foreground text-center">
+   409→                빌릴 책 선택
+   410→              </h2>
+   411→
+   412→              {/* Current active loans count */}
+   413→              <div className="flex items-center gap-4">
+   414→                <div className="card-senior flex flex-1 items-center gap-3">
+   415→                  <BookOpen className="h-6 w-6 text-primary" />
+   416→                  <div>
+   417→                    <p className="text-caption text-muted-foreground">현재 대출</p>
+   418→                    <p className="text-body font-bold text-foreground">{activeLoans.length}권</p>
+   419→                  </div>
+   420→                </div>
+   421→                <div className="card-senior flex flex-1 items-center gap-3">
+   422→                  <BookOpen className="h-6 w-6 text-emerald-500" />
+   423→                  <div>
+   424→                    <p className="text-caption text-muted-foreground">대출 가능</p>
+   425→                    <p className="text-body font-bold text-foreground">
+   426→                      {Math.max(0, MAX_LOAN_COUNT - activeLoans.length)}권
+   427→                    </p>
+   428→                  </div>
+   429→                </div>
+   430→              </div>
+   431→
+   432→              {/* Selected books summary */}
+   433→              {selectedBooks.length > 0 && (
+   434→                <div className="rounded-xl bg-primary/5 border-2 border-primary/20 p-4">
+   435→                  <p className="text-body font-bold text-primary mb-2">
+   436→                    선택한 책: {selectedBooks.length}권
+   437→                  </p>
+   438→                  <div className="flex flex-wrap gap-2">
+   439→                    {selectedBooks.map((b) => (
+   440→                      <Badge key={b.id} variant="secondary" className="text-caption py-1.5 px-3">
+   441→                        {b.title}
+   442→                        <button
+   443→                          onClick={() => toggleBook(b)}
+   444→                          className="ml-2 text-muted-foreground hover:text-foreground"
+   445→                        >
+   446→                          <X className="h-4 w-4" />
+   447→                        </button>
+   448→                      </Badge>
+   449→                    ))}
+   450→                  </div>
+   451→                </div>
+   452→              )}
+   453→
+   454→              {/* Book list */}
+   455→              <div className="max-h-80 overflow-y-auto custom-scrollbar flex flex-col gap-3">
+   456→                {books.map((book, index) => {
+   457→                  const isSelected = selectedBooks.some((b) => b.id === book.id)
+   458→                  const colors = CATEGORY_COLORS[book.category] || { bg: 'bg-slate-100', icon: 'text-slate-600' }
+   459→
+   460→                  return (
+   461→                    <motion.div
+   462→                      key={book.id}
+   463→                      initial={{ opacity: 0, y: 10 }}
+   464→                      animate={{ opacity: 1, y: 0 }}
+   465→                      transition={{ delay: index * 0.03 }}
+   466→                      onClick={() => toggleBook(book)}
+   467→                      className={cn(
+   468→                        'card-senior cursor-pointer transition-all',
+   469→                        isSelected && 'border-primary bg-primary/5'
+   470→                      )}
+   471→                    >
+   472→                      <div className="flex items-center gap-3">
+   473→                        {/* Checkbox */}
+   474→                        <div
+   475→                          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border-2 transition-colors"
+   476→                          style={{
+   477→                            borderColor: isSelected ? 'var(--primary)' : 'var(--border)',
+   478→                            background: isSelected ? 'var(--primary)' : 'var(--card)',
+   479→                          }}
+   480→                        >
+   481→                          {isSelected && (
+   482→                            <CheckCircle className="h-8 w-8 text-primary-foreground" />
+   483→                          )}
+   484→                        </div>
+   485→
+   486→                        {/* Book cover */}
+   487→                        <div className={cn('flex h-14 w-10 shrink-0 items-center justify-center rounded-lg', colors.bg)}>
+   488→                          <BookOpen className={cn('h-6 w-6', colors.icon)} />
+   489→                        </div>
+   490→
+   491→                        {/* Info */}
+   492→                        <div className="flex-1 min-w-0">
+   493→                          <h4 className="text-body font-bold text-foreground truncate">{book.title}</h4>
+   494→                          <p className="text-caption text-muted-foreground truncate">{book.author}</p>
+   495→                        </div>
+   496→
+   497→                        {/* Available copies */}
+   498→                        <Badge className="bg-emerald-100 text-emerald-800" variant="secondary">
+   499→                          {book.availableCopies}권
+   500→                        </Badge>
+   501→                      </div>
+   502→                    </motion.div>
+   503→                  )
+   504→                })}
+   505→              </div>
+   506→
+   507→              {/* Next button */}
+   508→              <div className="flex gap-3">
+   509→                <button
+   510→                  onClick={() => setStep(1)}
+   511→                  className="btn-senior bg-secondary text-secondary-foreground rounded-xl"
+   512→                >
+   513→                  이전
+   514→                </button>
+   515→                <button
+   516→                  onClick={handleNextFromSelection}
+   517→                  className="btn-senior flex-1 bg-primary text-primary-foreground rounded-xl"
+   518→                >
+   519→                  <ArrowRight className="h-5 w-5" />
+   520→                  다음 ({selectedBooks.length}권)
+   521→                </button>
+   522→              </div>
+   523→            </motion.div>
+   524→          )}
+   525→
+   526→          {/* Step 3: Loan limit exceeded */}
+   527→          {step === 3 && (
+   528→            <motion.div
+   529→              key="step3"
+   530→              initial={{ opacity: 0, x: 50 }}
+   531→              animate={{ opacity: 1, x: 0 }}
+   532→              exit={{ opacity: 0, x: -50 }}
+   533→              className="flex flex-col items-center gap-6"
+   534→            >
+   535→              <motion.div
+   536→                initial={{ scale: 0 }}
+   537→                animate={{ scale: 1 }}
+   538→                transition={{ type: 'spring' }}
+   539→              >
+   540→                <AlertTriangle className="h-20 w-20 text-amber-500" />
+   541→              </motion.div>
+   542→
+   543→              <div className="text-center">
+   544→                <h2 className="text-title text-foreground">
+   545→                  대여 권수를 초과했습니다!
+   546→                </h2>
+   547→                <p className="text-body text-muted-foreground mt-2">
+   548→                  최대 {MAX_LOAN_COUNT}권까지 대출할 수 있습니다.
+   549→                </p>
+   550→              </div>
+   551→
+   552→              {/* Current loans list */}
+   553→              <div className="card-senior w-full">
+   554→                <h3 className="text-heading text-foreground mb-3">현재 대출 목록</h3>
+   555→                <div className="flex flex-col gap-2">
+   556→                  {activeLoans.map((loan) => (
+   557→                    <div key={loan.id} className="flex items-center gap-2 rounded-lg bg-muted/50 p-3">
+   558→                      <BookOpen className="h-5 w-5 text-primary shrink-0" />
+   559→                      <span className="text-body text-foreground truncate flex-1">
+   560→                        {loan.book?.title || '제목 없음'}
+   561→                      </span>
+   562→                      <span className="text-caption text-muted-foreground shrink-0">
+   563→                        ~{formatDate(loan.dueDate)}
+   564→                      </span>
+   565→                    </div>
+   566→                  ))}
+   567→                </div>
+   568→              </div>
+   569→
+   570→              <div className="rounded-xl bg-amber-50 border-2 border-amber-200 p-4 text-center w-full">
+   571→                <p className="text-body font-bold text-amber-800">
+   572→                  반납 후 다시 오세요
+   573→                </p>
+   574→              </div>
+   575→
+   576→              <div className="flex w-full gap-3">
+   577→                <button
+   578→                  onClick={() => setView('counter-return')}
+   579→                  className="btn-senior flex-1 bg-primary text-primary-foreground rounded-xl"
+   580→                >
+   581→                  반납하러 가기
+   582→                </button>
+   583→                <button
+   584→                  onClick={() => setStep(2)}
+   585→                  className="btn-senior bg-secondary text-secondary-foreground rounded-xl"
+   586→                >
+   587→                  다시 선택
+   588→                </button>
+   589→              </div>
+   590→            </motion.div>
+   591→          )}
+   592→
+   593→          {/* Step 4: Overdue books warning */}
+   594→          {step === 4 && (
+   595→            <motion.div
+   596→              key="step4"
+   597→              initial={{ opacity: 0, x: 50 }}
+   598→              animate={{ opacity: 1, x: 0 }}
+   599→              exit={{ opacity: 0, x: -50 }}
+   600→              className="flex flex-col items-center gap-6"
+   601→            >
+   602→              <motion.div
+   603→                initial={{ scale: 0 }}
+   604→                animate={{ scale: 1 }}
+   605→                transition={{ type: 'spring' }}
+   606→              >
+   607→                <AlertTriangle className="h-20 w-20 text-rose-500" />
+   608→              </motion.div>
+   609→
+   610→              <div className="text-center">
+   611→                <h2 className="text-title text-foreground">
+   612→                  연체된 도서가 있습니다
+   613→                </h2>
+   614→                <p className="text-body text-muted-foreground mt-2">
+   615→                  먼저 반납해주세요.
+   616→                </p>
+   617→              </div>
+   618→
+   619→              {/* Overdue loans */}
+   620→              <div className="card-senior w-full">
+   621→                <h3 className="text-heading text-foreground mb-3">연체 도서 목록</h3>
+   622→                <div className="flex flex-col gap-2">
+   623→                  {activeLoans
+   624→                    .filter((loan) => new Date(loan.dueDate) < new Date())
+   625→                    .map((loan) => {
+   626→                      const today = new Date()
+   627→                      const due = new Date(loan.dueDate)
+   628→                      const overdueDays = Math.ceil(
+   629→                        (today.getTime() - due.getTime()) / (1000 * 60 * 60 * 24)
+   630→                      )
+   631→                      return (
+   632→                        <div key={loan.id} className="flex items-center gap-2 rounded-lg bg-rose-50 border border-rose-200 p-3">
+   633→                          <BookOpen className="h-5 w-5 text-rose-600 shrink-0" />
+   634→                          <div className="flex-1 min-w-0">
+   635→                            <span className="text-body text-foreground truncate block">
+   636→                              {loan.book?.title || '제목 없음'}
+   637→                            </span>
+   638→                            <span className="text-caption text-rose-600">
+   639→                              반납일: {formatDate(loan.dueDate)} ({overdueDays}일 연체)
+   640→                            </span>
+   641→                          </div>
+   642→                        </div>
+   643→                      )
+   644→                    })}
+   645→                </div>
+   646→              </div>
+   647→
+   648→              <button
+   649→                onClick={() => setView('counter-return')}
+   650→                className="btn-senior w-full bg-primary text-primary-foreground rounded-xl"
+   651→              >
+   652→                <ArrowRight className="h-5 w-5" />
+   653→                반납하러 가기
+   654→              </button>
+   655→              <button
+   656→                onClick={() => setStep(2)}
+   657→                className="btn-senior w-full bg-secondary text-secondary-foreground rounded-xl"
+   658→              >
+   659→                다시 선택
+   660→              </button>
+   661→            </motion.div>
+   662→          )}
+   663→
+   664→          {/* Step 5: Loan confirmation */}
+   665→          {step === 5 && (
+   666→            <motion.div
+   667→              key="step5"
+   668→              initial={{ opacity: 0, x: 50 }}
+   669→              animate={{ opacity: 1, x: 0 }}
+   670→              exit={{ opacity: 0, x: -50 }}
+   671→              className="flex flex-col gap-6"
+   672→            >
+   673→              <h2 className="text-title text-foreground text-center">
+   674→                대여 확인
+   675→              </h2>
+   676→
+   677→              <p className="text-body text-muted-foreground text-center">
+   678→                아래 책을 대출합니다. 반납일을 확인해주세요.
+   679→              </p>
+   680→
+   681→              {/* Loan summary */}
+   682→              <div className="card-senior">
+   683→                <div className="flex flex-col gap-4">
+   684→                  {selectedBooks.map((book, index) => {
+   685→                    const dueDate = addDays(new Date(), LOAN_PERIOD_DAYS)
+   686→                    const colors = CATEGORY_COLORS[book.category] || { bg: 'bg-slate-100', icon: 'text-slate-600' }
+   687→                    return (
+   688→                      <motion.div
+   689→                        key={book.id}
+   690→                        initial={{ opacity: 0, y: 10 }}
+   691→                        animate={{ opacity: 1, y: 0 }}
+   692→                        transition={{ delay: index * 0.1 }}
+   693→                        className="flex items-center gap-3 rounded-xl bg-muted/50 p-4"
+   694→                      >
+   695→                        <div className={cn('flex h-12 w-10 shrink-0 items-center justify-center rounded-lg', colors.bg)}>
+   696→                          <BookOpen className={cn('h-6 w-6', colors.icon)} />
+   697→                        </div>
+   698→                        <div className="flex-1 min-w-0">
+   699→                          <h4 className="text-body font-bold text-foreground truncate">
+   700→                            {book.title}
+   701→                          </h4>
+   702→                          <p className="text-caption text-muted-foreground">{book.author}</p>
+   703→                        </div>
+   704→                        <div className="text-right shrink-0">
+   705→                          <p className="text-caption text-muted-foreground">반납일</p>
+   706→                          <p className="text-body font-bold text-primary">
+   707→                            {formatDate(dueDate.toISOString())}
+   708→                          </p>
+   709→                        </div>
+   710→                      </motion.div>
+   711→                    )
+   712→                  })}
+   713→                </div>
+   714→
+   715→                <Separator className="my-4" />
+   716→
+   717→                <div className="flex items-center justify-between">
+   718→                  <span className="text-body font-bold text-foreground">총 {selectedBooks.length}권</span>
+   719→                  <span className="text-caption text-muted-foreground">
+   720→                    대출기간: {LOAN_PERIOD_DAYS}일
+   721→                  </span>
+   722→                </div>
+   723→              </div>
+   724→
+   725→              <div className="flex gap-3">
+   726→                <button
+   727→                  onClick={() => setStep(2)}
+   728→                  className="btn-senior bg-secondary text-secondary-foreground rounded-xl"
+   729→                >
+   730→                  이전
+   731→                </button>
+   732→                <button
+   733→                  onClick={() => setConfirmOpen(true)}
+   734→                  className="btn-senior flex-1 bg-primary text-primary-foreground rounded-xl"
+   735→                >
+   736→                  <CheckCircle className="h-5 w-5" />
+   737→                  대여합니다
+   738→                </button>
+   739→              </div>
+   740→
+   741→              {/* AlertDialog */}
+   742→              <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+   743→                <AlertDialogContent>
+   744→                  <AlertDialogHeader>
+   745→                    <AlertDialogTitle className="text-heading">
+   746→                      정말 대여하시겠습니까?
+   747→                    </AlertDialogTitle>
+   748→                    <AlertDialogDescription className="text-body">
+   749→                      {selectedBooks.length}권의 책을 대출합니다.
+   750→                      반납일은 대출일로부터 {LOAN_PERIOD_DAYS}일 후입니다.
+   751→                    </AlertDialogDescription>
+   752→                  </AlertDialogHeader>
+   753→                  <AlertDialogFooter className="flex-col gap-3 sm:flex-col">
+   754→                    <AlertDialogAction
+   755→                      onClick={handleConfirmLoan}
+   756→                      disabled={loading}
+   757→                      className="btn-senior bg-primary text-primary-foreground rounded-xl w-full"
+   758→                    >
+   759→                      {loading ? '처리 중...' : '네, 대여합니다'}
+   760→                    </AlertDialogAction>
+   761→                    <AlertDialogCancel
+   762→                      className="btn-senior bg-secondary text-secondary-foreground rounded-xl w-full"
+   763→                    >
+   764→                      아니요
+   765→                    </AlertDialogCancel>
+   766→                  </AlertDialogFooter>
+   767→                </AlertDialogContent>
+   768→              </AlertDialog>
+   769→            </motion.div>
+   770→          )}
+   771→
+   772→          {/* Step 6: Receipt / Success */}
+   773→          {step === 6 && (
+   774→            <motion.div
+   775→              key="step6"
+   776→              initial={{ opacity: 0, x: 50 }}
+   777→              animate={{ opacity: 1, x: 0 }}
+   778→              exit={{ opacity: 0, x: -50 }}
+   779→              className="flex flex-col items-center gap-6"
+   780→            >
+   781→              {/* Star stamp animation */}
+   782→              {isMissionMode && (
+   783→                <motion.div
+   784→                  initial={{ scale: 0, rotate: -30 }}
+   785→                  animate={{ scale: 1, rotate: 0 }}
+   786→                  transition={{ type: 'spring', stiffness: 200, damping: 15 }}
+   787→                  className="star-stamp"
+   788→                >
+   789→                  <Star className="h-16 w-16 fill-amber-400 text-amber-400" />
+   790→                </motion.div>
+   791→              )}
+   792→
+   793→              <motion.div
+   794→                initial={{ scale: 0 }}
+   795→                animate={{ scale: 1 }}
+   796→                transition={{ type: 'spring', stiffness: 150, damping: 15 }}
+   797→              >
+   798→                <CheckCircle className="h-20 w-20 text-emerald-500" />
+   799→              </motion.div>
+   800→
+   801→              <h2 className="text-title text-foreground text-center">
+   802→                대여 완료!
+   803→              </h2>
+   804→
+   805→              {/* Receipt card */}
+   806→              <div className="w-full rounded-xl border-2 border-dashed border-border bg-card p-6">
+   807→                <div className="mb-4 text-center">
+   808→                  <p className="text-heading font-bold text-foreground">스마트 도서관 영수증</p>
+   809→                  <Separator className="mt-2" />
+   810→                </div>
+   811→
+   812→                <div className="flex flex-col gap-4">
+   813→                  {/* User info */}
+   814→                  <div className="flex items-center justify-between">
+   815→                    <span className="text-caption text-muted-foreground">회원명</span>
+   816→                    <span className="text-body font-bold text-foreground">{currentUser.name}</span>
+   817→                  </div>
+   818→                  <div className="flex items-center justify-between">
+   819→                    <span className="text-caption text-muted-foreground">도서증 번호</span>
+   820→                    <span className="text-body font-bold text-foreground">{currentUser.cardNumber}</span>
+   821→                  </div>
+   822→
+   823→                  <Separator />
+   824→
+   825→                  {/* Loan items */}
+   826→                  {loanResults.map((item) => (
+   827→                    <div key={item.book.id} className="rounded-lg bg-muted/50 p-3">
+   828→                      <p className="text-body font-bold text-foreground">{item.book.title}</p>
+   829→                      <p className="text-caption text-muted-foreground">{item.book.author}</p>
+   830→                      <div className="mt-2 flex items-center gap-2">
+   831→                        <Clock className="h-4 w-4 text-primary" />
+   832→                        <span className="text-caption font-bold text-primary">
+   833→                          반납일: {formatDate(item.dueDate)}
+   834→                        </span>
+   835→                      </div>
+   836→                    </div>
+   837→                  ))}
+   838→
+   839→                  <Separator />
+   840→
+   841→                  <div className="text-center">
+   842→                    <p className="text-heading font-bold text-foreground">
+   843→                      총 {loanResults.length}권 대여
+   844→                    </p>
+   845→                  </div>
+   846→
+   847→                  <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-center">
+   848→                    <p className="text-caption text-amber-800">
+   849→                      💡 연장은 1회 가능합니다 ({EXTEND_DAYS}일)
+   850→                    </p>
+   851→                  </div>
+   852→                </div>
+   853→              </div>
+   854→
+   855→              <div className="flex w-full flex-col gap-3">
+   856→                <button
+   857→                  onClick={() => setView('home')}
+   858→                  className="btn-senior w-full bg-primary text-primary-foreground rounded-xl"
+   859→                >
+   860→                  홈으로
+   861→                </button>
+   862→              </div>
+   863→            </motion.div>
+   864→          )}
+   865→        </AnimatePresence>
+   866→      </main>
+   867→    </div>
+   868→  )
+   869→}
+   870→

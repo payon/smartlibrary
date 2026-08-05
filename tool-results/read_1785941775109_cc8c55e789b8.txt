@@ -1,0 +1,780 @@
+     1→'use client'
+     2→
+     3→import { useState, useEffect, useCallback } from 'react'
+     4→import { motion, AnimatePresence } from 'framer-motion'
+     5→import {
+     6→  BookOpen,
+     7→  CheckCircle,
+     8→  CreditCard,
+     9→  HandCoins,
+    10→  Star,
+    11→  ChevronRight,
+    12→  Library,
+    13→  Home,
+    14→  AlertTriangle,
+    15→  Clock,
+    16→  X,
+    17→  UserCheck,
+    18→} from 'lucide-react'
+    19→import { useAppStore, type LoanItem } from '@/stores/useAppStore'
+    20→import { cn } from '@/lib/utils'
+    21→import { speak } from '@/lib/tts'
+    22→import TopBar from '@/components/TopBar'
+    23→import { Badge } from '@/components/ui/badge'
+    24→import { Separator } from '@/components/ui/separator'
+    25→import { OVERDUE_FEE_PER_DAY } from '@/lib/constants'
+    26→import { toast } from 'sonner'
+    27→
+    28→type ReturnStep = 1 | 2 | 3 | 4
+    29→
+    30→// Format date to Korean
+    31→function formatDate(dateStr: string): string {
+    32→  const d = new Date(dateStr)
+    33→  return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`
+    34→}
+    35→
+    36→// Get days remaining (negative = overdue)
+    37→function getDaysRemaining(dueDate: string): number {
+    38→  const today = new Date()
+    39→  today.setHours(0, 0, 0, 0)
+    40→  const due = new Date(dueDate)
+    41→  due.setHours(0, 0, 0, 0)
+    42→  return Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+    43→}
+    44→
+    45→// Get color class based on days remaining
+    46→function getDaysColor(days: number): string {
+    47→  if (days < 0) return 'bg-rose-100 text-rose-800'
+    48→  if (days <= 7) return 'bg-amber-100 text-amber-800'
+    49→  return 'bg-emerald-100 text-emerald-800'
+    50→}
+    51→
+    52→function getDaysLabel(days: number): string {
+    53→  if (days < 0) return `${Math.abs(days)}일 연체`
+    54→  if (days === 0) return '오늘 반납'
+    55→  return `${days}일 남음`
+    56→}
+    57→
+    58→// Step progress bar
+    59→function StepProgress({ current, total }: { current: number; total: number }) {
+    60→  return (
+    61→    <div className="mb-4">
+    62→      <div className="flex items-center gap-1">
+    63→        {Array.from({ length: total }).map((_, i) => (
+    64→          <div
+    65→            key={i}
+    66→            className={cn(
+    67→              'h-2 flex-1 rounded-full transition-colors',
+    68→              i + 1 <= current ? 'bg-primary' : 'bg-muted'
+    69→            )}
+    70→          />
+    71→        ))}
+    72→      </div>
+    73→      <p className="mt-1 text-center text-caption text-muted-foreground">
+    74→        {current} / {total}단계
+    75→      </p>
+    76→    </div>
+    77→  )
+    78→}
+    79→
+    80→// Barcode placeholder
+    81→function BarcodePlaceholder() {
+    82→  return (
+    83→    <div className="flex h-12 items-center justify-center gap-[2px] rounded bg-white px-2">
+    84→      {Array.from({ length: 30 }).map((_, i) => (
+    85→        <div
+    86→          key={i}
+    87→          className="h-full rounded-sm bg-foreground/80"
+    88→          style={{
+    89→            width: i % 3 === 0 ? '2px' : '1px',
+    90→          }}
+    91→        />
+    92→      ))}
+    93→    </div>
+    94→  )
+    95→}
+    96→
+    97→// Scan simulation card
+    98→function ScanCard({ book, index, total, scanning, scanned }: {
+    99→  book: LoanItem
+   100→  index: number
+   101→  total: number
+   102→  scanning: boolean
+   103→  scanned: boolean
+   104→}) {
+   105→  return (
+   106→    <motion.div
+   107→      initial={{ opacity: 0, y: 10 }}
+   108→      animate={{ opacity: 1, y: 0 }}
+   109→      className="card-senior"
+   110→    >
+   111→      <div className="flex items-start gap-4">
+   112→        {/* Book cover */}
+   113→        <div className="flex h-16 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-100">
+   114→          <BookOpen className="h-7 w-7 text-amber-700" />
+   115→        </div>
+   116→
+   117→        <div className="flex-1 min-w-0">
+   118→          <h4 className="text-body font-bold text-foreground truncate">
+   119→            {book.book?.title || '제목 없음'}
+   120→          </h4>
+   121→          <p className="text-caption text-muted-foreground">{book.book?.author || ''}</p>
+   122→
+   123→          {/* Barcode area */}
+   124→          <div className="relative mt-2 overflow-hidden rounded-lg border border-border bg-muted/30 p-2">
+   125→            <BarcodePlaceholder />
+   126→            {/* Scan line animation */}
+   127→            {scanning && (
+   128→              <motion.div
+   129→                className="absolute left-0 right-0 h-1 bg-primary"
+   130→                initial={{ top: 0 }}
+   131→                animate={{ top: ['0%', '95%', '0%'] }}
+   132→                transition={{ duration: 1.5, repeat: 1, ease: 'easeInOut' }}
+   133→              />
+   134→            )}
+   135→          </div>
+   136→        </div>
+   137→
+   138→        {/* Status indicator */}
+   139→        <div className="shrink-0">
+   140→          {scanning && (
+   141→            <motion.div
+   142→              animate={{ rotate: 360 }}
+   143→              transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+   144→            >
+   145→              <div className="h-10 w-10 rounded-full border-4 border-primary/20 border-t-primary" />
+   146→            </motion.div>
+   147→          )}
+   148→          {scanned && (
+   149→            <motion.div
+   150→              initial={{ scale: 0 }}
+   151→              animate={{ scale: 1 }}
+   152→              transition={{ type: 'spring', stiffness: 200 }}
+   153→              className="flex items-center justify-center"
+   154→            >
+   155→              <CheckCircle className="h-10 w-10 text-emerald-500" />
+   156→            </motion.div>
+   157→          )}
+   158→          {!scanning && !scanned && (
+   159→            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+   160→              <span className="text-caption text-muted-foreground">{index + 1}</span>
+   161→            </div>
+   162→          )}
+   163→        </div>
+   164→      </div>
+   165→
+   166→      {/* Scan status text */}
+   167→      {scanning && (
+   168→        <p className="mt-3 text-center text-body text-primary font-bold">
+   169→          스캔 중...
+   170→        </p>
+   171→      )}
+   172→      {scanned && (
+   173→        <motion.div
+   174→          initial={{ opacity: 0 }}
+   175→          animate={{ opacity: 1 }}
+   176→          className="mt-3 flex items-center justify-center gap-2 rounded-lg bg-emerald-50 p-2"
+   177→        >
+   178→          <span className="text-body text-emerald-700 font-bold">삑!</span>
+   179→          <span className="text-caption text-emerald-600">스캔 완료</span>
+   180→        </motion.div>
+   181→      )}
+   182→    </motion.div>
+   183→  )
+   184→}
+   185→
+   186→export default function CounterReturnView() {
+   187→  const {
+   188→    currentUser,
+   189→    setView,
+   190→    ttsEnabled,
+   191→    isMissionMode,
+   192→    completeMissionStep,
+   193→  } = useAppStore()
+   194→
+   195→  const [step, setStep] = useState<ReturnStep>(1)
+   196→  const [activeLoans, setActiveLoans] = useState<LoanItem[]>([])
+   197→  const [selectedLoans, setSelectedLoans] = useState<LoanItem[]>([])
+   198→  const [loading, setLoading] = useState(true)
+   199→  const [scanningIndex, setScanningIndex] = useState(-1)
+   200→  const [scannedIndices, setScannedIndices] = useState<Set<number>>(new Set())
+   201→  const [totalFee, setTotalFee] = useState(0)
+   202→  const [overdueItems, setOverdueItems] = useState<{ book: LoanItem; days: number; fee: number }[]>([])
+   203→  const [returnCompleted, setReturnCompleted] = useState(false)
+   204→  const [hasOverdue, setHasOverdue] = useState(false)
+   205→
+   206→  // Fetch active loans
+   207→  const fetchLoans = useCallback(async () => {
+   208→    if (!currentUser) return
+   209→    setLoading(true)
+   210→    try {
+   211→      const res = await fetch(`/api/loans?userId=${currentUser.id}`)
+   212→      if (res.ok) {
+   213→        const data = await res.json()
+   214→        const active = data.filter((l: LoanItem) => l.status === 'active')
+   215→        setActiveLoans(active)
+   216→      }
+   217→    } catch {
+   218→      // ignore
+   219→    } finally {
+   220→      setLoading(false)
+   221→    }
+   222→  }, [currentUser])
+   223→
+   224→  useEffect(() => {
+   225→    fetchLoans()
+   226→  }, [fetchLoans])
+   227→
+   228→  // TTS on step change
+   229→  useEffect(() => {
+   230→    if (!ttsEnabled) return
+   231→    const messages: Record<ReturnStep, string> = {
+   232→      1: '반납할 책을 선택해주세요.',
+   233→      2: '책 바코드를 스캔하고 있습니다.',
+   234→      3: '연체료를 확인해주세요.',
+   235→      4: '반납이 완료되었습니다.',
+   236→    }
+   237→    speak(messages[step])
+   238→  }, [step, ttsEnabled])
+   239→
+   240→  // Toggle loan selection
+   241→  const toggleLoan = (loan: LoanItem) => {
+   242→    setSelectedLoans((prev) => {
+   243→      const exists = prev.find((l) => l.id === loan.id)
+   244→      if (exists) {
+   245→        return prev.filter((l) => l.id !== loan.id)
+   246→      }
+   247→      return [...prev, loan]
+   248→    })
+   249→  }
+   250→
+   251→  // Run scan simulation
+   252→  const runScanSimulation = () => {
+   253→    if (selectedLoans.length === 0) return
+   254→    setStep(2)
+   255→    setScanningIndex(0)
+   256→    setScannedIndices(new Set())
+   257→
+   258→    let currentIndex = 0
+   259→    const interval = setInterval(() => {
+   260→      // Mark current as scanned
+   261→      setScannedIndices((prev) => {
+   262→        const next = new Set(prev)
+   263→        next.add(currentIndex)
+   264→        return next
+   265→      })
+   266→
+   267→      if (ttsEnabled && currentIndex === selectedLoans.length - 1) {
+   268→        speak('삑! 모든 책 스캔이 완료되었습니다.')
+   269→      }
+   270→
+   271→      currentIndex++
+   272→      if (currentIndex >= selectedLoans.length) {
+   273→        setScanningIndex(-1)
+   274→        clearInterval(interval)
+   275→
+   276→        // Calculate overdue fees after a brief delay
+   277→        setTimeout(() => {
+   278→          let total = 0
+   279→          const items: { book: LoanItem; days: number; fee: number }[] = []
+   280→          for (const loan of selectedLoans) {
+   281→            const days = getDaysRemaining(loan.dueDate)
+   282→            if (days < 0) {
+   283→              const fee = Math.abs(days) * OVERDUE_FEE_PER_DAY
+   284→              items.push({ book: loan, days: Math.abs(days), fee })
+   285→              total += fee
+   286→            }
+   287→          }
+   288→          setOverdueItems(items)
+   289→          setTotalFee(total)
+   290→          setHasOverdue(total > 0)
+   291→
+   292→          if (total > 0) {
+   293→            setStep(3)
+   294→          } else {
+   295→            setStep(3) // still go to step 3 to confirm
+   296→          }
+   297→
+   298→          if (isMissionMode) completeMissionStep()
+   299→        }, 1000)
+   300→      } else {
+   301→        setScanningIndex(currentIndex)
+   302→      }
+   303→    }, 1500)
+   304→  }
+   305→
+   306→  // Process return
+   307→  const processReturn = async () => {
+   308→    setLoading(true)
+   309→
+   310→    let anyOverdue = false
+   311→    let calculatedTotalFee = 0
+   312→    const items: { book: LoanItem; days: number; fee: number }[] = []
+   313→
+   314→    for (const loan of selectedLoans) {
+   315→      try {
+   316→        const res = await fetch(`/api/loans/${loan.id}/return`, {
+   317→          method: 'POST',
+   318→        })
+   319→        if (res.ok) {
+   320→          const data = await res.json()
+   321→          if (data.overdueDays > 0) {
+   322→            anyOverdue = true
+   323→            const fee = data.overdueDays * OVERDUE_FEE_PER_DAY
+   324→            calculatedTotalFee += fee
+   325→            items.push({ book: loan, days: data.overdueDays, fee })
+   326→          }
+   327→        }
+   328→      } catch {
+   329→        toast.error(`${loan.book?.title} 반납에 실패했습니다.`)
+   330→      }
+   331→    }
+   332→
+   333→    setOverdueItems(items)
+   334→    setTotalFee(calculatedTotalFee)
+   335→    setHasOverdue(anyOverdue)
+   336→    setReturnCompleted(true)
+   337→    setStep(4)
+   338→    setLoading(false)
+   339→
+   340→    if (ttsEnabled) {
+   341→      if (anyOverdue) {
+   342→        speak(`반납이 완료되었습니다. 연체료는 ${calculatedTotalFee.toLocaleString()}원입니다.`)
+   343→      } else {
+   344→        speak('반납이 완료되었습니다. 감사합니다!')
+   345→      }
+   346→    }
+   347→
+   348→    if (isMissionMode) completeMissionStep()
+   349→
+   350→    // Refresh loans
+   351→    fetchLoans()
+   352→  }
+   353→
+   354→  // Pre-requisite check
+   355→  if (!currentUser) {
+   356→    return (
+   357→      <div className="flex min-h-screen flex-col bg-background">
+   358→        <TopBar title="창구 반납" />
+   359→        <main className="mx-auto flex w-full max-w-lg flex-1 flex-col items-center justify-center gap-6 px-4">
+   360→          <CreditCard className="h-16 w-16 text-muted-foreground/50" />
+   361→          <h2 className="text-title text-foreground">회원가입이 필요합니다</h2>
+   362→          <p className="text-body text-muted-foreground text-center">
+   363→            먼저 회원가입을 해주세요
+   364→          </p>
+   365→          <button
+   366→            onClick={() => setView('registration')}
+   367→            className="btn-senior bg-primary text-primary-foreground rounded-xl"
+   368→          >
+   369→            <UserCheck className="h-6 w-6" />
+   370→            회원가입하기
+   371→          </button>
+   372→        </main>
+   373→      </div>
+   374→    )
+   375→  }
+   376→
+   377→  // Loading state
+   378→  if (loading && step === 1) {
+   379→    return (
+   380→      <div className="flex min-h-screen flex-col bg-background">
+   381→        <TopBar title="창구 반납" />
+   382→        <main className="mx-auto flex w-full max-w-lg flex-1 flex-col items-center justify-center gap-4">
+   383→          <div className="h-16 w-16 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+   384→          <p className="text-body text-muted-foreground">불러오는 중...</p>
+   385→        </main>
+   386→      </div>
+   387→    )
+   388→  }
+   389→
+   390→  // No active loans
+   391→  if (!loading && step === 1 && activeLoans.length === 0) {
+   392→    return (
+   393→      <div className="flex min-h-screen flex-col bg-background">
+   394→        <TopBar title="창구 반납" />
+   395→        <main className="mx-auto flex w-full max-w-lg flex-1 flex-col items-center justify-center gap-6 px-4">
+   396→          <motion.div
+   397→            initial={{ scale: 0 }}
+   398→            animate={{ scale: 1 }}
+   399→            transition={{ type: 'spring' }}
+   400→          >
+   401→            <BookOpen className="h-16 w-16 text-muted-foreground/50" />
+   402→          </motion.div>
+   403→          <h2 className="text-title text-foreground">반납할 도서가 없습니다</h2>
+   404→          <p className="text-body text-muted-foreground text-center">
+   405→            현재 대출 중인 책이 없습니다.
+   406→          </p>
+   407→          <button
+   408→            onClick={() => setView('home')}
+   409→            className="btn-senior bg-primary text-primary-foreground rounded-xl"
+   410→          >
+   411→            <Home className="h-6 w-6" />
+   412→            홈으로
+   413→          </button>
+   414→        </main>
+   415→      </div>
+   416→    )
+   417→  }
+   418→
+   419→  return (
+   420→    <div className="flex min-h-screen flex-col bg-background">
+   421→      <TopBar
+   422→        title="창구 반납"
+   423→        helpText="창구 반납 화면입니다. 반납할 책을 선택하고 바코드 스캔을 통해 반납하는 연습을 합니다."
+   424→      />
+   425→
+   426→      <main className="mx-auto w-full max-w-lg flex-1 px-4 py-6">
+   427→        <StepProgress current={step} total={4} />
+   428→
+   429→        <AnimatePresence mode="wait">
+   430→          {/* Step 1: Select books to return */}
+   431→          {step === 1 && (
+   432→            <motion.div
+   433→              key="step1"
+   434→              initial={{ opacity: 0, x: 50 }}
+   435→              animate={{ opacity: 1, x: 0 }}
+   436→              exit={{ opacity: 0, x: -50 }}
+   437→              className="flex flex-col gap-6"
+   438→            >
+   439→              <h2 className="text-title text-foreground text-center">
+   440→                반납할 책 선택
+   441→              </h2>
+   442→
+   443→              {/* Selection counter */}
+   444→              {selectedLoans.length > 0 && (
+   445→                <div className="rounded-xl bg-primary/5 border-2 border-primary/20 p-4 text-center">
+   446→                  <p className="text-heading font-bold text-primary">
+   447→                    선택한 책: {selectedLoans.length}권
+   448→                  </p>
+   449→                </div>
+   450→              )}
+   451→
+   452→              {/* Loans list */}
+   453→              <div className="max-h-96 overflow-y-auto custom-scrollbar flex flex-col gap-3">
+   454→                {activeLoans.map((loan, index) => {
+   455→                  const isSelected = selectedLoans.some((l) => l.id === loan.id)
+   456→                  const days = getDaysRemaining(loan.dueDate)
+   457→
+   458→                  return (
+   459→                    <motion.div
+   460→                      key={loan.id}
+   461→                      initial={{ opacity: 0, y: 10 }}
+   462→                      animate={{ opacity: 1, y: 0 }}
+   463→                      transition={{ delay: index * 0.03 }}
+   464→                      onClick={() => toggleLoan(loan)}
+   465→                      className={cn(
+   466→                        'card-senior cursor-pointer transition-all',
+   467→                        isSelected && 'border-primary bg-primary/5'
+   468→                      )}
+   469→                    >
+   470→                      <div className="flex items-center gap-3">
+   471→                        {/* Checkbox */}
+   472→                        <div
+   473→                          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border-2 transition-colors"
+   474→                          style={{
+   475→                            borderColor: isSelected ? 'var(--primary)' : 'var(--border)',
+   476→                            background: isSelected ? 'var(--primary)' : 'var(--card)',
+   477→                          }}
+   478→                        >
+   479→                          {isSelected && (
+   480→                            <CheckCircle className="h-8 w-8 text-primary-foreground" />
+   481→                          )}
+   482→                        </div>
+   483→
+   484→                        {/* Book cover */}
+   485→                        <div className="flex h-14 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-100">
+   486→                          <BookOpen className="h-6 w-6 text-amber-700" />
+   487→                        </div>
+   488→
+   489→                        {/* Info */}
+   490→                        <div className="flex-1 min-w-0">
+   491→                          <h4 className="text-body font-bold text-foreground truncate">
+   492→                            {loan.book?.title || '제목 없음'}
+   493→                          </h4>
+   494→                          <p className="text-caption text-muted-foreground truncate">
+   495→                            {loan.book?.author || ''}
+   496→                          </p>
+   497→                        </div>
+   498→
+   499→                        {/* Days badge */}
+   500→                        <Badge className={cn('shrink-0', getDaysColor(days))} variant="secondary">
+   501→                          {getDaysLabel(days)}
+   502→                        </Badge>
+   503→                      </div>
+   504→
+   505→                      {/* Loan details */}
+   506→                      <div className="mt-2 flex items-center gap-4 text-caption text-muted-foreground">
+   507→                        <span className="flex items-center gap-1">
+   508→                          <Clock className="h-3.5 w-3.5" />
+   509→                          대출: {formatDate(loan.loanDate)}
+   510→                        </span>
+   511→                        <span className="flex items-center gap-1">
+   512→                          <Clock className="h-3.5 w-3.5" />
+   513→                          반납: {formatDate(loan.dueDate)}
+   514→                        </span>
+   515→                      </div>
+   516→                    </motion.div>
+   517→                  )
+   518→                })}
+   519→              </div>
+   520→
+   521→              {/* Action button */}
+   522→              <button
+   523→                onClick={runScanSimulation}
+   524→                disabled={selectedLoans.length === 0}
+   525→                className="btn-senior w-full bg-primary text-primary-foreground rounded-xl"
+   526→              >
+   527→                <HandCoins className="h-6 w-6" />
+   528→                {selectedLoans.length === 0
+   529→                  ? '반납할 책을 선택해주세요'
+   530→                  : `반납하기 (${selectedLoans.length}권)`
+   531→                }
+   532→              </button>
+   533→            </motion.div>
+   534→          )}
+   535→
+   536→          {/* Step 2: Scan simulation */}
+   537→          {step === 2 && (
+   538→            <motion.div
+   539→              key="step2"
+   540→              initial={{ opacity: 0, x: 50 }}
+   541→              animate={{ opacity: 1, x: 0 }}
+   542→              exit={{ opacity: 0, x: -50 }}
+   543→              className="flex flex-col gap-6"
+   544→            >
+   545→              <h2 className="text-title text-foreground text-center">
+   546→                책 스캔 중
+   547→              </h2>
+   548→
+   549→              {/* Progress */}
+   550→              <div className="rounded-xl bg-primary/5 border-2 border-primary/20 p-4 text-center">
+   551→                <p className="text-heading font-bold text-primary">
+   552→                  {scannedIndices.size} / {selectedLoans.length}권 스캔 완료
+   553→                </p>
+   554→              </div>
+   555→
+   556→              {/* Scan cards */}
+   557→              <div className="max-h-96 overflow-y-auto custom-scrollbar flex flex-col gap-4">
+   558→                {selectedLoans.map((loan, index) => (
+   559→                  <ScanCard
+   560→                    key={loan.id}
+   561→                    book={loan}
+   562→                    index={index}
+   563→                    total={selectedLoans.length}
+   564→                    scanning={index === scanningIndex}
+   565→                    scanned={scannedIndices.has(index)}
+   566→                  />
+   567→                ))}
+   568→              </div>
+   569→            </motion.div>
+   570→          )}
+   571→
+   572→          {/* Step 3: Overdue fee calculation */}
+   573→          {step === 3 && (
+   574→            <motion.div
+   575→              key="step3"
+   576→              initial={{ opacity: 0, x: 50 }}
+   577→              animate={{ opacity: 1, x: 0 }}
+   578→              exit={{ opacity: 0, x: -50 }}
+   579→              className="flex flex-col items-center gap-6"
+   580→            >
+   581→              <h2 className="text-title text-foreground text-center">
+   582→                {hasOverdue ? '연체료 계산' : '반납 확인'}
+   583→              </h2>
+   584→
+   585→              {hasOverdue ? (
+   586→                <>
+   587→                  {/* Overdue items */}
+   588→                  <motion.div
+   589→                    initial={{ scale: 0.95 }}
+   590→                    animate={{ scale: 1 }}
+   591→                    className="card-senior w-full"
+   592→                  >
+   593→                    <div className="flex items-center gap-2 mb-4">
+   594→                      <AlertTriangle className="h-6 w-6 text-amber-500" />
+   595→                      <h3 className="text-heading text-foreground">연체 도서</h3>
+   596→                    </div>
+   597→
+   598→                    <div className="flex flex-col gap-3">
+   599→                      {overdueItems.map((item) => (
+   600→                        <div key={item.book.id} className="rounded-xl bg-rose-50 border border-rose-200 p-4">
+   601→                          <div className="flex items-start gap-3">
+   602→                            <BookOpen className="h-6 w-6 text-rose-600 shrink-0 mt-0.5" />
+   603→                            <div className="flex-1 min-w-0">
+   604→                              <p className="text-body font-bold text-foreground truncate">
+   605→                                {item.book.book?.title || '제목 없음'}
+   606→                              </p>
+   607→                              <div className="mt-2 flex items-center gap-4">
+   608→                                <span className="text-caption text-rose-600">
+   609→                                  {item.days}일 연체
+   610→                                </span>
+   611→                                <span className="text-body font-bold text-rose-700">
+   612→                                  {item.fee.toLocaleString()}원
+   613→                                </span>
+   614→                              </div>
+   615→                              <p className="text-caption text-muted-foreground mt-1">
+   616→                                (연체료: {OVERDUE_FEE_PER_DAY}원 × {item.days}일)
+   617→                              </p>
+   618→                            </div>
+   619→                          </div>
+   620→                        </div>
+   621→                      ))}
+   622→                    </div>
+   623→
+   624→                    <Separator className="my-4" />
+   625→
+   626→                    <div className="flex items-center justify-between">
+   627→                      <span className="text-heading font-bold text-foreground">총 연체료</span>
+   628→                      <span className="text-title font-bold text-rose-600">
+   629→                        {totalFee.toLocaleString()}원
+   630→                      </span>
+   631→                    </div>
+   632→                  </motion.div>
+   633→
+   634→                  {/* Simulation notice */}
+   635→                  <div className="w-full rounded-xl bg-sky-50 border border-sky-200 p-4 text-center">
+   636→                    <p className="text-caption text-sky-700">
+   637→                      📋 이것은 시뮬레이션입니다. 실제 비용이 청구되지 않습니다.
+   638→                    </p>
+   639→                  </div>
+   640→                </>
+   641→              ) : (
+   642→                <>
+   643→                  <motion.div
+   644→                    initial={{ scale: 0 }}
+   645→                    animate={{ scale: 1 }}
+   646→                    transition={{ type: 'spring' }}
+   647→                  >
+   648→                    <CheckCircle className="h-16 w-16 text-emerald-500" />
+   649→                  </motion.div>
+   650→                  <p className="text-body text-muted-foreground text-center">
+   651→                    연체된 도서가 없습니다. 정상 반납됩니다.
+   652→                  </p>
+   653→                </>
+   654→              )}
+   655→
+   656→              <button
+   657→                onClick={processReturn}
+   658→                disabled={loading}
+   659→                className="btn-senior w-full bg-primary text-primary-foreground rounded-xl"
+   660→              >
+   661→                {loading ? '처리 중...' : '반납 완료하기'}
+   662→              </button>
+   663→            </motion.div>
+   664→          )}
+   665→
+   666→          {/* Step 4: Return complete */}
+   667→          {step === 4 && returnCompleted && (
+   668→            <motion.div
+   669→              key="step4"
+   670→              initial={{ opacity: 0, x: 50 }}
+   671→              animate={{ opacity: 1, x: 0 }}
+   672→              exit={{ opacity: 0, x: -50 }}
+   673→              className="flex flex-col items-center gap-6"
+   674→            >
+   675→              {/* Star stamp animation */}
+   676→              {isMissionMode && (
+   677→                <motion.div
+   678→                  initial={{ scale: 0, rotate: -30 }}
+   679→                  animate={{ scale: 1, rotate: 0 }}
+   680→                  transition={{ type: 'spring', stiffness: 200, damping: 15 }}
+   681→                  className="star-stamp"
+   682→                >
+   683→                  <Star className="h-16 w-16 fill-amber-400 text-amber-400" />
+   684→                </motion.div>
+   685→              )}
+   686→
+   687→              <motion.div
+   688→                initial={{ scale: 0 }}
+   689→                animate={{ scale: 1 }}
+   690→                transition={{ type: 'spring', stiffness: 150, damping: 15 }}
+   691→              >
+   692→                <CheckCircle className="h-20 w-20 text-emerald-500" />
+   693→              </motion.div>
+   694→
+   695→              <h2 className="text-title text-foreground text-center">
+   696→                반납 완료!
+   697→              </h2>
+   698→
+   699→              {/* Return confirmation card */}
+   700→              <div className="w-full rounded-xl border-2 border-dashed border-border bg-card p-6">
+   701→                <div className="mb-4 text-center">
+   702→                  <p className="text-heading font-bold text-foreground">반납 확인증</p>
+   703→                  <Separator className="mt-2" />
+   704→                </div>
+   705→
+   706→                <div className="flex flex-col gap-4">
+   707→                  {/* User info */}
+   708→                  <div className="flex items-center justify-between">
+   709→                    <span className="text-caption text-muted-foreground">회원명</span>
+   710→                    <span className="text-body font-bold text-foreground">{currentUser.name}</span>
+   711→                  </div>
+   712→
+   713→                  <div className="flex items-center justify-between">
+   714→                    <span className="text-caption text-muted-foreground">반납일</span>
+   715→                    <span className="text-body font-bold text-foreground">
+   716→                      {formatDate(new Date().toISOString())}
+   717→                    </span>
+   718→                  </div>
+   719→
+   720→                  <Separator />
+   721→
+   722→                  {/* Returned books */}
+   723→                  <h3 className="text-body font-bold text-foreground">반납 도서</h3>
+   724→                  <div className="flex flex-col gap-2">
+   725→                    {selectedLoans.map((loan) => (
+   726→                      <div key={loan.id} className="flex items-center gap-3 rounded-lg bg-muted/50 p-3">
+   727→                        <BookOpen className="h-5 w-5 text-primary shrink-0" />
+   728→                        <span className="text-body text-foreground truncate flex-1">
+   729→                          {loan.book?.title || '제목 없음'}
+   730→                        </span>
+   731→                        <CheckCircle className="h-5 w-5 text-emerald-500 shrink-0" />
+   732→                      </div>
+   733→                    ))}
+   734→                  </div>
+   735→
+   736→                  <Separator />
+   737→
+   738→                  {/* Return status */}
+   739→                  {hasOverdue ? (
+   740→                    <div className="rounded-xl bg-rose-50 border border-rose-200 p-4 text-center">
+   741→                      <p className="text-heading font-bold text-rose-700">연체 반납</p>
+   742→                      <p className="text-body text-rose-600 mt-1">
+   743→                        연체료: {totalFee.toLocaleString()}원
+   744→                      </p>
+   745→                      <p className="text-caption text-rose-500 mt-1">
+   746→                        (시뮬레이션 — 실제 비용이 청구되지 않습니다)
+   747→                      </p>
+   748→                    </div>
+   749→                  ) : (
+   750→                    <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4 text-center">
+   751→                      <p className="text-heading font-bold text-emerald-700">정상 반납</p>
+   752→                      <p className="text-body text-emerald-600 mt-1">
+   753→                        감사합니다!
+   754→                      </p>
+   755→                    </div>
+   756→                  )}
+   757→
+   758→                  <div className="text-center">
+   759→                    <p className="text-body font-bold text-foreground">
+   760→                      총 {selectedLoans.length}권 반납
+   761→                    </p>
+   762→                  </div>
+   763→                </div>
+   764→              </div>
+   765→
+   766→              <button
+   767→                onClick={() => setView('home')}
+   768→                className="btn-senior w-full bg-primary text-primary-foreground rounded-xl"
+   769→              >
+   770→                <Home className="h-6 w-6" />
+   771→                홈으로
+   772→              </button>
+   773→            </motion.div>
+   774→          )}
+   775→        </AnimatePresence>
+   776→      </main>
+   777→    </div>
+   778→  )
+   779→}
+   780→

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { OVERDUE_FEE_PER_DAY } from '@/lib/constants'
+import { OVERDUE_BLOCK_MULTIPLIER } from '@/lib/constants'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,7 +39,8 @@ export async function POST(
 
     const diffMs = returnDate.getTime() - dueDate.getTime()
     const overdueDays = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)))
-    const overdueFee = overdueDays * OVERDUE_FEE_PER_DAY
+    // 연체일수만큼 대여 정지 (연체료 없음)
+    const penaltyDays = overdueDays * OVERDUE_BLOCK_MULTIPLIER
 
     const updatedLoan = await db.simLoan.update({
       where: { id },
@@ -58,7 +59,7 @@ export async function POST(
     return NextResponse.json({
       loan: updatedLoan,
       overdueDays,
-      overdueFee,
+      penaltyDays,
     })
   } catch (error) {
     console.error('반납 오류:', error)

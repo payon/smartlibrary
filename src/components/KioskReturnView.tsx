@@ -19,7 +19,7 @@ import { useAppStore, type LoanItem } from '@/stores/useAppStore'
 import { cn } from '@/lib/utils'
 import { speak } from '@/lib/tts'
 import { toast } from 'sonner'
-import { OVERDUE_FEE_PER_DAY } from '@/lib/constants'
+import { OVERDUE_BLOCK_MULTIPLIER } from '@/lib/constants'
 import {
   Dialog,
   DialogContent,
@@ -30,7 +30,7 @@ import {
 
 interface ReturnedBook extends LoanItem {
  overdueDays: number
- overdueFee: number
+ penaltyDays: number
 }
 
 type KioskReturnStep = 'start' | 'returning' | 'review' | 'complete'
@@ -189,10 +189,10 @@ export default function KioskReturnView() {
       setInsertSuccess(loan.id)
       if (ttsEnabled) speak('삑!')
       const overdueDays = getOverdueDays(loan.dueDate)
-      const overdueFee = overdueDays * OVERDUE_FEE_PER_DAY
+      const penaltyDays = overdueDays * OVERDUE_BLOCK_MULTIPLIER
       setReturnedBooks((prev) => [
         ...prev,
-        { ...loan, overdueDays, overdueFee },
+        { ...loan, overdueDays, penaltyDays },
       ])
 
       if (isMissionMode && currentMissionScenarioId === 'scenario-kiosk-return') {
@@ -237,14 +237,14 @@ export default function KioskReturnView() {
     (l) => !returnedBooks.some((r) => r.id === l.id)
   )
 
-  const totalFee = returnedBooks.reduce((sum, rb) => sum + rb.overdueFee, 0)
+  const totalPenaltyDays = returnedBooks.reduce((max, rb) => Math.max(max, rb.penaltyDays), 0)
   const hasAnyOverdue = returnedBooks.some((rb) => rb.overdueDays > 0)
 
   // Help text per step
   const helpTexts: Record<KioskReturnStep, string> = {
     start: '키오스크 시작 화면입니다. 도서 대여 또는 도서 반납을 선택할 수 있습니다.',
     returning: '반납할 책을 투입구에 넣는 화면입니다. 반납할 책을 누르면 자동으로 투입됩니다.',
-    review: '반납된 책 목록을 확인하는 화면입니다. 연체된 책이 있으면 연체료가 표시됩니다.',
+    review: '반납된 책 목록을 확인하는 화면입니다. 연체된 책이 있으면 대여 정지 안내가 표시됩니다.',
     complete: '반납이 완료되었습니다. 영수증을 출력하거나 처음으로 돌아갈 수 있습니다.',
   }
 
@@ -532,7 +532,7 @@ export default function KioskReturnView() {
                         {rb.overdueDays > 0 ? (
                           <div className="mt-2 bg-rose-600/20 rounded-lg p-2">
                             <p className="text-rose-400 text-caption">
-                              연체 {rb.overdueDays}일 | 연체료: {rb.overdueFee.toLocaleString()}원
+                              연체 {rb.overdueDays}일 | 대여 정지 {rb.penaltyDays}일
                             </p>
                           </div>
                         ) : (
@@ -548,12 +548,12 @@ export default function KioskReturnView() {
                 <>
                   <div className="bg-amber-600/20 border border-amber-500/30 rounded-xl p-4 text-center">
                     <p className="text-amber-400 text-body font-bold">
-                      총 연체료: {totalFee.toLocaleString()}원
+                      대여 정지 기간: {totalPenaltyDays}일
                     </p>
                   </div>
                   <div className="bg-white/5 rounded-xl p-3 text-center">
                     <p className="text-white/50 text-caption">
-                      시뮬레이션입니다. 실제 비용이 없습니다.
+                      시뮬레이션입니다. 실제로는 대여가 제한됩니다.
                     </p>
                   </div>
                 </>
@@ -614,7 +614,7 @@ export default function KioskReturnView() {
                       </p>
                       {rb.overdueDays > 0 ? (
                         <p className="text-caption text-rose-600">
-                          연체 반납 (연체료: {rb.overdueFee.toLocaleString()}원)
+                          연체 반납 (대여 정지: {rb.penaltyDays}일)
                         </p>
                       ) : (
                         <p className="text-caption text-emerald-600">정상 반납</p>

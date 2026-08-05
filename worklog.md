@@ -305,3 +305,34 @@ Stage Summary:
 - 4자리 PIN이 회원가입 또는 도서증 발급 시 필수 설정
 - 무인키오스크 대여 시: 책 자동 스캔→바코드 스캔→PIN 입력→대출
 - Lint 0 에러, 브라우저에서 PIN 입력 단계 및 API 동작 확인
+
+---
+Task ID: 6
+Agent: Main Orchestrator
+Task: 대출 규정 전면 개정 (거주지 기반 도서관 이용, 10권/15일, 연장 불가, 연체=대여 정지)
+
+Work Log:
+- constants.ts: MAX_LOAN_COUNT 5→10, LOAN_PERIOD_DAYS 14→15, EXTEND_DAYS/OVERDUE_FEE_PER_DAY 삭제, OVERDUE_BLOCK_MULTIPLIER=1 신규
+- /api/loans/route.ts POST:
+  - 연체 도서 존재 시 연체일수 반환 에러 메시지 추가 (blockDays 포함)
+  - 페널티 기간 계산 로직 추가: 반납 시 연체일수만큼 대여 정지 (반납일 + 연체일수)
+  - 페널티 기간 중 대출 시도 시 잔여 정지일 안내
+- /api/loans/[id]/return/route.ts: overdueFee 대신 penaltyDays 반환 (연체일수 × OVERDUE_BLOCK_MULTIPLIER)
+- /api/loans/[id]/extend/route.ts: 모든 연장 요청 거부 ("연장이 불가합니다")
+- RegistrationView.tsx 약관 제3조 전면 개정:
+  ① 거주 주소지 기반 관할 지역 내 모든 도서관 이용
+  ② 최대 10권 대출
+  ③ 대출 기간 15일
+  ④ 연장 불가
+  ⑤ 연체 시 연체일수만큼 대여 정지
+- CounterLoanView.tsx: EXTEND_DAYS 임포트 제거, TTS 10권, 영수증에 "연장 불가" 안내
+- CounterReturnView.tsx: 연체료→대여 정지일수로 전면 변경 (state, UI, TTS 모두)
+- KioskLoanView.tsx: TTS/안내문 5권→10권
+- KioskReturnView.tsx: overdueFee→penaltyDays로 전면 변경
+- 시나리오 stepsJson: 키오스크 대여 5권→10권
+
+Stage Summary:
+- 9개 파일 수정 (constants, 3 API routes, 5 UI components)
+- 대출 규정: 거주지 기반 전 도서관 이용, 최대 10권, 15일 대출, 연장 불가, 연체=대여 정지
+- 기존 연체료(100원/일) 시스템 완전 제거, 대여 정지 기간 시스템으로 대체
+- Lint 0 에러, 브라우저에서 약관 내용(10권/15일/연장 불가) 시각 확인 완료

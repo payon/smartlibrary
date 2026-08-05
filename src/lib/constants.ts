@@ -247,7 +247,7 @@ export const SCENARIOS = [
     orderIndex: 5,
     stepsJson: JSON.stringify([
       { step: 1, title: '키오스크 시작하기', description: '키오스크 화면을 터치하여 도서 대여를 선택합니다.' },
-      { step: 2, title: '책 선택하기', description: '빌릴 책을 최대 5권까지 선택합니다. 자동으로 바코드가 스캔됩니다.' },
+      { step: 2, title: '책 선택하기', description: '빌릴 책을 최대 10권까지 선택합니다. 자동으로 바코드가 스캔됩니다.' },
       { step: 3, title: '도서증 바코드 스캔', description: '모바일 도서증 또는 실물 도서증의 바코드를 스캔합니다.' },
       { step: 4, title: '비밀번호 입력', description: '설정한 4자리 비밀번호를 입력합니다.' },
       { step: 5, title: '대여 완료 확인', description: '대여 내역을 확인하고 완료를 누릅니다.' },
@@ -269,10 +269,9 @@ export const SCENARIOS = [
   },
 ]
 
-export const MAX_LOAN_COUNT = 5
-export const LOAN_PERIOD_DAYS = 14
-export const EXTEND_DAYS = 7
-export const OVERDUE_FEE_PER_DAY = 100
+export const MAX_LOAN_COUNT = 10
+export const LOAN_PERIOD_DAYS = 15
+export const OVERDUE_BLOCK_MULTIPLIER = 1 // 연체일수 × 이 배수만큼 대여 정지
 
 export type FontSize = 'normal' | 'large' | 'xlarge'
 export type ViewName =

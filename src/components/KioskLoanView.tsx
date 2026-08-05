@@ -135,7 +135,7 @@ export default function KioskLoanView() {
     if (!ttsEnabled) return
     switch (step) {
       case 'start': speak('원하시는 서비스를 선택해주세요'); break
-      case 'place-books': speak('빌릴 책을 최대 5권까지 선택해주세요. 선택 후 자동으로 스캔됩니다.'); break
+      case 'place-books': speak('빌릴 책을 최대 10권까지 선택해주세요. 선택 후 자동으로 스캔됩니다.'); break
       case 'scan-card': speak('도서증 바코드를 스캔해주세요. 모바일 도서증이나 실물 도서증 모두 가능합니다.'); break
       case 'enter-pin': speak('비밀번호 4자리를 입력해주세요.'); break
       case 'confirm': speak('대여할 책을 확인하고 대여 완료를 눌러주세요'); break
@@ -324,7 +324,7 @@ export default function KioskLoanView() {
 
   const helpTexts: Record<KioskLoanStep, string> = {
     start: '키오스크 시작 화면입니다. 도서 대여 또는 도서 반납을 선택할 수 있습니다.',
-    'place-books': '빌릴 책을 최대 5권까지 선택하세요. 선택한 책은 자동으로 스캔됩니다.',
+    'place-books': '빌릴 책을 최대 10권까지 선택하세요. 선택한 책은 자동으로 스캔됩니다.',
     'scan-card': '모바일 도서증의 바코드 또는 실물 도서증의 바코드를 스캔하는 화면입니다.',
     'enter-pin': '가입 시 설정한 비밀번호 4자리를 입력해주세요.',
     confirm: '대여할 책 목록을 확인하는 화면입니다. 내용이 맞으면 대여 완료 버튼을 눌러주세요.',

@@ -34,7 +34,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { toast } from 'sonner'
-import { MAX_LOAN_COUNT, LOAN_PERIOD_DAYS, EXTEND_DAYS } from '@/lib/constants'
+import { MAX_LOAN_COUNT, LOAN_PERIOD_DAYS } from '@/lib/constants'
 
 type LoanStep = 1 | 2 | 3 | 4 | 5 | 6
 
@@ -158,7 +158,7 @@ export default function CounterLoanView() {
     if (!ttsEnabled) return
     const messages: Record<LoanStep, string> = {
       1: '사서님께 도서증을 제시해주세요.',
-      2: '빌리고 싶은 책을 선택해주세요. 최대 5권까지 빌릴 수 있습니다.',
+      2: '빌리고 싶은 책을 선택해주세요. 최대 10권까지 빌릴 수 있습니다.',
       3: '대여 권수를 확인해주세요.',
       4: '연체된 도서가 있는지 확인해주세요.',
       5: '대여할 책과 반납일을 확인해주세요.',
@@ -845,7 +845,7 @@ export default function CounterLoanView() {
 
                   <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-center">
                     <p className="text-caption text-amber-800">
-                      💡 연장은 1회 가능합니다 ({EXTEND_DAYS}일)
+                      ⚠️ 연장은 불가합니다. 반납일을 꼭 지켜주세요.
                     </p>
                   </div>
                 </div>

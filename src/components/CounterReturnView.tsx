@@ -22,7 +22,7 @@ import { speak } from '@/lib/tts'
 import TopBar from '@/components/TopBar'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { OVERDUE_FEE_PER_DAY } from '@/lib/constants'
+import { OVERDUE_BLOCK_MULTIPLIER } from '@/lib/constants'
 import { toast } from 'sonner'
 
 type ReturnStep = 1 | 2 | 3 | 4
@@ -198,8 +198,8 @@ export default function CounterReturnView() {
   const [loading, setLoading] = useState(true)
   const [scanningIndex, setScanningIndex] = useState(-1)
   const [scannedIndices, setScannedIndices] = useState<Set<number>>(new Set())
-  const [totalFee, setTotalFee] = useState(0)
-  const [overdueItems, setOverdueItems] = useState<{ book: LoanItem; days: number; fee: number }[]>([])
+  const [totalPenaltyDays, setTotalPenaltyDays] = useState(0)
+  const [overdueItems, setOverdueItems] = useState<{ book: LoanItem; days: number; penaltyDays: number }[]>([])
   const [returnCompleted, setReturnCompleted] = useState(false)
   const [hasOverdue, setHasOverdue] = useState(false)
 
@@ -231,7 +231,7 @@ export default function CounterReturnView() {
     const messages: Record<ReturnStep, string> = {
       1: '반납할 책을 선택해주세요.',
       2: '책 바코드를 스캔하고 있습니다.',
-      3: '연체료를 확인해주세요.',
+      3: '연체 상태를 확인해주세요.',
       4: '반납이 완료되었습니다.',
     }
     speak(messages[step])
@@ -273,27 +273,23 @@ export default function CounterReturnView() {
         setScanningIndex(-1)
         clearInterval(interval)
 
-        // Calculate overdue fees after a brief delay
+        // Calculate overdue penalty days after a brief delay
         setTimeout(() => {
-          let total = 0
-          const items: { book: LoanItem; days: number; fee: number }[] = []
+          let totalPenalty = 0
+          const items: { book: LoanItem; days: number; penaltyDays: number }[] = []
           for (const loan of selectedLoans) {
             const days = getDaysRemaining(loan.dueDate)
             if (days < 0) {
-              const fee = Math.abs(days) * OVERDUE_FEE_PER_DAY
-              items.push({ book: loan, days: Math.abs(days), fee })
-              total += fee
+              const penaltyDays = Math.abs(days) * OVERDUE_BLOCK_MULTIPLIER
+              items.push({ book: loan, days: Math.abs(days), penaltyDays })
+              if (penaltyDays > totalPenalty) totalPenalty = penaltyDays
             }
           }
           setOverdueItems(items)
-          setTotalFee(total)
-          setHasOverdue(total > 0)
+          setTotalPenaltyDays(totalPenalty)
+          setHasOverdue(items.length > 0)
 
-          if (total > 0) {
-            setStep(3)
-          } else {
-            setStep(3) // still go to step 3 to confirm
-          }
+          setStep(3)
 
           if (isMissionMode) completeMissionStep()
         }, 1000)
@@ -308,8 +304,8 @@ export default function CounterReturnView() {
     setLoading(true)
 
     let anyOverdue = false
-    let calculatedTotalFee = 0
-    const items: { book: LoanItem; days: number; fee: number }[] = []
+    let maxPenaltyDays = 0
+    const items: { book: LoanItem; days: number; penaltyDays: number }[] = []
 
     for (const loan of selectedLoans) {
       try {
@@ -318,11 +314,10 @@ export default function CounterReturnView() {
         })
         if (res.ok) {
           const data = await res.json()
-          if (data.overdueDays > 0) {
+          if (data.penaltyDays > 0) {
             anyOverdue = true
-            const fee = data.overdueDays * OVERDUE_FEE_PER_DAY
-            calculatedTotalFee += fee
-            items.push({ book: loan, days: data.overdueDays, fee })
+            if (data.penaltyDays > maxPenaltyDays) maxPenaltyDays = data.penaltyDays
+            items.push({ book: loan, days: data.overdueDays, penaltyDays: data.penaltyDays })
           }
         }
       } catch {
@@ -331,7 +326,7 @@ export default function CounterReturnView() {
     }
 
     setOverdueItems(items)
-    setTotalFee(calculatedTotalFee)
+    setTotalPenaltyDays(maxPenaltyDays)
     setHasOverdue(anyOverdue)
     setReturnCompleted(true)
     setStep(4)
@@ -339,7 +334,7 @@ export default function CounterReturnView() {
 
     if (ttsEnabled) {
       if (anyOverdue) {
-        speak(`반납이 완료되었습니다. 연체료는 ${calculatedTotalFee.toLocaleString()}원입니다.`)
+        speak(`반납이 완료되었습니다. 연체로 인해 ${maxPenaltyDays}일 동안 대여가 제한됩니다.`)
       } else {
         speak('반납이 완료되었습니다. 감사합니다!')
       }
@@ -578,7 +573,7 @@ export default function CounterReturnView() {
               className="flex flex-col items-center gap-6"
             >
               <h2 className="text-title text-foreground text-center">
-                {hasOverdue ? '연체료 계산' : '반납 확인'}
+                {hasOverdue ? '연체 확인' : '반납 확인'}
               </h2>
 
               {hasOverdue ? (
@@ -608,11 +603,11 @@ export default function CounterReturnView() {
                                   {item.days}일 연체
                                 </span>
                                 <span className="text-body font-bold text-rose-700">
-                                  {item.fee.toLocaleString()}원
+                                  대여 정지 {item.penaltyDays}일
                                 </span>
                               </div>
                               <p className="text-caption text-muted-foreground mt-1">
-                                (연체료: {OVERDUE_FEE_PER_DAY}원 × {item.days}일)
+                                (연체 {item.days}일 × {OVERDUE_BLOCK_MULTIPLIER}배 = {item.penaltyDays}일 정지)
                               </p>
                             </div>
                           </div>
@@ -623,9 +618,9 @@ export default function CounterReturnView() {
                     <Separator className="my-4" />
 
                     <div className="flex items-center justify-between">
-                      <span className="text-heading font-bold text-foreground">총 연체료</span>
+                      <span className="text-heading font-bold text-foreground">대여 정지 기간</span>
                       <span className="text-title font-bold text-rose-600">
-                        {totalFee.toLocaleString()}원
+                        {totalPenaltyDays}일
                       </span>
                     </div>
                   </motion.div>
@@ -739,10 +734,10 @@ export default function CounterReturnView() {
                     <div className="rounded-xl bg-rose-50 border border-rose-200 p-4 text-center">
                       <p className="text-heading font-bold text-rose-700">연체 반납</p>
                       <p className="text-body text-rose-600 mt-1">
-                        연체료: {totalFee.toLocaleString()}원
+                        대여 정지: {totalPenaltyDays}일
                       </p>
                       <p className="text-caption text-rose-500 mt-1">
-                        (시뮬레이션 — 실제 비용이 청구되지 않습니다)
+                        (시뮬레이션 — 실제 제한이 적용되지 않습니다)
                       </p>
                     </div>
                   ) : (

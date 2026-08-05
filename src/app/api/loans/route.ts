@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { MAX_LOAN_COUNT, LOAN_PERIOD_DAYS } from '@/lib/constants'
+import { MAX_LOAN_COUNT, LOAN_PERIOD_DAYS, OVERDUE_BLOCK_MULTIPLIER } from '@/lib/constants'
 
 export const dynamic = 'force-dynamic'
 
@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Check overdue loans
+    // Check overdue loans — 연체된 기간만큼 대여 정지
     const today = new Date()
     today.setHours(0, 0, 0, 0)
     const overdueLoans = await db.simLoan.findMany({
@@ -91,9 +91,64 @@ export async function POST(request: NextRequest) {
         dueDate: { lt: today.toISOString().split('T')[0] },
       },
     })
+
     if (overdueLoans.length > 0) {
+      // 가장 많이 연체된 도서 기준으로 대여 정지일 계산
+      let maxOverdueDays = 0
+      for (const loan of overdueLoans) {
+        const dueDate = new Date(loan.dueDate)
+        dueDate.setHours(0, 0, 0, 0)
+        const days = Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24))
+        if (days > maxOverdueDays) maxOverdueDays = days
+      }
+      const blockDays = maxOverdueDays * OVERDUE_BLOCK_MULTIPLIER
       return NextResponse.json(
-        { error: '연체된 도서가 있어 대출할 수 없습니다. 먼저 반납해주세요.' },
+        {
+          error: `연체된 도서가 있어 대출할 수 없습니다. 반납 후 ${blockDays}일 뒤에 대여 가능합니다.`,
+          overdueDays: maxOverdueDays,
+          blockDays,
+        },
+        { status: 400 },
+      )
+    }
+
+    // Check if user is in penalty period (returned overdue but still within block period)
+    const recentOverdueReturns = await db.simLoan.findMany({
+      where: {
+        userId,
+        status: 'returned',
+        returnDate: { not: null },
+        dueDate: { lt: '', },
+      },
+    })
+    // Check returned loans where returnDate > dueDate (were overdue when returned)
+    const penalizedReturns = await db.simLoan.findMany({
+      where: { userId, status: 'returned' },
+    })
+    let penaltyEndDate: Date | null = null
+    for (const loan of penalizedReturns) {
+      if (!loan.returnDate || !loan.dueDate) continue
+      const returnDate = new Date(loan.returnDate)
+      const dueDate = new Date(loan.dueDate)
+      returnDate.setHours(0, 0, 0, 0)
+      dueDate.setHours(0, 0, 0, 0)
+      const overdueDays = Math.max(0, Math.floor((returnDate.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)))
+      if (overdueDays > 0) {
+        // 대여 정지 종료일 = 반납일 + 연체일수
+        const pEnd = new Date(returnDate)
+        pEnd.setDate(pEnd.getDate() + overdueDays * OVERDUE_BLOCK_MULTIPLIER)
+        if (!penaltyEndDate || pEnd > penaltyEndDate) {
+          penaltyEndDate = pEnd
+        }
+      }
+    }
+    if (penaltyEndDate && today <= penaltyEndDate) {
+      const remainingDays = Math.ceil((penaltyEndDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+      return NextResponse.json(
+        {
+          error: `연체 반납으로 인해 ${remainingDays}일 동안 대출할 수 없습니다.`,
+          penaltyRemainingDays: remainingDays,
+        },
         { status: 400 },
       )
     }

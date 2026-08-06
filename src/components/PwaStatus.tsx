@@ -5,22 +5,43 @@
  * - PWA 설치 버튼 표시
  * - 서비스 워커 업데이트 알림
  * - 오프라인 상태 표시
- * - TWA (Trusted Web Activity) 모드 감지
+ *
+ * [하이드레이션 안전]
+ * - useSyncExternalStore로 클라이언트 마운트 여부 감지
+ * - 서버에서는 false, 클라이언트에서 true를 반환하여 불일치 방지
  */
 
 'use client';
 
+import { useSyncExternalStore } from 'react';
 import { usePwa } from '@/hooks/use-pwa';
 import { Download, RefreshCw, WifiOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
+/** 구독 함수 (빈 함수 - 상태 변경 없음) */
+const emptySubscribe = () => () => {};
+
+/** 클라이언트 스냅샷 (항상 true) */
+const getSnapshot = () => true;
+
+/** 서버 스냅샷 (항상 false) */
+const getServerSnapshot = () => false;
+
 /**
  * PWA 관련 상태 표시 컴포넌트
- * 오프라인 배너, 업데이트 알림, 설치 버튼을 표시합니다.
+ * 마운트 전에는 빈 프래그먼트를 반환하여 하이드레이션 불일치를 방지합니다.
  */
 export default function PwaStatus() {
   const { canInstall, promptInstall, isOffline, updateAvailable, applyUpdate } = usePwa();
+
+  /** 클라이언트에서만 true, 서버에서는 false (하이드레이션 안전) */
+  const isClient = useSyncExternalStore(emptySubscribe, getSnapshot, getServerSnapshot);
+
+  // 서버에서는 아무것도 렌더링하지 않음
+  if (!isClient) {
+    return null;
+  }
 
   /** 업데이트 적용 버튼 클릭 핸들러 */
   const handleUpdate = () => {

@@ -3,12 +3,11 @@
  *
  * [POST] /api/seed
  * 데이터베이스를 초기화하고 시드 데이터를 삽입합니다.
+ * 데모 사용자(김도서관, PIN 1234)를 생성합니다.
  *
  * [보안 조치]
  * - 레이트 리미팅 (초기화는 1분당 1회로 제한)
  * - 개발/시뮬레이션 환경 전용
- *
- * [주의] 프로덕션 환경에서는 비활성화해야 합니다.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -51,10 +50,30 @@ export async function POST(request: NextRequest) {
     const bookCount = await db.book.createMany({ data: SEED_BOOKS });
     const scenarioCount = await db.scenario.createMany({ data: SCENARIOS });
 
+    // 데모 사용자 생성
+    const demoUser = await db.simUser.create({
+      data: {
+        name: '김도서관',
+        birthDate: '19900101',
+        phone: '010-1234-5678',
+        address: '서울시 강남구',
+        cardType: 'mobile',
+        cardNumber: 'LIB-00000001',
+        cardIssued: new Date().toISOString().split('T')[0],
+        pin: '1234',
+        isActive: true,
+      },
+    });
+
     return NextResponse.json({
       success: true,
       books: bookCount.count,
       scenarios: scenarioCount.count,
+      demoUser: {
+        id: demoUser.id,
+        name: demoUser.name,
+        cardNumber: demoUser.cardNumber,
+      },
     });
   } catch (error) {
     console.error('시드 데이터 초기화 오류:', error);

@@ -380,3 +380,25 @@ Stage Summary:
 - 데이터베이스 보안: 파라미터화 쿼리(Prisma ORM), 프로덕션 로그 비활성화, 응답에서 PIN 제거
 - 전체 소스 한글 주석 완료
 - 브라우저 검증: 온보딩 정상 렌더링, PWA 메타태그 확인(manifest/icon/theme-color), 보안 헤더 확인, API 보안 테스트 통과
+
+---
+Task ID: 4-a, 5, 6, 7, 8
+Agent: Main Developer
+Task: Build Complete Unattended Library Kiosk Simulator - Frontend Core + Backend APIs + Database Seed
+
+Work Log:
+- Read and analyzed all existing files (constants, store, page, layout, CSS, API routes, prisma schema, security)
+- Updated constants.ts: added coverUrl to all 15 SEED_BOOKS, added KIOSK_VIEWS type/constants, KioskViewName/KioskMode types, BOOK_CATEGORIES
+- Rewrote useAppStore.ts: kiosk-focused store with screen routing, kioskMode, authenticatedUser, selectedBooks/returnedBooks, sensorActive
+- Updated globals.css: navy blue primary (#1e3a5f), kiosk-frame/screen/btn/dark-bg/light-bg classes, 8+ CSS animations (sensorPulse, slideInLeft/Right, fadeIn, scanRFID, successCheck, etc.)
+- Created 11 kiosk screen components in src/components/kiosk/: KioskIdleScreen, KioskMainMenu, KioskAuthScan, KioskAuthPin, KioskLoanSelect, KioskLoanConfirm, KioskLoanComplete, KioskReturnInsert, KioskReturnScanning, KioskReturnConfirm, KioskReturnComplete
+- Rewrote page.tsx: kiosk container with AnimatePresence screen router, seed initialization
+- Updated layout.tsx: navy theme, dark color scheme, overflow hidden, kiosk-optimized viewport
+- Updated API routes: seed (demo user 김도서관 PIN 1234), books (?search= & ?category=), users (GET by PIN), loans (batch bookIds, demo-user bypass)
+- Updated security.ts: CSP img-src allows images.unsplash.com
+- All lint errors resolved, dev server compiles successfully
+
+Stage Summary:
+- Complete kiosk UI with 11 screens covering idle → main menu → auth (scan+PIN) → loan select/confirm/complete or return insert/scanning/confirm/complete flows
+- Navy blue ECO-style theme, portrait mode (480px max-width), Korean text throughout
+- Demo user auto-seeded, framer-motion animations, shadcn/ui components, large touch targets

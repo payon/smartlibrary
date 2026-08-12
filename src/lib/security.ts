@@ -383,7 +383,7 @@ export const SECURITY_HEADERS = {
     "default-src 'self'",
     "script-src 'self' 'unsafe-inline' 'unsafe-eval'", // Next.js 런타임에 필요
     "style-src 'self' 'unsafe-inline'", // Tailwind CSS 런타임에 필요
-    "img-src 'self' data: blob:", // 이미지 출처 제한
+    "img-src 'self' data: blob: https://images.unsplash.com", // 이미지 출처 제한
     "font-src 'self' data:", // 폰트 출처 제한
     "connect-src 'self'", // API 연결 제한 (PWA에서는 필요에 따라 확장)
     "frame-ancestors 'none'", // 클릭재킹 방지

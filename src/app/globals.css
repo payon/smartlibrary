@@ -2,7 +2,6 @@
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
-@custom-variant high-contrast (&:is(.high-contrast *));
 
 @theme inline {
   --color-background: var(--background);
@@ -56,7 +55,7 @@
   --card-foreground: #1E293B;
   --popover: #FFFFFF;
   --popover-foreground: #1E293B;
-  --primary: #2563EB;
+  --primary: #1e3a5f;
   --primary-foreground: #FFFFFF;
   --secondary: #F1F5F9;
   --secondary-foreground: #334155;
@@ -71,88 +70,12 @@
   --warning-foreground: #FFFFFF;
   --border: #E2E8F0;
   --input: #E2E8F0;
-  --ring: #2563EB;
-  --chart-1: #2563EB;
+  --ring: #1e3a5f;
+  --chart-1: #1e3a5f;
   --chart-2: #059669;
   --chart-3: #D97706;
   --chart-4: #7C3AED;
   --chart-5: #EC4899;
-  /* Font size variables for senior accessibility */
-  --text-title: 1.75rem;
-  --text-heading: 1.5rem;
-  --text-body: 1.25rem;
-  --text-caption: 1rem;
-  --text-button: 1.375rem;
-  --btn-height: 4rem;
-  --btn-radius: 1rem;
-  --touch-min: 3.5rem;
-}
-
-/* Large font mode */
-.font-large {
-  --text-title: 2.25rem;
-  --text-heading: 1.875rem;
-  --text-body: 1.625rem;
-  --text-caption: 1.25rem;
-  --text-button: 1.75rem;
-  --btn-height: 5rem;
-}
-
-/* Extra large font mode */
-.font-xlarge {
-  --text-title: 2.75rem;
-  --text-heading: 2.25rem;
-  --text-body: 2rem;
-  --text-caption: 1.5rem;
-  --text-button: 2.125rem;
-  --btn-height: 5.5rem;
-}
-
-/* High contrast mode */
-.high-contrast {
-  --background: #000000;
-  --foreground: #FFD700;
-  --card: #1A1A1A;
-  --card-foreground: #FFD700;
-  --popover: #1A1A1A;
-  --popover-foreground: #FFD700;
-  --primary: #FFFFFF;
-  --primary-foreground: #000000;
-  --secondary: #333333;
-  --secondary-foreground: #FFFFFF;
-  --muted: #333333;
-  --muted-foreground: #CCCCCC;
-  --accent: #333333;
-  --accent-foreground: #FFFFFF;
-  --destructive: #FF4444;
-  --success: #44FF44;
-  --warning: #FFAA00;
-  --border: #666666;
-  --input: #666666;
-  --ring: #FFD700;
-}
-
-.dark {
-  --background: #0F172A;
-  --foreground: #F1F5F9;
-  --card: #1E293B;
-  --card-foreground: #F1F5F9;
-  --popover: #1E293B;
-  --popover-foreground: #F1F5F9;
-  --primary: #3B82F6;
-  --primary-foreground: #FFFFFF;
-  --secondary: #334155;
-  --secondary-foreground: #F1F5F9;
-  --muted: #334155;
-  --muted-foreground: #94A3B8;
-  --accent: #334155;
-  --accent-foreground: #F1F5F9;
-  --destructive: #EF4444;
-  --success: #10B981;
-  --warning: #F59E0B;
-  --border: #475569;
-  --input: #475569;
-  --ring: #3B82F6;
 }
 
 @layer base {
@@ -164,100 +87,215 @@
   }
 }
 
-/* Senior-friendly utility classes */
-.text-title {
-  font-size: var(--text-title);
-  font-weight: 700;
-  line-height: 1.4;
+/* ======================================================================== */
+/* 키오스크 프레임 - 세로 모드 키오스크 시뮬레이션 컨테이너                      */
+/* ======================================================================== */
+
+.kiosk-frame {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100vh;
+  background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+  position: relative;
+  overflow: hidden;
 }
 
-.text-heading {
-  font-size: var(--text-heading);
+/* ======================================================================== */
+/* 키오스크 화면 - 전체 높이 컨테이너                                          */
+/* ======================================================================== */
+
+.kiosk-screen {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  max-height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ======================================================================== */
+/* 키오스크 버튼 - 큰 터치 타겟                                              */
+/* ======================================================================== */
+
+.kiosk-btn {
+  min-height: 56px;
+  border-radius: 0.75rem;
+  padding: 0.875rem 1.5rem;
+  font-size: 1.125rem;
   font-weight: 600;
-  line-height: 1.4;
-}
-
-.text-body {
-  font-size: var(--text-body);
-  font-weight: 400;
-  line-height: 1.6;
-}
-
-.text-caption {
-  font-size: var(--text-caption);
-  font-weight: 400;
-  line-height: 1.5;
-}
-
-.text-button {
-  font-size: var(--text-button);
-  font-weight: 700;
-}
-
-.btn-senior {
-  min-height: var(--btn-height);
-  min-width: var(--touch-min);
-  border-radius: var(--btn-radius);
-  padding: 0.75rem 1.5rem;
-  font-size: var(--text-button);
-  font-weight: 700;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.75rem;
+  gap: 0.5rem;
   transition: all 0.15s ease;
   cursor: pointer;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
 
-.btn-senior:active {
+.kiosk-btn:active {
   transform: scale(0.97);
 }
 
-.btn-senior:disabled {
+.kiosk-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;
 }
 
-.btn-senior:focus-visible {
-  outline: 3px solid #FBBF24;
-  outline-offset: 2px;
+/* ======================================================================== */
+/* 키오스크 배경 스타일                                                       */
+/* ======================================================================== */
+
+.kiosk-dark-bg {
+  background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+  color: #f1f5f9;
 }
 
-/* Card style for senior */
-.card-senior {
-  border-radius: 1rem;
-  padding: 1.5rem;
-  background: var(--card);
-  border: 2px solid var(--border);
-  transition: box-shadow 0.2s ease;
+.kiosk-light-bg {
+  background: #f8fafc;
+  color: #1e293b;
 }
 
-.card-senior:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+/* ======================================================================== */
+/* 키오스크 전용 스크롤바                                                     */
+/* ======================================================================== */
+
+.kiosk-scroll::-webkit-scrollbar {
+  width: 6px;
 }
 
-/* Input style for senior */
-.input-senior {
-  min-height: var(--btn-height);
-  font-size: var(--text-body);
-  border-radius: 0.75rem;
-  padding: 0.75rem 1rem;
-  border: 2px solid var(--input);
-  background: var(--card);
-  color: var(--foreground);
-  width: 100%;
+.kiosk-scroll::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-.input-senior:focus {
-  outline: 3px solid #FBBF24;
-  outline-offset: 2px;
-  border-color: var(--primary);
+.kiosk-scroll::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.4);
+  border-radius: 3px;
 }
 
-/* Scan animation */
+.kiosk-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.6);
+}
+
+/* 스크롤바 숨김 */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* ======================================================================== */
+/* 키오스크 애니메이션                                                        */
+/* ======================================================================== */
+
+/* 센서 접근 감지 펄스 */
+@keyframes sensorPulse {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.05); }
+}
+
+.sensor-pulse {
+  animation: sensorPulse 2s ease-in-out infinite;
+}
+
+/* 왼쪽에서 슬라이드 진입 */
+@keyframes slideInLeft {
+  from { transform: translateX(-30px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.slide-in-left {
+  animation: slideInLeft 0.3s ease-out;
+}
+
+/* 오른쪽에서 슬라이드 진입 */
+@keyframes slideInRight {
+  from { transform: translateX(30px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.slide-in-right {
+  animation: slideInRight 0.3s ease-out;
+}
+
+/* 페이드 인 */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.fade-in {
+  animation: fadeIn 0.4s ease-out;
+}
+
+/* RFID 스캔 원형 애니메이션 */
+@keyframes scanRFID {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.scan-rfid {
+  animation: scanRFID 2s linear infinite;
+}
+
+/* RFID 스캔 펄스 */
+@keyframes scanPulse {
+  0% { transform: scale(0.8); opacity: 0.6; }
+  50% { transform: scale(1.2); opacity: 0.2; }
+  100% { transform: scale(0.8); opacity: 0.6; }
+}
+
+.scan-pulse {
+  animation: scanPulse 1.5s ease-in-out infinite;
+}
+
+/* 성공 체크마크 애니메이션 */
+@keyframes successCheck {
+  0% { transform: scale(0); opacity: 0; }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.success-check {
+  animation: successCheck 0.5s ease-out forwards;
+}
+
+/* 접근 안내 텍스트 펄스 */
+@keyframes touchPulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+.touch-pulse {
+  animation: touchPulse 2s ease-in-out infinite;
+}
+
+/* 도서 삽입 가이드 화살표 */
+@keyframes insertBounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+.insert-bounce {
+  animation: insertBounce 1.5s ease-in-out infinite;
+}
+
+/* 카드 스캔 링 */
+@keyframes cardScanRing {
+  0% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.5); }
+  70% { box-shadow: 0 0 0 20px rgba(56, 189, 248, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0); }
+}
+
+.card-scan-ring {
+  animation: cardScanRing 1.5s ease-out infinite;
+}
+
+/* 기존 카드 스캔 라인 (호환성 유지) */
 @keyframes scanLine {
   0% { top: 0; }
   50% { top: calc(100% - 4px); }
@@ -268,70 +306,7 @@
   animation: scanLine 2s ease-in-out infinite;
 }
 
-/* Star stamp animation */
-@keyframes stampAppear {
-  0% { transform: scale(0) rotate(-30deg); opacity: 0; }
-  60% { transform: scale(1.2) rotate(5deg); opacity: 1; }
-  100% { transform: scale(1) rotate(0deg); opacity: 1; }
-}
-
-.star-stamp {
-  animation: stampAppear 0.5s ease-out forwards;
-}
-
-/* Confetti animation */
-@keyframes confettiFall {
-  0% { transform: translateY(-100vh) rotate(0deg); opacity: 1; }
-  100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
-}
-
-/* Kiosk timeout bar */
-@keyframes timeoutShrink {
-  from { width: 100%; }
-  to { width: 0%; }
-}
-
-.timeout-bar {
-  animation: timeoutShrink linear forwards;
-}
-
-/* Pulse for help button */
-@keyframes gentlePulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.4); }
-  50% { box-shadow: 0 0 0 8px rgba(37, 99, 235, 0); }
-}
-
-.help-pulse {
-  animation: gentlePulse 2s ease-in-out infinite;
-}
-
-/* Custom scrollbar for senior */
-.custom-scrollbar::-webkit-scrollbar {
-  width: 12px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: var(--muted);
-  border-radius: 6px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: var(--muted-foreground);
-  border-radius: 6px;
-  border: 3px solid var(--muted);
-}
-
-/* Kiosk mode - vertical screen simulation */
-.kiosk-frame {
-  max-width: 480px;
-  margin: 0 auto;
-  min-height: 100vh;
-  background: #1a1a2e;
-  position: relative;
-  overflow: hidden;
-}
-
-/* QR code placeholder */
+/* QR 코드 점멸 */
 @keyframes qrPulse {
   0%, 100% { opacity: 0.8; }
   50% { opacity: 1; }

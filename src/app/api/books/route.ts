@@ -1,8 +1,8 @@
 /**
  * 도서 검색 API 라우트
  *
- * [GET] /api/books?query=xxx
- * 도서를 검색합니다. 쿼리 없으면 전체 조회.
+ * [GET] /api/books?search=xxx&category=xxx
+ * 도서를 검색합니다. ?search= 및 ?category= 쿼리 파라미터 지원.
  *
  * [보안 조치]
  * - 검색어 길이 제한 (최대 100자)
@@ -29,12 +29,13 @@ export const dynamic = 'force-dynamic';
 
 /**
  * 도서 검색 GET 핸들러
- * 제목, 저자, 카테고리에서 검색어를 포함하는 도서를 반환합니다.
+ * 제목, 저자에서 검색어를 포함하며 카테고리로 필터링한 도서를 반환합니다.
  */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const rawQuery = searchParams.get('query')?.trim();
+    const rawSearch = searchParams.get('search')?.trim();
+    const rawCategory = searchParams.get('category')?.trim();
 
     // [보안] 레이트 리미팅 체크
     const clientIp = getClientIp(request);
@@ -46,37 +47,36 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 검색어가 있는 경우
-    if (rawQuery) {
-      // [보안] 검색어 길이 제한
-      if (rawQuery.length > MAX_QUERY_LENGTH) {
+    // [보안] 검색어 sanitization
+    let searchFilter = undefined;
+    if (rawSearch) {
+      if (rawSearch.length > MAX_QUERY_LENGTH) {
         return NextResponse.json(
           { error: '검색어가 너무 깁니다. 100자 이하로 입력해주세요.' },
           { status: 400 }
         );
       }
-
-      // [보안] 검색어 XSS sanitization
-      const query = sanitizeString(rawQuery);
-
-      // [데이터베이스] Prisma ORM 파라미터화 쿼리 (SQL Injection 방지)
-      // contains 연산자는 Prisma가 내부적으로 파라미터화 처리
-      const books = await db.book.findMany({
-        where: {
-          OR: [
-            { title: { contains: query } },
-            { author: { contains: query } },
-            { category: { contains: query } },
-          ],
-        },
-        orderBy: { title: 'asc' },
-      });
-
-      return NextResponse.json(books);
+      const query = sanitizeString(rawSearch);
+      searchFilter = {
+        OR: [
+          { title: { contains: query } },
+          { author: { contains: query } },
+        ],
+      };
     }
 
-    // 검색어 없음: 전체 도서 목록 반환
+    // 카테고리 필터
+    let categoryFilter = undefined;
+    if (rawCategory) {
+      categoryFilter = { category: rawCategory };
+    }
+
+    // [데이터베이스] Prisma ORM 파라미터화 쿼리
     const books = await db.book.findMany({
+      where: {
+        ...(searchFilter || {}),
+        ...(categoryFilter || {}),
+      },
       orderBy: { title: 'asc' },
     });
 

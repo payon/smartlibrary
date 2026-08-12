@@ -1,15 +1,15 @@
 /**
- * 애플리케이션 상수 정의 모듈
+ * 키오스크 시뮬레이션 상수 정의 모듈
  *
  * [내용]
- * - 시드 도서 데이터 (15권)
+ * - 시드 도서 데이터 (15권, 표지 이미지 포함)
  * - 학습 시나리오 정의 (7개)
  * - 대출 규정 상수 (최대 권수, 대출 기간, 연체 배수)
- * - 타입 정의 (글꼴 크기, 뷰 이름)
+ * - 키오스크 화면 타입 정의
  */
 
 // ============================================================================
-// 시드 도서 데이터
+// 시드 도서 데이터 (표지 이미지 URL 포함)
 // ============================================================================
 
 /** 도서관 시뮬레이션용 시드 도서 데이터 */
@@ -24,6 +24,7 @@ export const SEED_BOOKS = [
     shelfLocation: '2층 A-05',
     totalCopies: 3,
     availableCopies: 2,
+    coverUrl: 'https://images.unsplash.com/photo-1544947950-fa07a98d237f?w=200&h=300&fit=crop',
   },
   {
     isbn: '9788954641015',
@@ -35,6 +36,7 @@ export const SEED_BOOKS = [
     shelfLocation: '2층 A-12',
     totalCopies: 5,
     availableCopies: 3,
+    coverUrl: 'https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?w=200&h=300&fit=crop',
   },
   {
     isbn: '9788901216237',
@@ -46,6 +48,7 @@ export const SEED_BOOKS = [
     shelfLocation: '2층 B-03',
     totalCopies: 2,
     availableCopies: 1,
+    coverUrl: 'https://images.unsplash.com/photo-1512820790803-83ca734da794?w=200&h=300&fit=crop',
   },
   {
     isbn: '9788937460783',
@@ -57,6 +60,7 @@ export const SEED_BOOKS = [
     shelfLocation: '2층 B-08',
     totalCopies: 4,
     availableCopies: 4,
+    coverUrl: 'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?w=200&h=300&fit=crop',
   },
   {
     isbn: '9788950910089',
@@ -68,6 +72,7 @@ export const SEED_BOOKS = [
     shelfLocation: '2층 A-01',
     totalCopies: 3,
     availableCopies: 2,
+    coverUrl: 'https://images.unsplash.com/photo-1481627834876-b7833e8f5570?w=200&h=300&fit=crop',
   },
   {
     isbn: '9788901257781',
@@ -79,6 +84,7 @@ export const SEED_BOOKS = [
     shelfLocation: '2층 B-15',
     totalCopies: 3,
     availableCopies: 3,
+    coverUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=300&fit=crop',
   },
   {
     isbn: '9788934984206',
@@ -90,6 +96,7 @@ export const SEED_BOOKS = [
     shelfLocation: '3층 C-02',
     totalCopies: 4,
     availableCopies: 1,
+    coverUrl: 'https://images.unsplash.com/photo-1476275466078-4007374efbbe?w=200&h=300&fit=crop',
   },
   {
     isbn: '9788901277192',
@@ -101,6 +108,7 @@ export const SEED_BOOKS = [
     shelfLocation: '3층 C-07',
     totalCopies: 3,
     availableCopies: 3,
+    coverUrl: 'https://images.unsplash.com/photo-1519682577862-22b62b24e493?w=200&h=300&fit=crop',
   },
   {
     isbn: '9788937444066',
@@ -112,6 +120,7 @@ export const SEED_BOOKS = [
     shelfLocation: '3층 C-11',
     totalCopies: 2,
     availableCopies: 2,
+    coverUrl: 'https://images.unsplash.com/photo-1495446815901-a7297e633e8d?w=200&h=300&fit=crop',
   },
   {
     isbn: '9788937832588',
@@ -123,6 +132,7 @@ export const SEED_BOOKS = [
     shelfLocation: '4층 D-03',
     totalCopies: 2,
     availableCopies: 2,
+    coverUrl: 'https://images.unsplash.com/photo-1532012197267-da84d127e765?w=200&h=300&fit=crop',
   },
   {
     isbn: '9788937439109',
@@ -134,6 +144,7 @@ export const SEED_BOOKS = [
     shelfLocation: '2층 A-20',
     totalCopies: 3,
     availableCopies: 3,
+    coverUrl: 'https://images.unsplash.com/photo-1524578271613-d550eacf6090?w=200&h=300&fit=crop',
   },
   {
     isbn: '9788954681660',
@@ -145,6 +156,7 @@ export const SEED_BOOKS = [
     shelfLocation: '3층 C-15',
     totalCopies: 5,
     availableCopies: 4,
+    coverUrl: 'https://images.unsplash.com/photo-1553729459-uj6mw2q6z7s?w=200&h=300&fit=crop',
   },
   {
     isbn: '9788901274191',
@@ -156,6 +168,7 @@ export const SEED_BOOKS = [
     shelfLocation: '3층 C-02',
     totalCopies: 3,
     availableCopies: 2,
+    coverUrl: 'https://images.unsplash.com/photo-1491841550275-ad7854e35ca6?w=200&h=300&fit=crop',
   },
   {
     isbn: '9788945079496',
@@ -167,6 +180,7 @@ export const SEED_BOOKS = [
     shelfLocation: '4층 D-08',
     totalCopies: 3,
     availableCopies: 3,
+    coverUrl: 'https://images.unsplash.com/photo-1507842217343-583bb7270b66?w=200&h=300&fit=crop',
   },
   {
     isbn: '9788997402009',
@@ -178,6 +192,7 @@ export const SEED_BOOKS = [
     shelfLocation: '3층 E-01',
     totalCopies: 4,
     availableCopies: 2,
+    coverUrl: 'https://images.unsplash.com/photo-1589998059171-988d887df646?w=200&h=300&fit=crop',
   },
 ];
 
@@ -292,33 +307,50 @@ export const SCENARIOS = [
 // 대출 규정 상수
 // ============================================================================
 
-/** 최대 대출 가능 권수 (거주지 기반, 모든 도서관 합산) */
+/** 최대 대출 가능 권수 */
 export const MAX_LOAN_COUNT = 10;
 
 /** 대출 기간 (일) - 연장 불가, 고정 15일 */
 export const LOAN_PERIOD_DAYS = 15;
 
-/** 연체 정지 배수 - 연체일수 × 이 값만큼 대여 정지 (1 = 1:1 동일) */
+/** 연체 정지 배수 - 연체일수 × 이 값만큼 대여 정지 */
 export const OVERDUE_BLOCK_MULTIPLIER = 1;
 
 // ============================================================================
-// 타입 정의
+// 키오스크 화면 타입 정의
 // ============================================================================
 
-/** 글꼴 크기 옵션 타입 */
-export type FontSize = 'normal' | 'large' | 'xlarge';
+/** 키오스크 화면 이름 타입 */
+export type KioskViewName =
+  | 'idle'
+  | 'main-menu'
+  | 'auth-scan'
+  | 'auth-pin'
+  | 'loan-select'
+  | 'loan-confirm'
+  | 'loan-complete'
+  | 'return-insert'
+  | 'return-scanning'
+  | 'return-confirm'
+  | 'return-complete';
 
-/** 뷰 이름 타입 (SPA 라우팅에 사용) */
-export type ViewName =
-  | 'onboarding'
-  | 'home'
-  | 'registration'
-  | 'card-issuance'
-  | 'book-search'
-  | 'counter-loan'
-  | 'counter-return'
-  | 'kiosk-loan'
-  | 'kiosk-return'
-  | 'learning-progress'
-  | 'settings'
-  | 'completion';
+/** 키오스크 모드 타입 */
+export type KioskMode = 'loan' | 'return' | null;
+
+/** 키오스크 화면 상수 */
+export const KIOSK_VIEWS = {
+  IDLE: 'idle' as const,
+  MAIN_MENU: 'main-menu' as const,
+  AUTH_SCAN: 'auth-scan' as const,
+  AUTH_PIN: 'auth-pin' as const,
+  LOAN_SELECT: 'loan-select' as const,
+  LOAN_CONFIRM: 'loan-confirm' as const,
+  LOAN_COMPLETE: 'loan-complete' as const,
+  RETURN_INSERT: 'return-insert' as const,
+  RETURN_SCANNING: 'return-scanning' as const,
+  RETURN_CONFIRM: 'return-confirm' as const,
+  RETURN_COMPLETE: 'return-complete' as const,
+};
+
+/** 도서 카테고리 목록 */
+export const BOOK_CATEGORIES = ['전체', '소설', '인문', '과학', '역사', '시'] as const;

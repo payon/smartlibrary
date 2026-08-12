@@ -1,45 +1,74 @@
 /**
- * 메인 페이지 컴포넌트
+ * 키오스크 시뮬레이션 메인 페이지
  *
  * [역할]
- * - 전체 애플리케이션의 뷰 라우팅 (SPA 방식)
- * - 시니어 접근성 설정 (글꼴 크기, 고대비 모드)
+ * - 키오스크 화면 컨테이너 (세로 모드, max-width 480px)
+ * - 화면 라우팅 (store.screen 기준)
  * - 시드 데이터 초기화
- * - PWA 상태 표시 (오프라인, 업데이트, 설치)
+ * - PWA 상태 표시
  */
 
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
-import { cn } from '@/lib/utils';
-import OnboardingView from '@/components/OnboardingView';
-import HomeView from '@/components/HomeView';
-import SettingsView from '@/components/SettingsView';
-import RegistrationView from '@/components/RegistrationView';
-import CardIssuanceView from '@/components/CardIssuanceView';
-import BookSearchView from '@/components/BookSearchView';
-import CounterLoanView from '@/components/CounterLoanView';
-import CounterReturnView from '@/components/CounterReturnView';
-import KioskLoanView from '@/components/KioskLoanView';
-import KioskReturnView from '@/components/KioskReturnView';
-import LearningProgressView from '@/components/LearningProgressView';
-import CompletionView from '@/components/CompletionView';
+import type { KioskViewName } from '@/lib/constants';
+import KioskIdleScreen from '@/components/kiosk/KioskIdleScreen';
+import KioskMainMenu from '@/components/kiosk/KioskMainMenu';
+import KioskAuthScan from '@/components/kiosk/KioskAuthScan';
+import KioskAuthPin from '@/components/kiosk/KioskAuthPin';
+import KioskLoanSelect from '@/components/kiosk/KioskLoanSelect';
+import KioskLoanConfirm from '@/components/kiosk/KioskLoanConfirm';
+import KioskLoanComplete from '@/components/kiosk/KioskLoanComplete';
+import KioskReturnInsert from '@/components/kiosk/KioskReturnInsert';
+import KioskReturnScanning from '@/components/kiosk/KioskReturnScanning';
+import KioskReturnConfirm from '@/components/kiosk/KioskReturnConfirm';
+import KioskReturnComplete from '@/components/kiosk/KioskReturnComplete';
 import PwaStatus from '@/components/PwaStatus';
 
 /**
+ * 키오스크 화면 렌더러
+ * 현재 store.screen 값에 따라 해당 컴포넌트를 반환합니다.
+ */
+function ScreenRouter({ screen }: { screen: KioskViewName }) {
+  switch (screen) {
+    case 'idle':
+      return <KioskIdleScreen />;
+    case 'main-menu':
+      return <KioskMainMenu />;
+    case 'auth-scan':
+      return <KioskAuthScan />;
+    case 'auth-pin':
+      return <KioskAuthPin />;
+    case 'loan-select':
+      return <KioskLoanSelect />;
+    case 'loan-confirm':
+      return <KioskLoanConfirm />;
+    case 'loan-complete':
+      return <KioskLoanComplete />;
+    case 'return-insert':
+      return <KioskReturnInsert />;
+    case 'return-scanning':
+      return <KioskReturnScanning />;
+    case 'return-confirm':
+      return <KioskReturnConfirm />;
+    case 'return-complete':
+      return <KioskReturnComplete />;
+    default:
+      return <KioskIdleScreen />;
+  }
+}
+
+/**
  * 홈 페이지 컴포넌트
- * 애플리케이션의 진입점으로, 현재 뷰 상태에 따라 컴포넌트를 렌더링합니다.
+ * 키오스크 프레임 내에서 화면 전환을 관리합니다.
  */
 export default function Home() {
-  // Zustand 스토어에서 상태 가져오기
-  const { currentView, fontSize, highContrast, hasCompletedOnboarding, setView } = useAppStore();
+  const screen = useAppStore((s) => s.screen);
 
   // 시드 데이터 초기화 중복 실행 방지용 ref
   const seededRef = useRef(false);
-
-  // 글꼴 크기에 따른 CSS 클래스 매핑
-  const fontClass = fontSize === 'large' ? 'font-large' : fontSize === 'xlarge' ? 'font-xlarge' : '';
 
   // ========================================================================
   // 초기화: 시드 데이터 로드
@@ -52,59 +81,23 @@ export default function Home() {
     });
   }, []);
 
-  // ========================================================================
-  // 온보딩 완료 상태 확인
-  // ========================================================================
-  useEffect(() => {
-    if (currentView === 'onboarding' && hasCompletedOnboarding) {
-      setView('home');
-    }
-  }, [currentView, hasCompletedOnboarding, setView]);
-
-  /**
-   * 현재 뷰 상태에 따라 렌더링할 컴포넌트를 반환합니다.
-   * SPA 라우팅 패턴으로, URL 변경 없이 화면을 전환합니다.
-   */
-  const renderView = () => {
-    switch (currentView) {
-      case 'onboarding':
-        return <OnboardingView />;
-      case 'home':
-        return <HomeView />;
-      case 'settings':
-        return <SettingsView />;
-      case 'registration':
-        return <RegistrationView />;
-      case 'card-issuance':
-        return <CardIssuanceView />;
-      case 'book-search':
-        return <BookSearchView />;
-      case 'counter-loan':
-        return <CounterLoanView />;
-      case 'counter-return':
-        return <CounterReturnView />;
-      case 'kiosk-loan':
-        return <KioskLoanView />;
-      case 'kiosk-return':
-        return <KioskReturnView />;
-      case 'learning-progress':
-        return <LearningProgressView />;
-      case 'completion':
-        return <CompletionView />;
-      default:
-        return <HomeView />;
-    }
-  };
-
   return (
-    <div
-      id="app-content"
-      className={cn(fontClass, highContrast && 'high-contrast', 'min-h-screen bg-background')}
-    >
-      {/* 현재 뷰 렌더링 */}
-      {renderView()}
+    <div className="kiosk-frame">
+      {/* 화면 전환 애니메이션 */}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={screen}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="h-screen max-h-screen"
+        >
+          <ScreenRouter screen={screen} />
+        </motion.div>
+      </AnimatePresence>
 
-      {/* PWA 상태 표시 (오프라인, 업데이트, 설치) */}
+      {/* PWA 상태 표시 */}
       <PwaStatus />
     </div>
   );

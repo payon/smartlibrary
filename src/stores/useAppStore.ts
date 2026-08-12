@@ -1,17 +1,17 @@
 /**
- * 애플리케이션 전역 상태 관리 스토어 (Zustand)
+ * 키오스크 전역 상태 관리 스토어 (Zustand)
  *
  * [역할]
- * - SPA 라우팅 상태 관리 (뷰 전환, 이력 추적)
- * - 현재 로그인 사용자 정보
- * - 시니어 접근성 설정 (글꼴, 고대비, TTS)
- * - 온보딩 완료 상태
- * - 키오스크 타임아웃 설정
- * - 학습 미션 모드 상태
+ * - 키오스크 화면 전환 (SPA 라우팅)
+ * - 인증된 사용자 정보
+ * - 대출/반납 도서 선택 상태
+ * - 키오스크 모드 (대출/반납)
+ * - 센서 시뮬레이션 상태
+ * - 자동 타임아웃 관리
  */
 
 import { create } from 'zustand';
-import type { FontSize, ViewName } from '@/lib/constants';
+import type { KioskViewName, KioskMode } from '@/lib/constants';
 
 // ============================================================================
 // 인터페이스 정의
@@ -61,169 +61,178 @@ export interface LoanItem {
   book?: BookItem;
 }
 
-/** 학습 시나리오 인터페이스 */
-export interface ScenarioItem {
-  id: string;
-  title: string;
-  description: string | null;
-  difficulty: string;
-  category: string | null;
-  orderIndex: number;
-  stepsJson: string;
+/** 키오스크 전역 상태 인터페이스 */
+interface KioskState {
+  // ------------------------------------------------------------------------
+  // 화면 상태
+  // ------------------------------------------------------------------------
+  /** 현재 키오스크 화면 */
+  screen: KioskViewName;
+  /** 화면 전환 */
+  setScreen: (screen: KioskViewName) => void;
+  /** 이전 화면으로 이동 */
+  prevScreen: () => void;
+
+  // ------------------------------------------------------------------------
+  // 키오스크 모드
+  // ------------------------------------------------------------------------
+  /** 현재 키오스크 모드 (대출/반납) */
+  kioskMode: KioskMode;
+  /** 키오스크 모드 설정 */
+  setKioskMode: (mode: KioskMode) => void;
+
+  // ------------------------------------------------------------------------
+  // 인증된 사용자
+  // ------------------------------------------------------------------------
+  /** 인증된 사용자 정보 */
+  authenticatedUser: SimUser | null;
+  /** 인증된 사용자 설정 */
+  setAuthenticatedUser: (user: SimUser | null) => void;
+
+  // ------------------------------------------------------------------------
+  // 대출 선택 도서
+  // ------------------------------------------------------------------------
+  /** 대출 선택된 도서 목록 */
+  selectedBooks: BookItem[];
+  /** 도서 추가 */
+  addBook: (book: BookItem) => void;
+  /** 도서 제거 */
+  removeBook: (bookId: string) => void;
+  /** 선택 도서 초기화 */
+  clearSelectedBooks: () => void;
+
+  // ------------------------------------------------------------------------
+  // 반납 인식 대출
+  // ------------------------------------------------------------------------
+  /** 반납할 대출 기록 목록 */
+  returnedLoans: LoanItem[];
+  /** 반납 대출 추가 */
+  addReturnedLoan: (loan: LoanItem) => void;
+  /** 반납 대출 초기화 */
+  clearReturnedLoans: () => void;
+
+  // ------------------------------------------------------------------------
+  // 센서 상태 (시뮬레이션)
+  // ------------------------------------------------------------------------
+  /** 센서 활성화 여부 */
+  sensorActive: boolean;
+  /** 센서 상태 설정 */
+  setSensorActive: (active: boolean) => void;
+
+  // ------------------------------------------------------------------------
+  // 타임아웃
+  // ------------------------------------------------------------------------
+  /** 타임아웃 리셋 (화면 전환 시 호출) */
+  resetTimeout: () => void;
 }
 
-/** 학습 진행도 인터페이스 */
-export interface ProgressItem {
-  id: string;
-  userId: string;
-  scenarioId: string;
-  stepIndex: number;
-  completed: boolean;
-  attempts: number;
-  bestTimeSec: number | null;
-  stars: number;
-}
+// ============================================================================
+// 화면 이력 관리 (이전 화면으로 돌아가기용)
+// ============================================================================
 
-/** 학습 시나리오 단계 인터페이스 */
-export interface ScenarioStep {
-  step: number;
-  title: string;
-  description: string;
-}
+/** 화면 이력 스택 */
+const screenHistory: KioskViewName[] = [];
 
-/** 애플리케이션 전역 상태 인터페이스 */
-interface AppState {
-  // ------------------------------------------------------------------------
-  // 네비게이션 (SPA 라우팅)
-  // ------------------------------------------------------------------------
-  /** 현재 활성 뷰 이름 */
-  currentView: ViewName;
-  /** 뷰 이동 이력 (뒤로가기 기능용) */
-  viewHistory: ViewName[];
-  /** 뷰 전환 함수 */
-  setView: (view: ViewName) => void;
-  /** 이전 뷰로 돌아가기 */
-  goBack: () => void;
-
-  // ------------------------------------------------------------------------
-  // 사용자 정보
-  // ------------------------------------------------------------------------
-  /** 현재 로그인된 시뮬레이션 사용자 */
-  currentUser: SimUser | null;
-  /** 현재 사용자 설정 */
-  setCurrentUser: (user: SimUser | null) => void;
-
-  // ------------------------------------------------------------------------
-  // 접근성 (시니어 친화)
-  // ------------------------------------------------------------------------
-  /** 글꼴 크기 설정 */
-  fontSize: FontSize;
-  setFontSize: (size: FontSize) => void;
-  /** 고대비 모드 활성화 여부 */
-  highContrast: boolean;
-  setHighContrast: (enabled: boolean) => void;
-  /** TTS (음성 읽기) 활성화 여부 */
-  ttsEnabled: boolean;
-  setTtsEnabled: (enabled: boolean) => void;
-
-  // ------------------------------------------------------------------------
-  // 온보딩
-  // ------------------------------------------------------------------------
-  /** 온보딩 완료 여부 */
-  hasCompletedOnboarding: boolean;
-  setHasCompletedOnboarding: (completed: boolean) => void;
-
-  // ------------------------------------------------------------------------
-  // 키오스크 설정
-  // ------------------------------------------------------------------------
-  /** 키오스크 자동 종료 타임아웃 (초) */
-  kioskTimeoutSeconds: number;
-  setKioskTimeout: (seconds: number) => void;
-
-  // ------------------------------------------------------------------------
-  // 학습 미션 모드
-  // ------------------------------------------------------------------------
-  /** 미션 모드 활성화 여부 */
-  isMissionMode: boolean;
-  /** 현재 미션 시나리오 ID */
-  currentMissionScenarioId: string | null;
-  /** 현재 미션 단계 인덱스 */
-  currentMissionStep: number;
-  /** 미션 시나리오 및 단계 설정 */
-  setMission: (scenarioId: string | null, step?: number) => void;
-  /** 미션 모드 활성화/비활성화 */
-  setIsMissionMode: (enabled: boolean) => void;
-  /** 현재 미션 단계 완료 처리 */
-  completeMissionStep: () => void;
-}
+/** 이전 화면 매핑 */
+const PREV_SCREEN_MAP: Partial<Record<KioskViewName, KioskViewName>> = {
+  'main-menu': 'idle',
+  'auth-scan': 'main-menu',
+  'auth-pin': 'auth-scan',
+  'loan-select': 'auth-pin',
+  'loan-confirm': 'loan-select',
+  'loan-complete': 'idle',
+  'return-insert': 'main-menu',
+  'return-scanning': 'return-insert',
+  'return-confirm': 'return-scanning',
+  'return-complete': 'idle',
+};
 
 // ============================================================================
 // Zustand 스토어 생성
 // ============================================================================
 
 /**
- * 애플리케이션 전역 상태 스토어
+ * 키오스크 전역 상태 스토어
  * Zustand를 사용한 경량 상태 관리
  */
-export const useAppStore = create<AppState>((set, get) => ({
+export const useAppStore = create<KioskState>((set, get) => ({
   // ------------------------------------------------------------------------
-  // 네비게이션 초기값 및 액션
+  // 화면 상태 초기값 및 액션
   // ------------------------------------------------------------------------
-  currentView: 'onboarding',
-  viewHistory: [],
-  /** 새 뷰로 전환하고 이전 뷰를 이력에 저장 */
-  setView: (view) =>
-    set((state) => ({
-      currentView: view,
-      viewHistory: [...state.viewHistory, state.currentView],
-    })),
-  /** 이전 뷰로 돌아가기 (이력에서 마지막 항목 꺼내기) */
-  goBack: () => {
-    const { viewHistory } = get();
-    if (viewHistory.length > 0) {
-      const newHistory = [...viewHistory];
-      const prevView = newHistory.pop()!;
-      set({ currentView: prevView, viewHistory: newHistory });
+  screen: 'idle',
+  /** 화면 전환 (이력에 현재 화면을 저장) */
+  setScreen: (newScreen) => {
+    const current = get().screen;
+    screenHistory.push(current);
+    // 이력이 너무 길어지면 앞부분 제거
+    if (screenHistory.length > 20) screenHistory.shift();
+    set({ screen: newScreen });
+    // 타임아웃 리셋
+    get().resetTimeout();
+  },
+  /** 이전 화면으로 이동 */
+  prevScreen: () => {
+    if (screenHistory.length > 0) {
+      const prev = screenHistory.pop()!;
+      set({ screen: prev });
+      get().resetTimeout();
     }
   },
 
   // ------------------------------------------------------------------------
-  // 사용자 정보 초기값 및 액션
+  // 키오스크 모드 초기값 및 액션
   // ------------------------------------------------------------------------
-  currentUser: null,
-  setCurrentUser: (user) => set({ currentUser: user }),
+  kioskMode: null,
+  setKioskMode: (mode) => set({ kioskMode: mode }),
 
   // ------------------------------------------------------------------------
-  // 접근성 설정 초기값 및 액션
+  // 인증된 사용자 초기값 및 액션
   // ------------------------------------------------------------------------
-  fontSize: 'normal',
-  setFontSize: (size) => set({ fontSize: size }),
-  highContrast: false,
-  setHighContrast: (enabled) => set({ highContrast: enabled }),
-  ttsEnabled: true,
-  setTtsEnabled: (enabled) => set({ ttsEnabled: enabled }),
+  authenticatedUser: null,
+  setAuthenticatedUser: (user) => set({ authenticatedUser: user }),
 
   // ------------------------------------------------------------------------
-  // 온보딩 상태 초기값 및 액션
+  // 대출 선택 도서 초기값 및 액션
   // ------------------------------------------------------------------------
-  hasCompletedOnboarding: false,
-  setHasCompletedOnboarding: (completed) => set({ hasCompletedOnboarding: completed }),
+  selectedBooks: [],
+  addBook: (book) =>
+    set((state) => {
+      // 이미 선택된 도서인지 확인
+      if (state.selectedBooks.some((b) => b.id === book.id)) return state;
+      return { selectedBooks: [...state.selectedBooks, book] };
+    }),
+  removeBook: (bookId) =>
+    set((state) => ({
+      selectedBooks: state.selectedBooks.filter((b) => b.id !== bookId),
+    })),
+  clearSelectedBooks: () => set({ selectedBooks: [] }),
 
   // ------------------------------------------------------------------------
-  // 키오스크 설정 초기값 및 액션
+  // 반납 대출 기록 초기값 및 액션
   // ------------------------------------------------------------------------
-  kioskTimeoutSeconds: 60,
-  setKioskTimeout: (seconds) => set({ kioskTimeoutSeconds: seconds }),
+  returnedLoans: [],
+  addReturnedLoan: (loan) =>
+    set((state) => {
+      if (state.returnedLoans.some((l) => l.id === loan.id)) return state;
+      return { returnedLoans: [...state.returnedLoans, loan] };
+    }),
+  clearReturnedLoans: () => set({ returnedLoans: [] }),
 
   // ------------------------------------------------------------------------
-  // 학습 미션 모드 초기값 및 액션
+  // 센서 상태 초기값 및 액션
   // ------------------------------------------------------------------------
-  isMissionMode: false,
-  currentMissionScenarioId: null,
-  currentMissionStep: 0,
-  setMission: (scenarioId, step = 0) =>
-    set({ currentMissionScenarioId: scenarioId, currentMissionStep: step }),
-  setIsMissionMode: (enabled) => set({ isMissionMode: enabled }),
-  completeMissionStep: () =>
-    set((state) => ({ currentMissionStep: state.currentMissionStep + 1 })),
+  sensorActive: false,
+  setSensorActive: (active) => set({ sensorActive: active }),
+
+  // ------------------------------------------------------------------------
+  // 타임아웃 초기값 및 액션
+  // ------------------------------------------------------------------------
+  resetTimeout: () => {
+    // 자동 타임아웃은 각 화면에서 useEffect로 관리
+  },
 }));
+
+/**
+ * 사전 정의된 이전 화면 매핑 (컴포넌트에서 직접 사용)
+ */
+export { PREV_SCREEN_MAP };

@@ -308,7 +308,7 @@ export const SCENARIOS = [
 // ============================================================================
 
 /** 최대 대출 가능 권수 */
-export const MAX_LOAN_COUNT = 10;
+export const MAX_LOAN_COUNT = 2;
 
 /** 대출 기간 (일) - 연장 불가, 고정 15일 */
 export const LOAN_PERIOD_DAYS = 15;

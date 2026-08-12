@@ -1,34 +1,70 @@
 /**
  * 키오스크 시뮬레이션 메인 페이지
- *
- * [역할]
- * - 키오스크 화면 컨테이너 (세로 모드, max-width 480px)
- * - 화면 라우팅 (store.screen 기준)
- * - 시드 데이터 초기화
- * - PWA 상태 표시
- *
- * [하이드레이션 안전]
- * - dynamic import + ssr: false 로 서버 사이드 렌더링 완전 차단
- * - 클라이언트에서만 렌더링하여 하이드레이션 불일치 원천 제거
  */
 
 'use client';
 
-import dynamic from 'next/dynamic';
+import { useState, useEffect } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { useAppStore } from '@/stores/useAppStore';
+import type { KioskViewName } from '@/lib/constants';
+import KioskIdleScreen from '@/components/kiosk/KioskIdleScreen';
+import KioskMainMenu from '@/components/kiosk/KioskMainMenu';
+import KioskAuthScan from '@/components/kiosk/KioskAuthScan';
+import KioskAuthPin from '@/components/kiosk/KioskAuthPin';
+import KioskLoanSelect from '@/components/kiosk/KioskLoanSelect';
+import KioskLoanConfirm from '@/components/kiosk/KioskLoanConfirm';
+import KioskLoanComplete from '@/components/kiosk/KioskLoanComplete';
+import KioskReturnInsert from '@/components/kiosk/KioskReturnInsert';
+import KioskReturnScanning from '@/components/kiosk/KioskReturnScanning';
+import KioskReturnConfirm from '@/components/kiosk/KioskReturnConfirm';
+import KioskReturnComplete from '@/components/kiosk/KioskReturnComplete';
 
-/** SSR 없이 클라이언트에서만 마운트 (하이드레이션 오류 완전 방지) */
-const KioskApp = dynamic(() => import('@/components/kiosk/KioskApp'), {
-  ssr: false,
-  loading: () => (
-    <div className="kiosk-frame kiosk-dark-bg flex items-center justify-center">
-      <div className="text-center">
-        <div className="w-12 h-12 border-4 border-sky-400/30 border-t-sky-400 rounded-full animate-spin mx-auto mb-4" />
-        <p className="text-sky-300 text-sm">키오스크를 시작하는 중...</p>
-      </div>
-    </div>
-  ),
-});
+function ScreenRouter({ screen }: { screen: KioskViewName }) {
+  switch (screen) {
+    case 'idle': return <KioskIdleScreen />;
+    case 'main-menu': return <KioskMainMenu />;
+    case 'auth-scan': return <KioskAuthScan />;
+    case 'auth-pin': return <KioskAuthPin />;
+    case 'loan-select': return <KioskLoanSelect />;
+    case 'loan-confirm': return <KioskLoanConfirm />;
+    case 'loan-complete': return <KioskLoanComplete />;
+    case 'return-insert': return <KioskReturnInsert />;
+    case 'return-scanning': return <KioskReturnScanning />;
+    case 'return-confirm': return <KioskReturnConfirm />;
+    case 'return-complete': return <KioskReturnComplete />;
+    default: return <KioskIdleScreen />;
+  }
+}
 
 export default function Home() {
-  return <KioskApp />;
+  const [mounted, setMounted] = useState(false);
+  const screen = useAppStore((s) => s.screen);
+  const kioskMode = useAppStore((s) => s.kioskMode);
+
+  useEffect(() => {
+    setMounted(true);
+    fetch('/api/seed', { method: 'POST' }).catch(() => {});
+  }, []);
+
+  if (!mounted) return null;
+
+  const screenKey = screen + '-' + (kioskMode || '');
+
+  return (
+    <div className="kiosk-frame">
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={screenKey}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="h-screen max-h-screen"
+        >
+          <ScreenRouter screen={screen} />
+        </motion.div>
+      </AnimatePresence>
+    </div>
+  );
 }

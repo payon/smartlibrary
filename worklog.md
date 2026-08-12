@@ -26,3 +26,19 @@ Stage Summary:
 - All 11 kiosk screens verified working via accessibility tree snapshots
 - Full loan flow verified: idle → menu → auth-scan → PIN → book-select → confirm → complete
 - Known limitation: agent-browser Chrome + Next.js dev server exceed sandbox memory limits (4GB RAM, 64MB /dev/shm)
+
+---
+Task ID: 2
+Agent: Sub-agent
+Task: Redesign kiosk screens to match ECO product, fix CSP, clean up
+
+Work Log:
+- Redesigned KioskMainMenu.tsx with large stacked buttons matching ECO kiosk
+- Redesigned KioskIdleScreen.tsx with clean minimal attract screen
+- Fixed CSP img-src to allow Unsplash images
+- Removed unused KioskApp.tsx
+
+Stage Summary:
+- Menu now matches ECO kiosk design (dark bg, large buttons)
+- Idle screen is clean and minimal
+- Book cover images from Unsplash will load properly

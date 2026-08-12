@@ -4,7 +4,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
 import type { KioskViewName } from '@/lib/constants';
@@ -38,16 +38,13 @@ function ScreenRouter({ screen }: { screen: KioskViewName }) {
 }
 
 export default function Home() {
-  const [mounted, setMounted] = useState(false);
   const screen = useAppStore((s) => s.screen);
   const kioskMode = useAppStore((s) => s.kioskMode);
 
+  /* 시드 데이터 초기화 (최초 1회) */
   useEffect(() => {
-    setMounted(true);
     fetch('/api/seed', { method: 'POST' }).catch(() => {});
   }, []);
-
-  if (!mounted) return null;
 
   const screenKey = screen + '-' + (kioskMode || '');
 

@@ -4,7 +4,10 @@
  * [기능]
  * - 서비스 선택 (도서 대출 / 도서 반납)
  * - 현재 시간 표시
- * - 처음으로 돌아가기 버튼
+ *
+ * [디자인]
+ * - ECO 키오스크 실제 제품 디자인 반영
+ * - 다크 네이비 배경, 대형 수직 버튼
  */
 
 'use client';
@@ -12,7 +15,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
-import { BookOpen, BookDown, Home, Clock } from 'lucide-react';
+import { BookOpen, ArrowDownToLine, Clock, Library } from 'lucide-react';
 
 export default function KioskMainMenu() {
   const { setScreen, setKioskMode } = useAppStore();
@@ -23,7 +26,7 @@ export default function KioskMainMenu() {
     const update = () => {
       const now = new Date();
       setCurrentTime(
-        `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+        `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`
       );
     };
     update();
@@ -44,58 +47,77 @@ export default function KioskMainMenu() {
   };
 
   return (
-    <div className="kiosk-screen kiosk-dark-bg flex flex-col">
-      {/* 상단 시간 */}
-      <header className="flex items-center justify-between px-6 pt-8 pb-4">
-        <div className="text-slate-400 text-sm flex items-center gap-1.5">
-          <Clock className="w-4 h-4" />
-          {currentTime}
+    <div
+      className="flex flex-col h-screen"
+      style={{ background: '#0b1120' }}
+    >
+      {/* 상단 브랜딩 영역 */}
+      <header className="flex flex-col items-center pt-10 pb-6 px-6">
+        <div className="flex items-center gap-3 mb-1">
+          <Library className="w-7 h-7 text-sky-400" strokeWidth={1.8} />
+          <h1
+            className="text-2xl font-bold tracking-[0.15em] text-white"
+            style={{ textShadow: '0 0 24px rgba(56, 189, 248, 0.25)' }}
+          >
+            SMART LIBRARY
+          </h1>
         </div>
+        <p className="text-slate-500 text-xs tracking-widest mt-1">
+          무인 도서대출반납기
+        </p>
       </header>
 
-      {/* 메인 콘텐츠 영역 */}
-      <main className="flex-1 flex flex-col items-center justify-center px-8">
-        <motion.h2
-          initial={{ opacity: 0, y: -10 }}
+      {/* 메인 버튼 영역 */}
+      <main className="flex-1 flex flex-col items-center justify-center px-8 gap-6">
+        {/* 도서 대출 버튼 */}
+        <motion.button
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="text-2xl font-bold text-white mb-12 text-center"
+          transition={{ duration: 0.4, delay: 0.1 }}
+          whileTap={{ scale: 0.97 }}
+          onClick={handleLoan}
+          className="w-full max-w-md rounded-2xl flex items-center justify-center gap-5 cursor-pointer transition-shadow duration-200 hover:shadow-xl active:shadow-md"
+          style={{
+            minHeight: '140px',
+            background: 'linear-gradient(135deg, #1e3a5f 0%, #0f2744 100%)',
+            boxShadow: '0 4px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255,255,255,0.06)',
+            border: '1px solid rgba(56, 189, 248, 0.15)',
+          }}
         >
-          서비스를 선택해주세요
-        </motion.h2>
-
-        {/* 서비스 선택 버튼 */}
-        <div className="flex flex-col gap-5 w-full max-w-xs">
-          <motion.button
-            whileTap={{ scale: 0.97 }}
-            onClick={handleLoan}
-            className="kiosk-btn bg-sky-700 hover:bg-sky-600 text-white rounded-2xl shadow-lg shadow-sky-900/30"
-            style={{ minHeight: '80px', fontSize: '1.25rem' }}
-          >
-            <BookOpen className="w-7 h-7" />
+          <BookOpen className="w-12 h-12 text-sky-400" strokeWidth={1.5} />
+          <span className="text-2xl font-bold text-white tracking-wider">
             도서 대출
-          </motion.button>
+          </span>
+        </motion.button>
 
-          <motion.button
-            whileTap={{ scale: 0.97 }}
-            onClick={handleReturn}
-            className="kiosk-btn bg-teal-700 hover:bg-teal-600 text-white rounded-2xl shadow-lg shadow-teal-900/30"
-            style={{ minHeight: '80px', fontSize: '1.25rem' }}
-          >
-            <BookDown className="w-7 h-7" />
+        {/* 도서 반납 버튼 */}
+        <motion.button
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.25 }}
+          whileTap={{ scale: 0.97 }}
+          onClick={handleReturn}
+          className="w-full max-w-md rounded-2xl flex items-center justify-center gap-5 cursor-pointer transition-shadow duration-200 hover:shadow-xl active:shadow-md"
+          style={{
+            minHeight: '140px',
+            background: 'linear-gradient(135deg, #134e4a 0%, #0a3d3a 100%)',
+            boxShadow: '0 4px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255,255,255,0.06)',
+            border: '1px solid rgba(45, 212, 191, 0.15)',
+          }}
+        >
+          <ArrowDownToLine className="w-12 h-12 text-teal-400" strokeWidth={1.5} />
+          <span className="text-2xl font-bold text-white tracking-wider">
             도서 반납
-          </motion.button>
-        </div>
+          </span>
+        </motion.button>
       </main>
 
-      {/* 하단 처음으로 버튼 */}
-      <footer className="pb-10 flex justify-center">
-        <button
-          onClick={() => setScreen('idle')}
-          className="flex items-center gap-2 text-slate-400 hover:text-slate-200 transition-colors text-sm px-4 py-2"
-        >
-          <Home className="w-4 h-4" />
-          처음으로
-        </button>
+      {/* 하단 시간 표시 */}
+      <footer className="pb-8 flex items-center justify-center gap-2">
+        <Clock className="w-4 h-4 text-slate-600" />
+        <span className="text-slate-600 text-sm tracking-wider font-mono">
+          {currentTime}
+        </span>
       </footer>
     </div>
   );

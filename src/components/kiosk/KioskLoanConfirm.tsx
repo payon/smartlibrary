@@ -25,41 +25,36 @@ export default function KioskLoanConfirm() {
   dueDate.setDate(dueDate.getDate() + LOAN_PERIOD_DAYS);
   const dueDateStr = `${dueDate.getFullYear()}.${String(dueDate.getMonth() + 1).padStart(2, '0')}.${String(dueDate.getDate()).padStart(2, '0')}`;
 
-  /** 대출 실행 */
+  /** 대출 실행 (한 번에 모든 도서 처리) */
   const handleLoan = async () => {
     if (!authenticatedUser || selectedBooks.length === 0) return;
 
     setIsProcessing(true);
-    let successCount = 0;
-    let failCount = 0;
 
-    // 각 도서별 대출 API 호출
-    for (const book of selectedBooks) {
-      try {
-        const res = await fetch('/api/loans', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: authenticatedUser.id,
-            bookId: book.id,
-            method: 'kiosk',
-            pin: authenticatedUser.pin || '1234',
-          }),
-        });
-        if (res.ok) successCount++;
-        else failCount++;
-      } catch {
-        failCount++;
+    try {
+      const res = await fetch('/api/loans', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: authenticatedUser.id,
+          bookIds: selectedBooks.map((b) => b.id),
+          method: 'kiosk',
+          pin: authenticatedUser.pin || '1234',
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        toast.success(`${data.loanedCount}권 대출이 완료되었습니다`);
+        setScreen('loan-complete');
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || '대출 처리에 실패했습니다. 다시 시도해주세요.');
       }
-    }
-
-    setIsProcessing(false);
-
-    if (successCount > 0) {
-      toast.success(`${successCount}권 대출이 완료되었습니다`);
-      setScreen('loan-complete');
-    } else {
-      toast.error('대출 처리에 실패했습니다. 다시 시도해주세요.');
+    } catch {
+      toast.error('네트워크 오류가 발생했습니다. 다시 시도해주세요.');
+    } finally {
+      setIsProcessing(false);
     }
   };
 

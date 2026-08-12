@@ -45,7 +45,7 @@ export default function KioskAuthPin() {
     setIsProcessing(true);
 
     try {
-      const res = await fetch('/api/users?pin=' + inputPin);
+      const res = await fetch('/api/users?pin=' + inputPin, { cache: 'no-store' });
       if (res.ok) {
         const users: SimUser[] = await res.json();
         if (users.length > 0) {

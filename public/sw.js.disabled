@@ -1,0 +1,58 @@
+/**
+ * 서비스 워커 (PWA) - 최소 버전
+ * API 요청은 절대 가로채지 않음
+ */
+
+const CACHE_NAME = 'smartlib-sim-v2';
+const PRECACHE_URLS = [
+  '/',
+  '/manifest.json',
+];
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then((cache) => cache.addAll(PRECACHE_URLS).catch(() => {}))
+      .then(() => self.skipWaiting())
+  );
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys()
+      .then((names) => Promise.all(
+        names.filter((n) => n !== CACHE_NAME).map((n) => caches.delete(n))
+      ))
+      .then(() => self.clients.claim())
+  );
+});
+
+// API 및 네비게이션 요청은 절대 가로채지 않음
+self.addEventListener('fetch', (event) => {
+  const url = event.request.url;
+  // API 요청 통과시키기
+  if (url.includes('/api/')) return;
+  // HTML 네비게이션 통과시키기
+  if (event.request.mode === 'navigate') return;
+  // POST 등 비-GET 통과시키기
+  if (event.request.method !== 'GET') return;
+
+  // 정적 에셋만 캐싱
+  if (/\/(icons|_next\/static)\//.test(url)) {
+    event.respondWith(
+      caches.open(CACHE_NAME).then((cache) =>
+        cache.match(event.request).then((cached) => {
+          if (cached) return cached;
+          return fetch(event.request).then((res) => {
+            if (res.ok) cache.put(event.request, res.clone());
+            return res;
+          });
+        })
+      )
+    );
+  }
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
+});

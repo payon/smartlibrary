@@ -28,7 +28,7 @@ export const db =
   globalForPrisma.prisma ??
   new PrismaClient({
     // 프로덕션에서는 로그 비활성화 (민감 정보 노출 방지)
-    log: process.env.NODE_ENV === 'production' ? [] : ['query'],
+    log: [],
   });
 
 // 개발 환경에서 글로벌에 인스턴스 캐싱

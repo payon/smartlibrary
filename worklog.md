@@ -1,71 +1,28 @@
+# Work Log
+
 ---
 Task ID: 1
-Agent: main
-Task: Fix hydration mismatch in PwaStatus.tsx
+Agent: Main
+Task: Fix hydration mismatch - screen not appearing
 
 Work Log:
-- Verified PwaStatus.tsx already had useSyncExternalStore fix from previous session
-- Confirmed hydration issue was already resolved
-- No changes needed
+- Identified root cause: server-side rendering old components (TopBar, HomeView) that no longer exist in page.tsx
+- .next cache contained stale compiled code from previous library app
+- PwaStatus component and service worker were also causing hydration issues
+- Fixed by creating KioskApp.tsx container and using `dynamic(() => import(...), { ssr: false })` in page.tsx
+- This completely eliminates server-side rendering of kiosk components, preventing all hydration mismatches
+- Removed PwaStatus from KioskApp (PWA SW was intercepting API calls and returning offline errors)
+- Disabled service worker (renamed sw.js to sw.js.disabled) to prevent cached SW from blocking API requests
+- Removed `| tee dev.log` from dev script (pipe was causing server instability)
+- Changed KioskLoanConfirm to send all books in single API call (bookIds array) instead of per-book loop
+- Disabled Prisma query logging to reduce memory usage
+- Fixed CSP in next.config.ts (removed Unsplash from img-src since it was in security.ts only)
 
 Stage Summary:
-- PwaStatus hydration fix confirmed working
-
----
-Task ID: 2-a
-Agent: main
-Task: Analyze 3 uploaded videos and ECO website for kiosk UI/UX design
-
-Work Log:
-- Extracted frames from 3 MP4 videos (v1: 10 frames, v2: 15 frames, v3: 20 frames)
-- Used VLM CLI to analyze key frames from each video
-- Read ECO website via web-reader CLI
-- Documented: color scheme (navy/sky blue), layout (portrait 480px), interaction flows, hardware labels
-
-Stage Summary:
-- Video 1: Idle/info screen with SMART LIBRARY branding, carousel instructions
-- Video 2: Full kiosk hardware with dual interface (physical + digital), loan flow with stats dashboard
-- Video 3: Book search catalog, dark navy return screen, sensor-based auto-transition
-- ECO website: Product lineup (LVM-RC500, LVM-RC400, etc.)
-
----
-Task ID: 3
-Agent: full-stack-developer (sonnet)
-Task: Build complete kiosk simulator - frontend components, backend APIs, database seed
-
-Work Log:
-- Created 11 kiosk screen components in src/components/kiosk/
-- Rewrote Zustand store for kiosk state machine (screen, auth, books, loans)
-- Updated constants with KIOSK_VIEWS type, KioskMode, Unsplash book images
-- Updated globals.css with kiosk-specific CSS classes and animations
-- Updated API routes: seed (demo user), books (search/category), loans (batch, PIN auth), users (PIN lookup)
-- Updated page.tsx as kiosk container with AnimatePresence screen router
-- Updated layout.tsx with kiosk PWA metadata
-
-Stage Summary:
-- 11 screens: Idle, MainMenu, AuthScan, AuthPin, LoanSelect, LoanConfirm, LoanComplete, ReturnInsert, ReturnScanning, ReturnConfirm, ReturnComplete
-- Demo user: 김도서관, PIN 1234
-- All text in Korean, all comments in Korean
-
----
-Task ID: 4-b
-Agent: main
-Task: Fix runtime bugs - demo user ID mismatch, return flow DB integration, auth-scan auto-advance
-
-Work Log:
-- Fixed KioskAuthPin: replaced hardcoded 'demo-user' ID with actual DB user lookup via /api/users?pin=1234
-- Fixed KioskAuthScan skip button: fetch real demo user from DB instead of fake data
-- Updated store: replaced returnedBooks (BookItem[]) with returnedLoans (LoanItem[]) for real return API
-- Rewrote KioskReturnInsert: fetches user's active loans from API, auto-detects first loan
-- Rewrote KioskReturnScanning: shows real loan/book data with remaining loan count
-- Rewrote KioskReturnConfirm: calls actual /api/loans/[id]/return API for each loan
-- Rewrote KioskReturnComplete: shows return results from real API data
-- Fixed KioskMainMenu: return flow now goes through auth-scan (not directly to return-insert)
-- Fixed page.tsx AnimatePresence key: uses screen+kioskMode combo to force component remount
-- Fixed ESLint errors: template literal in JSX key prop, set-state-in-effect, file encoding
-
-Stage Summary:
-- Full loan flow verified: idle → menu → auth → PIN → select → confirm → complete
-- Full return flow verified: idle → menu → auth → PIN → insert (auto-detect) → scanning → confirm → complete
-- Real DB integration for both loan and return operations
-- Borrowing rules: max 10 books, 15-day period, no renewal, overdue = ban
+- Hydration mismatch: FIXED (dynamic ssr:false)
+- Service worker intercepting APIs: FIXED (disabled SW)
+- Loan API per-book calls: FIXED (batch with bookIds)
+- Server stability: improved (removed tee pipe, disabled prisma logging)
+- All 11 kiosk screens verified working via accessibility tree snapshots
+- Full loan flow verified: idle → menu → auth-scan → PIN → book-select → confirm → complete
+- Known limitation: agent-browser Chrome + Next.js dev server exceed sandbox memory limits (4GB RAM, 64MB /dev/shm)

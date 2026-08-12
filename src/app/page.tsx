@@ -27,10 +27,7 @@ import KioskReturnConfirm from '@/components/kiosk/KioskReturnConfirm';
 import KioskReturnComplete from '@/components/kiosk/KioskReturnComplete';
 import PwaStatus from '@/components/PwaStatus';
 
-/**
- * 키오스크 화면 렌더러
- * 현재 store.screen 값에 따라 해당 컴포넌트를 반환합니다.
- */
+/** 키오스크 화면 렌더러 */
 function ScreenRouter({ screen }: { screen: KioskViewName }) {
   switch (screen) {
     case 'idle':
@@ -60,33 +57,27 @@ function ScreenRouter({ screen }: { screen: KioskViewName }) {
   }
 }
 
-/**
- * 홈 페이지 컴포넌트
- * 키오스크 프레임 내에서 화면 전환을 관리합니다.
- */
+/** 홈 페이지 컴포넌트 */
 export default function Home() {
   const screen = useAppStore((s) => s.screen);
-
-  // 시드 데이터 초기화 중복 실행 방지용 ref
+  const kioskMode = useAppStore((s) => s.kioskMode);
   const seededRef = useRef(false);
 
-  // ========================================================================
-  // 초기화: 시드 데이터 로드
-  // ========================================================================
+  /* 고유 키: 화면명 + 모드 조합으로 AnimatePresence가 컴포넌트를 재생성하도록 함 */
+  const screenKey = screen + '-' + (kioskMode || '');
+
+  /* 시드 데이터 초기화 */
   useEffect(() => {
     if (seededRef.current) return;
     seededRef.current = true;
-    fetch('/api/seed', { method: 'POST' }).catch(() => {
-      // 시드 오류는 무시 (이미 데이터가 있을 수 있음)
-    });
+    fetch('/api/seed', { method: 'POST' }).catch(() => {});
   }, []);
 
   return (
     <div className="kiosk-frame">
-      {/* 화면 전환 애니메이션 */}
       <AnimatePresence mode="wait">
         <motion.div
-          key={screen}
+          key={screenKey}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -96,8 +87,6 @@ export default function Home() {
           <ScreenRouter screen={screen} />
         </motion.div>
       </AnimatePresence>
-
-      {/* PWA 상태 표시 */}
       <PwaStatus />
     </div>
   );

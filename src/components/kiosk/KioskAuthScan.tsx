@@ -10,7 +10,7 @@
 
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
 import { CreditCard, CheckCircle2, X } from 'lucide-react';
@@ -20,12 +20,9 @@ import type { SimUser } from '@/stores/useAppStore';
 export default function KioskAuthScan() {
   const { setScreen, prevScreen, kioskMode, setAuthenticatedUser } = useAppStore();
   const [status, setStatus] = useState<'scanning' | 'recognized' | 'skipped'>('scanning');
-  const movedRef = useRef(false);
 
   /** 2초 후 자동 인식 시뮬레이션 */
   useEffect(() => {
-    if (movedRef.current) return;
-    movedRef.current = true;
     const timer = setTimeout(() => {
       setStatus('recognized');
     }, 2000);
@@ -36,7 +33,7 @@ export default function KioskAuthScan() {
       clearTimeout(timer);
       clearTimeout(moveTimer);
     };
-  }, []);
+  }, [setScreen]);
 
   /** 회원증 없이 이용하기 (데모 모드) - DB에서 실제 데모 사용자 조회 */
   const handleSkip = async () => {

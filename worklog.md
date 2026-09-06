@@ -1,44 +1,22 @@
-# Work Log
-
 ---
 Task ID: 1
-Agent: Main
-Task: Fix hydration mismatch - screen not appearing
+Agent: Main Agent
+Task: Create doc/ folder and write 9 documentation files
 
 Work Log:
-- Identified root cause: server-side rendering old components (TopBar, HomeView) that no longer exist in page.tsx
-- .next cache contained stale compiled code from previous library app
-- PwaStatus component and service worker were also causing hydration issues
-- Fixed by creating KioskApp.tsx container and using `dynamic(() => import(...), { ssr: false })` in page.tsx
-- This completely eliminates server-side rendering of kiosk components, preventing all hydration mismatches
-- Removed PwaStatus from KioskApp (PWA SW was intercepting API calls and returning offline errors)
-- Disabled service worker (renamed sw.js to sw.js.disabled) to prevent cached SW from blocking API requests
-- Removed `| tee dev.log` from dev script (pipe was causing server instability)
-- Changed KioskLoanConfirm to send all books in single API call (bookIds array) instead of per-book loop
-- Disabled Prisma query logging to reduce memory usage
-- Fixed CSP in next.config.ts (removed Unsplash from img-src since it was in security.ts only)
+- Created /home/z/my-project/doc/ directory
+- Wrote prd.md (7.1KB) — Product Requirements Document with ECO kiosk specs, functional/non-functional requirements, user stories, data requirements, constraints, milestones
+- Wrote tdd.md (7.6KB) — Technical Design Document with tech stack, state management, DB design, security design, performance design, error handling, deployment architecture
+- Wrote architect.md (13.5KB) — Architecture Document with system structure, module architecture, data flow diagrams, component architecture, API architecture, deployment architecture, ADR records
+- Wrote uiux.md (17.6KB) — UI/UX Design Document with design principles, color system (ECO palette), typography, 10 screen-by-screen wireframes, animation design, layout system, accessibility design
+- Wrote program.md (12.2KB) — Program Logic Document with flow diagrams, screen-by-screen logic, business rules engine, simulation logic, initialization logic, error handling patterns
+- Wrote interface.md (9.4KB) — Interface Specification Document with component interfaces, Zustand store interfaces, data model interfaces, API request/response interfaces, security interfaces, TTS interfaces, constant interfaces
+- Wrote api.md (10.2KB) — API Specification Document with 12 endpoint specifications including request/response formats, error codes, rate limits, body size limits
+- Wrote harness.md (10.4KB) — Test Harness Document with test strategy, test environment, 16 test cases (core flow, rules, UI/UX, security, error handling), Agent Browser E2E procedures, automation scripts, release criteria
+- Wrote agent.md (8.2KB) — Agent Configuration Document with agent roles, workflow, parallel execution strategy, todo tracking, worklog format, skill utilization guide, subagent instructions, debugging guide, deployment checklist
 
 Stage Summary:
-- Hydration mismatch: FIXED (dynamic ssr:false)
-- Service worker intercepting APIs: FIXED (disabled SW)
-- Loan API per-book calls: FIXED (batch with bookIds)
-- Server stability: improved (removed tee pipe, disabled prisma logging)
-- All 11 kiosk screens verified working via accessibility tree snapshots
-- Full loan flow verified: idle → menu → auth-scan → PIN → book-select → confirm → complete
-- Known limitation: agent-browser Chrome + Next.js dev server exceed sandbox memory limits (4GB RAM, 64MB /dev/shm)
-
----
-Task ID: 2
-Agent: Sub-agent
-Task: Redesign kiosk screens to match ECO product, fix CSP, clean up
-
-Work Log:
-- Redesigned KioskMainMenu.tsx with large stacked buttons matching ECO kiosk
-- Redesigned KioskIdleScreen.tsx with clean minimal attract screen
-- Fixed CSP img-src to allow Unsplash images
-- Removed unused KioskApp.tsx
-
-Stage Summary:
-- Menu now matches ECO kiosk design (dark bg, large buttons)
-- Idle screen is clean and minimal
-- Book cover images from Unsplash will load properly
+- All 9 documentation files created in /home/z/my-project/doc/
+- Total documentation size: ~96KB
+- Documents are comprehensive and specifically tailored to the ECO kiosk simulator project
+- Key project constraints (MAX_LOAN_COUNT=2, ECO screen matching, CSR-only rendering, Korean UI) are reflected throughout all documents

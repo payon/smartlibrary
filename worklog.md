@@ -20,3 +20,30 @@ Stage Summary:
 - Total documentation size: ~96KB
 - Documents are comprehensive and specifically tailored to the ECO kiosk simulator project
 - Key project constraints (MAX_LOAN_COUNT=2, ECO screen matching, CSR-only rendering, Korean UI) are reflected throughout all documents
+
+---
+Task ID: 3
+Agent: Main Agent
+Task: Create 8 documentation files for backend admin dashboard in doc/dashboard/
+
+Work Log:
+- Analyzed all 9 existing doc/*.md files (prd, tdd, architect, uiux, program, interface, api, harness, agent)
+- Identified current system limitations: text/images hardcoded in constants.ts, no admin control, no RBAC, no real-time sync
+- Proposed 6 additional features: Audit Log, Dashboard Stats, Screen Preview, Multi-Kiosk, Notice Management, Dynamic Categories
+- Created doc/dashboard/ directory
+- Wrote prd.md (634 lines) — Product Requirements with CMS management items, RBAC 3-tier permissions, responsive breakpoints, real-time sync spec
+- Wrote database.md (1,550 lines) — 9 new tables (AdminUser, AdminRole, AuditLog, CmsContent, CmsImage, KioskDevice, SystemSetting, Notice, DashboardStat), full Prisma schema, ER diagram, indexes, seed data, migration strategy
+- Wrote architect.md (1,704 lines) — System architecture with CMS→Kiosk sync flow, JWT auth, RBAC middleware, 4-breakpoint responsive, 5 ADRs
+- Wrote api.md (2,898 lines) — 12 API endpoint groups with full request/response/error specs, ETag caching, RBAC enforcement
+- Wrote tdd.md (2,863 lines) — Technical design with JWT/bcrypt auth, CMS key-value architecture, ETag polling, image upload, responsive 4-breakpoint, security 7-layer
+- Wrote program.md (2,821 lines) — Program logic for auth, CMS, CRUD, RBAC, real-time sync, audit logging, statistics, initialization, error handling
+- Wrote harness.md (1,656 lines) — 10 test cases, API curl scripts, Agent Browser E2E procedures, release criteria
+- Wrote agent.md (800 lines) — Agent roles, 7-phase workflow, subagent instructions, debugging guide, deployment checklist
+
+Stage Summary:
+- Total documentation: 14,926 lines across 8 files (~545KB)
+- Key architecture decisions: Same Next.js process, Polling over WebSocket, JWT auth, Key-value CMS table, Local file storage
+- RBAC: 3 roles (super_admin/admin/operator) with 22 permission codes
+- Real-time sync: 3-second polling with ETag/304 caching
+- Responsive: 4 breakpoints (375px/768px/1024px/1920px)
+- Default admin: admin@library.kr / admin123!

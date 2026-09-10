@@ -1,0 +1,2002 @@
+     1→# 관리자 대시보드 API 명세서
+     2→
+     3→> 한국 스마트 도서관 키오스크 관리자 대시보드 API Specification  
+     4→> Version: 1.0.0  
+     5→> Base URL: `https://{domain}`  
+     6→> 모든 관리자 API는 `/api/admin/*` 경로에 위치하며, JWT 인증 및 RBAC 권한 검사가 필요합니다.
+     7→
+     8→---
+     9→
+    10→## 목차
+    11→
+    12→1. [공통 사항](#1-공통-사항)
+    13→2. [인증 API](#2-인증-api)
+    14→3. [CMS 콘텐츠 API](#3-cms-콘텐츠-api)
+    15→4. [CMS 이미지 API](#4-cms-이미지-api)
+    16→5. [공개 CMS API (키오스크용)](#5-공개-cms-api-키오스크에서-호출-인증-불필요)
+    17→6. [도서 관리 API](#6-도서-관리-api)
+    18→7. [사용자 관리 API](#7-사용자-관리-api)
+    19→8. [관리자 계정 API](#8-관리자-계정-api)
+    20→9. [통계 API](#9-통계-api)
+    21→10. [감사 로그 API](#10-감사-로그-api)
+    22→11. [공지 관리 API](#11-공지-관리-api)
+    23→12. [시스템 설정 API](#12-시스템-설정-api)
+    24→
+    25→---
+    26→
+    27→## 1. 공통 사항
+    28→
+    29→### 1.1 인증 헤더
+    30→
+    31→모든 `/api/admin/*` 엔드포인트는 아래 헤더가 필수입니다:
+    32→
+    33→```
+    34→Authorization: Bearer {JWT}
+    35→```
+    36→
+    37→JWT가 누락되거나 만료된 경우 `401 Unauthorized` 응답이 반환됩니다.
+    38→
+    39→### 1.2 RBAC 권한 체계
+    40→
+    41→| Role | Code | 설명 |
+    42→|------|------|------|
+    43→| Super Admin | `super_admin` | 모든 권한, 관리자 계정 관리 가능 |
+    44→| Admin | `admin` | 콘텐츠/도서/사용자/공지/설정 관리 가능 |
+    45→| Viewer | `viewer` | 읽기 전용, 통계/로그 조회만 가능 |
+    46→
+    47→권한이 부족한 경우 `403 Forbidden` 응답이 반환됩니다.
+    48→
+    49→### 1.3 공통 에러 응답 형식
+    50→
+    51→모든 에러 응답은 아래 JSON 구조를 따릅니다:
+    52→
+    53→```json
+    54→{
+    55→  "error": {
+    56→    "code": "ERROR_CODE",
+    57→    "message": "사람이 읽을 수 있는 에러 메시지",
+    58→    "details": {}
+    59→  }
+    60→}
+    61→```
+    62→
+    63→### 1.4 공통 HTTP 상태 코드
+    64→
+    65→| Status | Code | 설명 |
+    66→|--------|------|------|
+    67→| 400 | `BAD_REQUEST` | 잘못된 요청 파라미터 또는 본문 |
+    68→| 401 | `UNAUTHORIZED` | JWT 누락, 만료 또는 무효 |
+    69→| 403 | `FORBIDDEN` | 권한 부족 (RBAC 거부) |
+    70→| 404 | `NOT_FOUND` | 요청한 리소스가 존재하지 않음 |
+    71→| 409 | `CONFLICT` | 중복 리소스 (예: 이미 존재하는 이메일) |
+    72→| 429 | `RATE_LIMITED` | 요청 한도 초과 |
+    73→| 500 | `INTERNAL_ERROR` | 서버 내부 오류 |
+    74→
+    75→### 1.5 Rate Limiting
+    76→
+    77→| 대상 | 한도 | Window |
+    78→|------|------|--------|
+    79→| 인증 API (`/auth/*`) | 10회 | 1분 |
+    80→| 일반 관리자 API | 100회 | 1분 |
+    81→| 이미지 업로드 | 20회 | 1분 |
+    82→| 공개 CMS API (`/api/cms/*`) | 200회 | 1분 |
+    83→
+    84→Rate limit 초과 시:
+    85→
+    86→```
+    87→HTTP/1.1 429 Too Many Requests
+    88→X-RateLimit-Limit: 100
+    89→X-RateLimit-Remaining: 0
+    90→X-RateLimit-Reset: 1719500400
+    91→```
+    92→
+    93→```json
+    94→{
+    95→  "error": {
+    96→    "code": "RATE_LIMITED",
+    97→    "message": "요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요.",
+    98→    "details": {
+    99→      "limit": 100,
+   100→      "window": "60s",
+   101→      "resetAt": "2025-06-27T15:00:00Z"
+   102→    }
+   103→  }
+   104→}
+   105→```
+   106→
+   107→### 1.6 공통 쿼리 파라미터 (Pagination)
+   108→
+   109→| Parameter | Type | Default | 설명 |
+   110→|-----------|------|---------|------|
+   111→| `page` | integer | 1 | 페이지 번호 (1-based) |
+   112→| `limit` | integer | 20 | 페이지당 항목 수 (max: 100) |
+   113→| `sortBy` | string | `createdAt` | 정렬 필드 |
+   114→| `sortOrder` | string | `desc` | 정렬 방향 (`asc` / `desc`) |
+   115→
+   116→Pagination 응답 형식:
+   117→
+   118→```json
+   119→{
+   120→  "data": [],
+   121→  "pagination": {
+   122→    "page": 1,
+   123→    "limit": 20,
+   124→    "total": 150,
+   125→    "totalPages": 8
+   126→  }
+   127→}
+   128→```
+   129→
+   130→### 1.7 공통 응답 헤더
+   131→
+   132→```
+   133→X-Request-Id: {uuid}
+   134→X-RateLimit-Limit: {limit}
+   135→X-RateLimit-Remaining: {remaining}
+   136→X-RateLimit-Reset: {epoch}
+   137→```
+   138→
+   139→---
+   140→
+   141→## 2. 인증 API
+   142→
+   143→### 2.1 로그인
+   144→
+   145→```
+   146→POST /api/admin/auth/login
+   147→```
+   148→
+   149→- **Required Role**: 없음 (공개 엔드포인트)
+   150→- **Rate Limit**: 10회/1분
+   151→
+   152→**Request Body:**
+   153→
+   154→```json
+   155→{
+   156→  "email": "admin@library.go.kr",
+   157→  "password": "SecureP@ss123!"
+   158→}
+   159→```
+   160→
+   161→| Field | Type | Required | Validation |
+   162→|-------|------|----------|------------|
+   163→| `email` | string | ✅ | 유효한 이메일 형식 |
+   164→| `password` | string | ✅ | 최소 8자 |
+   165→
+   166→**Response 200:**
+   167→
+   168→```json
+   169→{
+   170→  "data": {
+   171→    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+   172→    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+   173→    "expiresIn": 3600,
+   174→    "admin": {
+   175→      "id": "adm_01HX3K8M2P",
+   176→      "email": "admin@library.go.kr",
+   177→      "name": "김관리",
+   178→      "role": "admin",
+   179→      "lastLoginAt": "2025-06-27T14:30:00Z"
+   180→    }
+   181→  }
+   182→}
+   183→```
+   184→
+   185→**Error 400:**
+   186→
+   187→```json
+   188→{
+   189→  "error": {
+   190→    "code": "VALIDATION_ERROR",
+   191→    "message": "요청 본문이 올바르지 않습니다.",
+   192→    "details": {
+   193→      "email": "유효한 이메일 주소를 입력해주세요.",
+   194→      "password": "비밀번호는 최소 8자 이상이어야 합니다."
+   195→    }
+   196→  }
+   197→}
+   198→```
+   199→
+   200→**Error 401:**
+   201→
+   202→```json
+   203→{
+   204→  "error": {
+   205→    "code": "INVALID_CREDENTIALS",
+   206→    "message": "이메일 또는 비밀번호가 올바르지 않습니다.",
+   207→    "details": {}
+   208→  }
+   209→}
+   210→```
+   211→
+   212→**Error 429:**
+   213→
+   214→```json
+   215→{
+   216→  "error": {
+   217→    "code": "RATE_LIMITED",
+   218→    "message": "로그인 시도가 너무 많습니다. 5분 후 다시 시도해주세요.",
+   219→    "details": {
+   220→      "retryAfter": 300
+   221→    }
+   222→  }
+   223→}
+   224→```
+   225→
+   226→---
+   227→
+   228→### 2.2 로그아웃
+   229→
+   230→```
+   231→POST /api/admin/auth/logout
+   232→```
+   233→
+   234→- **Required Role**: `viewer` 이상 (인증 필요)
+   235→- **Description**: 현재 세션의 refreshToken을 무효화합니다.
+   236→
+   237→**Request Headers:**
+   238→
+   239→```
+   240→Authorization: Bearer {JWT}
+   241→```
+   242→
+   243→**Request Body:**
+   244→
+   245→```json
+   246→{
+   247→  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+   248→}
+   249→```
+   250→
+   251→| Field | Type | Required | 설명 |
+   252→|-------|------|----------|------|
+   253→| `refreshToken` | string | ✅ | 무효화할 refresh token |
+   254→
+   255→**Response 200:**
+   256→
+   257→```json
+   258→{
+   259→  "data": {
+   260→    "message": "로그아웃 되었습니다."
+   261→  }
+   262→}
+   263→```
+   264→
+   265→**Error 401:**
+   266→
+   267→```json
+   268→{
+   269→  "error": {
+   270→    "code": "UNAUTHORIZED",
+   271→    "message": "인증이 필요합니다.",
+   272→    "details": {}
+   273→  }
+   274→}
+   275→```
+   276→
+   277→---
+   278→
+   279→### 2.3 내 정보 조회
+   280→
+   281→```
+   282→GET /api/admin/auth/me
+   283→```
+   284→
+   285→- **Required Role**: `viewer` 이상
+   286→
+   287→**Response 200:**
+   288→
+   289→```json
+   290→{
+   291→  "data": {
+   292→    "id": "adm_01HX3K8M2P",
+   293→    "email": "admin@library.go.kr",
+   294→    "name": "김관리",
+   295→    "role": "admin",
+   296→    "permissions": [
+   297→      "cms:read",
+   298→      "cms:write",
+   299→      "books:read",
+   300→      "books:write",
+   301→      "users:read",
+   302→      "users:write",
+   303→      "notices:read",
+   304→      "notices:write",
+   305→      "settings:read",
+   306→      "settings:write",
+   307→      "stats:read",
+   308→      "audit:read"
+   309→    ],
+   310→    "lastLoginAt": "2025-06-27T14:30:00Z",
+   311→    "createdAt": "2024-01-15T09:00:00Z"
+   312→  }
+   313→}
+   314→```
+   315→
+   316→**Error 401:**
+   317→
+   318→```json
+   319→{
+   320→  "error": {
+   321→    "code": "UNAUTHORIZED",
+   322→    "message": "토큰이 만료되었습니다. 다시 로그인해주세요.",
+   323→    "details": {
+   324→      "expiredAt": "2025-06-27T15:30:00Z"
+   325→    }
+   326→  }
+   327→}
+   328→```
+   329→
+   330→---
+   331→
+   332→## 3. CMS 콘텐츠 API
+   333→
+   334→### 3.1 콘텐츠 목록 조회
+   335→
+   336→```
+   337→GET /api/admin/cms
+   338→```
+   339→
+   340→- **Required Role**: `viewer` 이상
+   341→
+   342→**Query Parameters:**
+   343→
+   344→| Parameter | Type | Required | 설명 |
+   345→|-----------|------|----------|------|
+   346→| `screen` | string | ❌ | 화면 필터 (`main` / `search` / `return` / `info` / `notice`) |
+   347→| `search` | string | ❌ | key 또는 label 검색 |
+   348→| `page` | integer | ❌ | 페이지 번호 (default: 1) |
+   349→| `limit` | integer | ❌ | 페이지당 항목 수 (default: 50, max: 200) |
+   350→
+   351→**Example Request:**
+   352→
+   353→```
+   354→GET /api/admin/cms?screen=main&limit=50
+   355→```
+   356→
+   357→**Response 200:**
+   358→
+   359→```json
+   360→{
+   361→  "data": [
+   362→    {
+   363→      "key": "main.title",
+   364→      "label": "메인 화면 제목",
+   365→      "value": "스마트 도서관에 오신 것을 환영합니다",
+   366→      "screen": "main",
+   367→      "type": "text",
+   368→      "updatedAt": "2025-06-27T10:00:00Z",
+   369→      "updatedBy": {
+   370→        "id": "adm_01HX3K8M2P",
+   371→        "name": "김관리"
+   372→      }
+   373→    },
+   374→    {
+   375→      "key": "main.subtitle",
+   376→      "label": "메인 화면 부제목",
+   377→      "value": "도서 검색과 대출/반납을 이용할 수 있습니다",
+   378→      "screen": "main",
+   379→      "type": "text",
+   380→      "updatedAt": "2025-06-25T08:00:00Z",
+   381→      "updatedBy": {
+   382→        "id": "adm_01HX3K8M2P",
+   383→        "name": "김관리"
+   384→      }
+   385→    },
+   386→    {
+   387→      "key": "main.background_image",
+   388→      "label": "메인 배경 이미지",
+   389→      "value": "img_01HX3K9A7N",
+   390→      "screen": "main",
+   391→      "type": "image",
+   392→      "updatedAt": "2025-06-20T12:00:00Z",
+   393→      "updatedBy": {
+   394→        "id": "adm_01HX3K8M2P",
+   395→        "name": "김관리"
+   396→      }
+   397→    }
+   398→  ],
+   399→  "pagination": {
+   400→    "page": 1,
+   401→    "limit": 50,
+   402→    "total": 32,
+   403→    "totalPages": 1
+   404→  }
+   405→}
+   406→```
+   407→
+   408→**Error 401:**
+   409→
+   410→```json
+   411→{
+   412→  "error": {
+   413→    "code": "UNAUTHORIZED",
+   414→    "message": "인증이 필요합니다.",
+   415→    "details": {}
+   416→  }
+   417→}
+   418→```
+   419→
+   420→**Error 403:**
+   421→
+   422→```json
+   423→{
+   424→  "error": {
+   425→    "code": "FORBIDDEN",
+   426→    "message": "접근 권한이 없습니다.",
+   427→    "details": {
+   428→      "requiredRole": "viewer",
+   429→      "currentRole": null
+   430→    }
+   431→  }
+   432→}
+   433→```
+   434→
+   435→---
+   436→
+   437→### 3.2 단일 콘텐츠 항목 조회
+   438→
+   439→```
+   440→GET /api/admin/cms/[key]
+   441→```
+   442→
+   443→- **Required Role**: `viewer` 이상
+   444→- **Path Parameter**: `key` — 콘텐츠 항목의 고유 key (예: `main.title`)
+   445→
+   446→**Example Request:**
+   447→
+   448→```
+   449→GET /api/admin/cms/main.title
+   450→```
+   451→
+   452→**Response 200:**
+   453→
+   454→```json
+   455→{
+   456→  "data": {
+   457→    "key": "main.title",
+   458→    "label": "메인 화면 제목",
+   459→    "value": "스마트 도서관에 오신 것을 환영합니다",
+   460→    "screen": "main",
+   461→    "type": "text",
+   462→    "description": "키오스크 메인 화면 상단에 표시되는 제목 텍스트입니다.",
+   463→    "updatedAt": "2025-06-27T10:00:00Z",
+   464→    "updatedBy": {
+   465→      "id": "adm_01HX3K8M2P",
+   466→      "name": "김관리"
+   467→    }
+   468→  }
+   469→}
+   470→```
+   471→
+   472→**Error 404:**
+   473→
+   474→```json
+   475→{
+   476→  "error": {
+   477→    "code": "NOT_FOUND",
+   478→    "message": "해당 콘텐츠 항목을 찾을 수 없습니다.",
+   479→    "details": {
+   480→      "key": "main.title"
+   481→    }
+   482→  }
+   483→}
+   484→```
+   485→
+   486→---
+   487→
+   488→### 3.3 콘텐츠 항목 수정
+   489→
+   490→```
+   491→PUT /api/admin/cms/[key]
+   492→```
+   493→
+   494→- **Required Role**: `admin` 이상
+   495→- **Description**: 콘텐츠 값을 수정하며, 변경 시 감사 로그(audit log)가 자동으로 기록됩니다.
+   496→
+   497→**Request Body:**
+   498→
+   499→```json
+   500→{
+   501→  "value": "행복한 도서관에 오신 것을 환영합니다"
+   502→}
+   503→```
+   504→
+   505→| Field | Type | Required | 설명 |
+   506→|-------|------|----------|------|
+   507→| `value` | string | ✅ | 새로운 콘텐츠 값 (빈 문자열 허용, max: 2000자) |
+   508→
+   509→**Response 200:**
+   510→
+   511→```json
+   512→{
+   513→  "data": {
+   514→    "key": "main.title",
+   515→    "label": "메인 화면 제목",
+   516→    "value": "행복한 도서관에 오신 것을 환영합니다",
+   517→    "screen": "main",
+   518→    "type": "text",
+   519→    "updatedAt": "2025-06-27T15:00:00Z",
+   520→    "updatedBy": {
+   521→      "id": "adm_01HX3K8M2P",
+   522→      "name": "김관리"
+   523→    },
+   524→    "auditLogId": "aud_01HX3L0B4Q"
+   525→  }
+   526→}
+   527→```
+   528→
+   529→**Error 400:**
+   530→
+   531→```json
+   532→{
+   533→  "error": {
+   534→    "code": "VALIDATION_ERROR",
+   535→    "message": "요청 본문이 올바르지 않습니다.",
+   536→    "details": {
+   537→      "value": "값은 2000자를 초과할 수 없습니다."
+   538→    }
+   539→  }
+   540→}
+   541→```
+   542→
+   543→**Error 403:**
+   544→
+   545→```json
+   546→{
+   547→  "error": {
+   548→    "code": "FORBIDDEN",
+   549→    "message": "쓰기 권한이 없습니다.",
+   550→    "details": {
+   551→      "requiredRole": "admin",
+   552→      "currentRole": "viewer"
+   553→    }
+   554→  }
+   555→}
+   556→```
+   557→
+   558→**Error 404:**
+   559→
+   560→```json
+   561→{
+   562→  "error": {
+   563→    "code": "NOT_FOUND",
+   564→    "message": "해당 콘텐츠 항목을 찾을 수 없습니다.",
+   565→    "details": {
+   566→      "key": "main.nonexistent"
+   567→    }
+   568→  }
+   569→}
+   570→```
+   571→
+   572→---
+   573→
+   574→### 3.4 콘텐츠 일괄 수정
+   575→
+   576→```
+   577→POST /api/admin/cms/batch
+   578→```
+   579→
+   580→- **Required Role**: `admin` 이상
+   581→- **Description**: 여러 콘텐츠 항목을 한 번에 수정합니다. 각 변경마다 감사 로그가 개별적으로 기록됩니다.
+   582→
+   583→**Request Body:**
+   584→
+   585→```json
+   586→{
+   587→  "items": [
+   588→    {
+   589→      "key": "main.title",
+   590→      "value": "행복한 도서관에 오신 것을 환영합니다"
+   591→    },
+   592→    {
+   593→      "key": "main.subtitle",
+   594→      "value": "검색과 대출/반납 서비스를 이용하세요"
+   595→    },
+   596→    {
+   597→      "key": "search.placeholder",
+   598→      "value": "책 제목 또는 저자를 입력하세요"
+   599→    }
+   600→  ]
+   601→}
+   602→```
+   603→
+   604→| Field | Type | Required | 설명 |
+   605→|-------|------|----------|------|
+   606→| `items` | array | ✅ | 수정할 항목 배열 (max: 50개) |
+   607→| `items[].key` | string | ✅ | 콘텐츠 key |
+   608→| `items[].value` | string | ✅ | 새로운 값 |
+   609→
+   610→**Response 200:**
+   611→
+   612→```json
+   613→{
+   614→  "data": {
+   615→    "updated": 3,
+   616→    "failed": 0,
+   617→    "results": [
+   618→      {
+   619→        "key": "main.title",
+   620→        "value": "행복한 도서관에 오신 것을 환영합니다",
+   621→        "updatedAt": "2025-06-27T15:00:00Z",
+   622→        "auditLogId": "aud_01HX3L0B4Q"
+   623→      },
+   624→      {
+   625→        "key": "main.subtitle",
+   626→        "value": "검색과 대출/반납 서비스를 이용하세요",
+   627→        "updatedAt": "2025-06-27T15:00:00Z",
+   628→        "auditLogId": "aud_01HX3L0B5R"
+   629→      },
+   630→      {
+   631→        "key": "search.placeholder",
+   632→        "value": "책 제목 또는 저자를 입력하세요",
+   633→        "updatedAt": "2025-06-27T15:00:00Z",
+   634→        "auditLogId": "aud_01HX3L0B6S"
+   635→      }
+   636→    ]
+   637→  }
+   638→}
+   639→```
+   640→
+   641→**Error 400 (부분 실패):**
+   642→
+   643→```json
+   644→{
+   645→  "error": {
+   646→    "code": "PARTIAL_FAILURE",
+   647→    "message": "일부 항목 수정에 실패했습니다.",
+   648→    "details": {
+   649→      "updated": 2,
+   650→      "failed": 1,
+   651→      "failures": [
+   652→        {
+   653→          "key": "invalid.key",
+   654→          "reason": "NOT_FOUND"
+   655→        }
+   656→      ]
+   657→    }
+   658→  }
+   659→}
+   660→```
+   661→
+   662→**Error 400 (항목 수 초과):**
+   663→
+   664→```json
+   665→{
+   666→  "error": {
+   667→    "code": "VALIDATION_ERROR",
+   668→    "message": "한 번에 최대 50개 항목까지 수정할 수 있습니다.",
+   669→    "details": {
+   670→      "max": 50,
+   671→      "provided": 55
+   672→    }
+   673→  }
+   674→}
+   675→```
+   676→
+   677→---
+   678→
+   679→## 4. CMS 이미지 API
+   680→
+   681→### 4.1 이미지 목록 조회
+   682→
+   683→```
+   684→GET /api/admin/cms/images
+   685→```
+   686→
+   687→- **Required Role**: `viewer` 이상
+   688→
+   689→**Query Parameters:**
+   690→
+   691→| Parameter | Type | Required | 설명 |
+   692→|-----------|------|----------|------|
+   693→| `screen` | string | ❌ | 화면 필터 |
+   694→| `page` | integer | ❌ | 페이지 번호 (default: 1) |
+   695→| `limit` | integer | ❌ | 페이지당 항목 수 (default: 20) |
+   696→
+   697→**Response 200:**
+   698→
+   699→```json
+   700→{
+   701→  "data": [
+   702→    {
+   703→      "id": "img_01HX3K9A7N",
+   704→      "url": "https://cdn.library.go.kr/cms/main-bg-001.jpg",
+   705→      "alt": "도서관 메인 배경 이미지",
+   706→      "screen": "main",
+   707→      "mimeType": "image/jpeg",
+   708→      "size": 245760,
+   709→      "width": 1920,
+   710→      "height": 1080,
+   711→      "updatedAt": "2025-06-20T12:00:00Z",
+   712→      "updatedBy": {
+   713→        "id": "adm_01HX3K8M2P",
+   714→        "name": "김관리"
+   715→      }
+   716→    }
+   717→  ],
+   718→  "pagination": {
+   719→    "page": 1,
+   720→    "limit": 20,
+   721→    "total": 12,
+   722→    "totalPages": 1
+   723→  }
+   724→}
+   725→```
+   726→
+   727→**Error 401:**
+   728→
+   729→```json
+   730→{
+   731→  "error": {
+   732→    "code": "UNAUTHORIZED",
+   733→    "message": "인증이 필요합니다.",
+   734→    "details": {}
+   735→  }
+   736→}
+   737→```
+   738→
+   739→---
+   740→
+   741→### 4.2 이미지 업로드
+   742→
+   743→```
+   744→POST /api/admin/cms/images
+   745→```
+   746→
+   747→- **Required Role**: `admin` 이상
+   748→- **Content-Type**: `multipart/form-data`
+   749→- **Rate Limit**: 20회/1분
+   750→
+   751→**Form Data:**
+   752→
+   753→| Field | Type | Required | 설명 |
+   754→|-------|------|----------|------|
+   755→| `file` | binary | ✅ | 이미지 파일 (JPEG, PNG, WebP, SVG) |
+   756→| `alt` | string | ❌ | 대체 텍스트 (default: "") |
+   757→| `screen` | string | ❌ | 할당할 화면 (예: `main`) |
+   758→
+   759→**제약 사항:**
+   760→
+   761→- 최대 파일 크기: 5MB
+   762→- 허용 MIME type: `image/jpeg`, `image/png`, `image/webp`, `image/svg+xml`
+   763→- 최소 해상도: 100×100px
+   764→- 최대 해상도: 3840×2160px
+   765→
+   766→**Response 201:**
+   767→
+   768→```json
+   769→{
+   770→  "data": {
+   771→    "id": "img_01HX3K9A7N",
+   772→    "url": "https://cdn.library.go.kr/cms/main-bg-002.jpg",
+   773→    "alt": "도서관 메인 배경 이미지",
+   774→    "screen": "main",
+   775→    "mimeType": "image/jpeg",
+   776→    "size": 245760,
+   777→    "width": 1920,
+   778→    "height": 1080,
+   779→    "createdAt": "2025-06-27T15:00:00Z",
+   780→    "createdBy": {
+   781→      "id": "adm_01HX3K8M2P",
+   782→      "name": "김관리"
+   783→    }
+   784→  }
+   785→}
+   786→```
+   787→
+   788→**Error 400:**
+   789→
+   790→```json
+   791→{
+   792→  "error": {
+   793→    "code": "VALIDATION_ERROR",
+   794→    "message": "이미지 파일이 올바르지 않습니다.",
+   795→    "details": {
+   796→      "file": "허용되지 않는 파일 형식입니다. (JPEG, PNG, WebP, SVG만 가능)"
+   797→    }
+   798→  }
+   799→}
+   800→```
+   801→
+   802→```json
+   803→{
+   804→  "error": {
+   805→    "code": "VALIDATION_ERROR",
+   806→    "message": "파일 크기가 제한을 초과합니다.",
+   807→    "details": {
+   808→      "file": "최대 5MB까지 업로드할 수 있습니다.",
+   809→      "maxSize": 5242880,
+   810→      "providedSize": 8388608
+   811→    }
+   812→  }
+   813→}
+   814→```
+   815→
+   816→**Error 429:**
+   817→
+   818→```json
+   819→{
+   820→  "error": {
+   821→    "code": "RATE_LIMITED",
+   822→    "message": "이미지 업로드 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.",
+   823→    "details": {}
+   824→  }
+   825→}
+   826→```
+   827→
+   828→---
+   829→
+   830→### 4.3 이미지 정보 수정
+   831→
+   832→```
+   833→PUT /api/admin/cms/images/[id]
+   834→```
+   835→
+   836→- **Required Role**: `admin` 이상
+   837→- **Path Parameter**: `id` — 이미지 ID
+   838→
+   839→**Request Body:**
+   840→
+   841→```json
+   842→{
+   843→  "alt": "메인 화면 배경 - 책장이 있는 도서관 내부",
+   844→  "screen": "main"
+   845→}
+   846→```
+   847→
+   848→| Field | Type | Required | 설명 |
+   849→|-------|------|----------|------|
+   850→| `alt` | string | ❌ | 대체 텍스트 (max: 200자) |
+   851→| `screen` | string | ❌ | 할당할 화면 |
+   852→
+   853→**Response 200:**
+   854→
+   855→```json
+   856→{
+   857→  "data": {
+   858→    "id": "img_01HX3K9A7N",
+   859→    "url": "https://cdn.library.go.kr/cms/main-bg-002.jpg",
+   860→    "alt": "메인 화면 배경 - 책장이 있는 도서관 내부",
+   861→    "screen": "main",
+   862→    "mimeType": "image/jpeg",
+   863→    "size": 245760,
+   864→    "width": 1920,
+   865→    "height": 1080,
+   866→    "updatedAt": "2025-06-27T15:30:00Z",
+   867→    "updatedBy": {
+   868→      "id": "adm_01HX3K8M2P",
+   869→      "name": "김관리"
+   870→    }
+   871→  }
+   872→}
+   873→```
+   874→
+   875→**Error 404:**
+   876→
+   877→```json
+   878→{
+   879→  "error": {
+   880→    "code": "NOT_FOUND",
+   881→    "message": "해당 이미지를 찾을 수 없습니다.",
+   882→    "details": {
+   883→      "id": "img_01HX3K9A7N"
+   884→    }
+   885→  }
+   886→}
+   887→```
+   888→
+   889→---
+   890→
+   891→### 4.4 이미지 삭제
+   892→
+   893→```
+   894→DELETE /api/admin/cms/images/[id]
+   895→```
+   896→
+   897→- **Required Role**: `admin` 이상
+   898→- **Path Parameter**: `id` — 이미지 ID
+   899→- **Description**: CDN에서 파일을 삭제하고 DB 레코드를 제거합니다. 해당 이미지를 참조하는 콘텐츠 항목이 있으면 `409 Conflict`가 반환됩니다.
+   900→
+   901→**Response 200:**
+   902→
+   903→```json
+   904→{
+   905→  "data": {
+   906→    "message": "이미지가 삭제되었습니다.",
+   907→    "id": "img_01HX3K9A7N"
+   908→  }
+   909→}
+   910→```
+   911→
+   912→**Error 404:**
+   913→
+   914→```json
+   915→{
+   916→  "error": {
+   917→    "code": "NOT_FOUND",
+   918→    "message": "해당 이미지를 찾을 수 없습니다.",
+   919→    "details": {
+   920→      "id": "img_invalid"
+   921→    }
+   922→  }
+   923→}
+   924→```
+   925→
+   926→**Error 409:**
+   927→
+   928→```json
+   929→{
+   930→  "error": {
+   931→    "code": "CONFLICT",
+   932→    "message": "해당 이미지를 참조하는 콘텐츠 항목이 존재합니다.",
+   933→    "details": {
+   934→      "referencedBy": ["main.background_image", "info.hero_image"]
+   935→    }
+   936→  }
+   937→}
+   938→```
+   939→
+   940→---
+   941→
+   942→## 5. 공개 CMS API (키오스크에서 호출, 인증 불필요)
+   943→
+   944→> 키오스크 클라이언트에서 호출하는 공개 API입니다.  
+   945→> JWT 인증이 필요하지 않으며, 응답 캐싱을 위해 ETag / If-None-Match 헤더를 지원합니다.
+   946→
+   947→### 5.1 전체 콘텐츠 조회
+   948→
+   949→```
+   950→GET /api/cms/content
+   951→```
+   952→
+   953→- **Required Role**: 없음 (공개)
+   954→- **Cache**: ETag 지원, max-age=300 (5분)
+   955→
+   956→**Query Parameters:**
+   957→
+   958→| Parameter | Type | Required | 설명 |
+   959→|-----------|------|----------|------|
+   960→| `v` | integer | ❌ | 콘텐츠 버전 (변경 시에만 응답 반환, 아니면 304) |
+   961→
+   962→**Request Headers (조건부 요청):**
+   963→
+   964→```
+   965→If-None-Match: "etag_abc123"
+   966→```
+   967→
+   968→**Response 200:**
+   969→
+   970→```
+   971→ETag: "etag_def456"
+   972→Cache-Control: public, max-age=300
+   973→```
+   974→
+   975→```json
+   976→{
+   977→  "data": {
+   978→    "version": 42,
+   979→    "updatedAt": "2025-06-27T15:00:00Z",
+   980→    "screens": {
+   981→      "main": {
+   982→        "title": "스마트 도서관에 오신 것을 환영합니다",
+   983→        "subtitle": "도서 검색과 대출/반납을 이용할 수 있습니다",
+   984→        "background_image": {
+   985→          "url": "https://cdn.library.go.kr/cms/main-bg-001.jpg",
+   986→          "alt": "도서관 메인 배경 이미지"
+   987→        }
+   988→      },
+   989→      "search": {
+   990→        "placeholder": "검색어를 입력하세요",
+   991→        "hint": "제목, 저자, ISBN으로 검색할 수 있습니다"
+   992→      },
+   993→      "return": {
+   994→        "title": "도서 반납",
+   995→        "instruction": "반납할 도서를 아래 슬롯에 넣어주세요"
+   996→      },
+   997→      "info": {
+   998→        "title": "도서관 안내",
+   999→        "operating_hours": "평일 09:00~18:00 / 토요일 09:00~13:00",
+  1000→        "contact": "02-1234-5678"
+  1001→      },
+  1002→      "notice": {
+  1003→        "title": "공지사항"
+  1004→      }
+  1005→    }
+  1006→  }
+  1007→}
+  1008→```
+  1009→
+  1010→**Response 304 (변경 없음):**
+  1011→
+  1012→```
+  1013→HTTP/1.1 304 Not Modified
+  1014→ETag: "etag_abc123"
+  1015→```
+  1016→
+  1017→**Error 429:**
+  1018→
+  1019→```json
+  1020→{
+  1021→  "error": {
+  1022→    "code": "RATE_LIMITED",
+  1023→    "message": "요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요.",
+  1024→    "details": {}
+  1025→  }
+  1026→}
+  1027→```
+  1028→
+  1029→---
+  1030→
+  1031→### 5.2 특정 화면 콘텐츠 조회
+  1032→
+  1033→```
+  1034→GET /api/cms/content/[screen]
+  1035→```
+  1036→
+  1037→- **Required Role**: 없음 (공개)
+  1038→- **Path Parameter**: `screen` — 화면 식별자 (`main`, `search`, `return`, `info`, `notice`)
+  1039→- **Cache**: ETag 지원, max-age=300
+  1040→
+  1041→**Example Request:**
+  1042→
+  1043→```
+  1044→GET /api/cms/content/main
+  1045→```
+  1046→
+  1047→**Response 200:**
+  1048→
+  1049→```
+  1050→ETag: "etag_main_v42"
+  1051→Cache-Control: public, max-age=300
+  1052→```
+  1053→
+  1054→```json
+  1055→{
+  1056→  "data": {
+  1057→    "screen": "main",
+  1058→    "version": 42,
+  1059→    "updatedAt": "2025-06-27T15:00:00Z",
+  1060→    "content": {
+  1061→      "title": "스마트 도서관에 오신 것을 환영합니다",
+  1062→      "subtitle": "도서 검색과 대출/반납을 이용할 수 있습니다",
+  1063→      "background_image": {
+  1064→        "url": "https://cdn.library.go.kr/cms/main-bg-001.jpg",
+  1065→        "alt": "도서관 메인 배경 이미지"
+  1066→      }
+  1067→    }
+  1068→  }
+  1069→}
+  1070→```
+  1071→
+  1072→**Error 404:**
+  1073→
+  1074→```json
+  1075→{
+  1076→  "error": {
+  1077→    "code": "NOT_FOUND",
+  1078→    "message": "알 수 없는 화면 식별자입니다.",
+  1079→    "details": {
+  1080→      "screen": "unknown",
+  1081→      "availableScreens": ["main", "search", "return", "info", "notice"]
+  1082→    }
+  1083→  }
+  1084→}
+  1085→```
+  1086→
+  1087→---
+  1088→
+  1089→## 6. 도서 관리 API
+  1090→
+  1091→### 6.1 도서 목록 조회
+  1092→
+  1093→```
+  1094→GET /api/admin/books
+  1095→```
+  1096→
+  1097→- **Required Role**: `viewer` 이상
+  1098→
+  1099→**Query Parameters:**
+  1100→
+  1101→| Parameter | Type | Required | 설명 |
+  1102→|-----------|------|----------|------|
+  1103→| `search` | string | ❌ | 제목/저자/ISBN 검색 |
+  1104→| `category` | string | ❌ | 카테고리 필터 |
+  1105→| `status` | string | ❌ | 상태 필터 (`available` / `on_loan` / `lost` / `removed`) |
+  1106→| `page` | integer | ❌ | 페이지 번호 (default: 1) |
+  1107→| `limit` | integer | ❌ | 페이지당 항목 수 (default: 20, max: 100) |
+  1108→| `sortBy` | string | ❌ | 정렬 필드 (`title` / `author` / `createdAt` / `updatedAt`) |
+  1109→| `sortOrder` | string | ❌ | 정렬 방향 (`asc` / `desc`, default: `desc`) |
+  1110→
+  1111→**Example Request:**
+  1112→
+  1113→```
+  1114→GET /api/admin/books?search=해리&category=문학&status=available&page=1&limit=20
+  1115→```
+  1116→
+  1117→**Response 200:**
+  1118→
+  1119→```json
+  1120→{
+  1121→  "data": [
+  1122→    {
+  1123→      "id": "bk_01HX3M1A2B",
+  1124→      "isbn": "9788901234567",
+  1125→      "title": "해리 포터와 마법사의 돌",
+  1126→      "author": "J.K. 롤링",
+  1127→      "publisher": "문학수철",
+  1128→      "category": "문학",
+  1129→      "location": "A-2-15",
+  1130→      "status": "available",
+  1131→      "coverImage": "https://cdn.library.go.kr/covers/9788901234567.jpg",
+  1132→      "totalCopies": 3,
+  1133→      "availableCopies": 2,
+  1134→      "publishedAt": "2000-08-01",
+  1135→      "createdAt": "2024-03-10T09:00:00Z",
+  1136→      "updatedAt": "2025-06-25T14:00:00Z"
+  1137→    }
+  1138→  ],
+  1139→  "pagination": {
+  1140→    "page": 1,
+  1141→    "limit": 20,
+  1142→    "total": 1,
+  1143→    "totalPages": 1
+  1144→  }
+  1145→}
+  1146→```
+  1147→
+  1148→**Error 401:**
+  1149→
+  1150→```json
+  1151→{
+  1152→  "error": {
+  1153→    "code": "UNAUTHORIZED",
+  1154→    "message": "인증이 필요합니다.",
+  1155→    "details": {}
+  1156→  }
+  1157→}
+  1158→```
+  1159→
+  1160→**Error 403:**
+  1161→
+  1162→```json
+  1163→{
+  1164→  "error": {
+  1165→    "code": "FORBIDDEN",
+  1166→    "message": "접근 권한이 없습니다.",
+  1167→    "details": {}
+  1168→  }
+  1169→}
+  1170→```
+  1171→
+  1172→---
+  1173→
+  1174→### 6.2 도서 등록
+  1175→
+  1176→```
+  1177→POST /api/admin/books
+  1178→```
+  1179→
+  1180→- **Required Role**: `admin` 이상
+  1181→
+  1182→**Request Body:**
+  1183→
+  1184→```json
+  1185→{
+  1186→  "isbn": "9788901234567",
+  1187→  "title": "해리 포터와 마법사의 돌",
+  1188→  "author": "J.K. 롤링",
+  1189→  "publisher": "문학수첼",
+  1190→  "category": "문학",
+  1191→  "location": "A-2-15",
+  1192→  "totalCopies": 3,
+  1193→  "publishedAt": "2000-08-01",
+  1194→  "coverImageUrl": "https://cdn.library.go.kr/covers/9788901234567.jpg",
+  1195→  "description": "해리 포터 시리즈의 첫 번째 책입니다."
+  1196→}
+  1197→```
+  1198→
+  1199→| Field | Type | Required | Validation |
+  1200→|-------|------|----------|------------|
+  1201→| `isbn` | string | ✅ | 13자리 ISBN (숫자만) |
+  1202→| `title` | string | ✅ | 1~200자 |
+  1203→| `author` | string | ✅ | 1~100자 |
+  1204→| `publisher` | string | ❌ | max 100자 |
+  1205→| `category` | string | ✅ | 등록된 카테고리 |
+  1206→| `location` | string | ❌ | 서가 위치 (예: A-2-15) |
+  1207→| `totalCopies` | integer | ✅ | 1 이상 |
+  1208→| `publishedAt` | string | ❌ | ISO 8601 날짜 |
+  1209→| `coverImageUrl` | string | ❌ | 유효한 URL |
+  1210→| `description` | string | ❌ | max 2000자 |
+  1211→
+  1212→**Response 201:**
+  1213→
+  1214→```json
+  1215→{
+  1216→  "data": {
+  1217→    "id": "bk_01HX3M1A2B",
+  1218→    "isbn": "9788901234567",
+  1219→    "title": "해리 포터와 마법사의 돌",
+  1220→    "author": "J.K. 롤링",
+  1221→    "publisher": "문학수첼",
+  1222→    "category": "문학",
+  1223→    "location": "A-2-15",
+  1224→    "status": "available",
+  1225→    "coverImage": "https://cdn.library.go.kr/covers/9788901234567.jpg",
+  1226→    "totalCopies": 3,
+  1227→    "availableCopies": 3,
+  1228→    "publishedAt": "2000-08-01",
+  1229→    "createdAt": "2025-06-27T15:00:00Z",
+  1230→    "updatedAt": "2025-06-27T15:00:00Z"
+  1231→  }
+  1232→}
+  1233→```
+  1234→
+  1235→**Error 400:**
+  1236→
+  1237→```json
+  1238→{
+  1239→  "error": {
+  1240→    "code": "VALIDATION_ERROR",
+  1241→    "message": "요청 본문이 올바르지 않습니다.",
+  1242→    "details": {
+  1243→      "isbn": "ISBN은 13자리 숫자여야 합니다.",
+  1244→      "title": "제목은 필수 항목입니다."
+  1245→    }
+  1246→  }
+  1247→}
+  1248→```
+  1249→
+  1250→**Error 409:**
+  1251→
+  1252→```json
+  1253→{
+  1254→  "error": {
+  1255→    "code": "CONFLICT",
+  1256→    "message": "동일한 ISBN의 도서가 이미 존재합니다.",
+  1257→    "details": {
+  1258→      "existingBookId": "bk_01HX3M1A2B"
+  1259→    }
+  1260→  }
+  1261→}
+  1262→```
+  1263→
+  1264→---
+  1265→
+  1266→### 6.3 도서 수정
+  1267→
+  1268→```
+  1269→PUT /api/admin/books/[id]
+  1270→```
+  1271→
+  1272→- **Required Role**: `admin` 이상
+  1273→- **Path Parameter**: `id` — 도서 ID
+  1274→
+  1275→**Request Body:**
+  1276→
+  1277→```json
+  1278→{
+  1279→  "title": "해리 포터와 마법사의 돌 (개정판)",
+  1280→  "location": "A-3-01",
+  1281→  "totalCopies": 5,
+  1282→  "description": "해리 포터 시리즈 첫 번째 책, 개정판입니다."
+  1283→}
+  1284→```
+  1285→
+  1286→| Field | Type | Required | 설명 |
+  1287→|-------|------|----------|------|
+  1288→| `title` | string | ❌ | 도서 제목 |
+  1289→| `author` | string | ❌ | 저자 |
+  1290→| `publisher` | string | ❌ | 출판사 |
+  1291→| `category` | string | ❌ | 카테고리 |
+  1292→| `location` | string | ❌ | 서가 위치 |
+  1293→| `totalCopies` | integer | ❌ | 총 권수 |
+  1294→| `publishedAt` | string | ❌ | 출판일 |
+  1295→| `coverImageUrl` | string | ❌ | 표지 이미지 URL |
+  1296→| `description` | string | ❌ | 설명 |
+  1297→
+  1298→> 모든 필드는 선택적이며, 포함된 필드만 업데이트됩니다 (partial update).
+  1299→
+  1300→**Response 200:**
+  1301→
+  1302→```json
+  1303→{
+  1304→  "data": {
+  1305→    "id": "bk_01HX3M1A2B",
+  1306→    "isbn": "9788901234567",
+  1307→    "title": "해리 포터와 마법사의 돌 (개정판)",
+  1308→    "author": "J.K. 롤링",
+  1309→    "publisher": "문학수첼",
+  1310→    "category": "문학",
+  1311→    "location": "A-3-01",
+  1312→    "status": "available",
+  1313→    "coverImage": "https://cdn.library.go.kr/covers/9788901234567.jpg",
+  1314→    "totalCopies": 5,
+  1315→    "availableCopies": 3,
+  1316→    "publishedAt": "2000-08-01",
+  1317→    "createdAt": "2024-03-10T09:00:00Z",
+  1318→    "updatedAt": "2025-06-27T15:30:00Z"
+  1319→  }
+  1320→}
+  1321→```
+  1322→
+  1323→**Error 400:**
+  1324→
+  1325→```json
+  1326→{
+  1327→  "error": {
+  1328→    "code": "VALIDATION_ERROR",
+  1329→    "message": "totalCopies는 현재 대출 중인 권수(2)보다 작을 수 없습니다.",
+  1330→    "details": {
+  1331→      "totalCopies": "최소 2 이상이어야 합니다.",
+  1332→      "currentLoans": 2
+  1333→    }
+  1334→  }
+  1335→}
+  1336→```
+  1337→
+  1338→**Error 404:**
+  1339→
+  1340→```json
+  1341→{
+  1342→  "error": {
+  1343→    "code": "NOT_FOUND",
+  1344→    "message": "해당 도서를 찾을 수 없습니다.",
+  1345→    "details": {
+  1346→      "id": "bk_invalid"
+  1347→    }
+  1348→  }
+  1349→}
+  1350→```
+  1351→
+  1352→---
+  1353→
+  1354→### 6.4 도서 삭제 (Soft Delete)
+  1355→
+  1356→```
+  1357→DELETE /api/admin/books/[id]
+  1358→```
+  1359→
+  1360→- **Required Role**: `admin` 이상
+  1361→- **Path Parameter**: `id` — 도서 ID
+  1362→- **Description**: 실제 레코드를 삭제하지 않고 `status`를 `removed`로 변경합니다 (soft delete). 대출 중인 도서는 삭제할 수 없습니다.
+  1363→
+  1364→**Response 200:**
+  1365→
+  1366→```json
+  1367→{
+  1368→  "data": {
+  1369→    "id": "bk_01HX3M1A2B",
+  1370→    "title": "해리 포터와 마법사의 돌 (개정판)",
+  1371→    "status": "removed",
+  1372→    "updatedAt": "2025-06-27T16:00:00Z"
+  1373→  }
+  1374→}
+  1375→```
+  1376→
+  1377→**Error 400:**
+  1378→
+  1379→```json
+  1380→{
+  1381→  "error": {
+  1382→    "code": "CONFLICT",
+  1383→    "message": "현재 대출 중인 도서는 삭제할 수 없습니다.",
+  1384→    "details": {
+  1385→      "activeLoans": 2,
+  1386→      "availableCopies": 3,
+  1387→      "totalCopies": 5
+  1388→    }
+  1389→  }
+  1390→}
+  1391→```
+  1392→
+  1393→**Error 404:**
+  1394→
+  1395→```json
+  1396→{
+  1397→  "error": {
+  1398→    "code": "NOT_FOUND",
+  1399→    "message": "해당 도서를 찾을 수 없습니다.",
+  1400→    "details": {
+  1401→      "id": "bk_invalid"
+  1402→    }
+  1403→  }
+  1404→}
+  1405→```
+  1406→
+  1407→---
+  1408→
+  1409→## 7. 사용자 관리 API
+  1410→
+  1411→### 7.1 사용자 목록 조회
+  1412→
+  1413→```
+  1414→GET /api/admin/users
+  1415→```
+  1416→
+  1417→- **Required Role**: `viewer` 이상
+  1418→
+  1419→**Query Parameters:**
+  1420→
+  1421→| Parameter | Type | Required | 설명 |
+  1422→|-----------|------|----------|------|
+  1423→| `search` | string | ❌ | 이름/전화번호/회원번호 검색 |
+  1424→| `status` | string | ❌ | 상태 필터 (`active` / `suspended` / `deactivated`) |
+  1425→| `page` | integer | ❌ | 페이지 번호 (default: 1) |
+  1426→| `limit` | integer | ❌ | 페이지당 항목 수 (default: 20, max: 100) |
+  1427→| `sortBy` | string | ❌ | 정렬 필드 |
+  1428→| `sortOrder` | string | ❌ | 정렬 방향 |
+  1429→
+  1430→**Response 200:**
+  1431→
+  1432→```json
+  1433→{
+  1434→  "data": [
+  1435→    {
+  1436→      "id": "usr_01HX3N2B3C",
+  1437→      "memberNumber": "LIB-2024-00142",
+  1438→      "name": "이서연",
+  1439→      "phone": "010-1234-5678",
+  1440→      "email": "seoyeon@email.com",
+  1441→      "status": "active",
+  1442→      "loanCount": 3,
+  1443→      "overdueCount": 0,
+  1444→      "createdAt": "2024-06-15T10:00:00Z",
+  1445→      "updatedAt": "2025-06-27T09:00:00Z"
+  1446→    }
+  1447→  ],
+  1448→  "pagination": {
+  1449→    "page": 1,
+  1450→    "limit": 20,
+  1451→    "total": 856,
+  1452→    "totalPages": 43
+  1453→  }
+  1454→}
+  1455→```
+  1456→
+  1457→**Error 401:**
+  1458→
+  1459→```json
+  1460→{
+  1461→  "error": {
+  1462→    "code": "UNAUTHORIZED",
+  1463→    "message": "인증이 필요합니다.",
+  1464→    "details": {}
+  1465→  }
+  1466→}
+  1467→```
+  1468→
+  1469→---
+  1470→
+  1471→### 7.2 사용자 등록
+  1472→
+  1473→```
+  1474→POST /api/admin/users
+  1475→```
+  1476→
+  1477→- **Required Role**: `admin` 이상
+  1478→
+  1479→**Request Body:**
+  1480→
+  1481→```json
+  1482→{
+  1483→  "name": "박지훈",
+  1484→  "phone": "010-9876-5432",
+  1485→  "email": "jihoon@email.com",
+  1486→  "address": "서울시 강남구 역삼동 123"
+  1487→}
+  1488→```
+  1489→
+  1490→| Field | Type | Required | Validation |
+  1491→|-------|------|----------|------------|
+  1492→| `name` | string | ✅ | 1~50자 |
+  1493→| `phone` | string | ✅ | 010-XXXX-XXXX 형식 |
+  1494→| `email` | string | ❌ | 유효한 이메일 |
+  1495→| `address` | string | ❌ | max 200자 |
+  1496→
+  1497→**Response 201:**
+  1498→
+  1499→```json
+  1500→{
+  1501→  "data": {
+  1502→    "id": "usr_01HX3N2B3C",
+  1503→    "memberNumber": "LIB-2025-00857",
+  1504→    "name": "박지훈",
+  1505→    "phone": "010-9876-5432",
+  1506→    "email": "jihoon@email.com",
+  1507→    "address": "서울시 강남구 역삼동 123",
+  1508→    "status": "active",
+  1509→    "loanCount": 0,
+  1510→    "overdueCount": 0,
+  1511→    "createdAt": "2025-06-27T15:00:00Z",
+  1512→    "updatedAt": "2025-06-27T15:00:00Z"
+  1513→  }
+  1514→}
+  1515→```
+  1516→
+  1517→**Error 400:**
+  1518→
+  1519→```json
+  1520→{
+  1521→  "error": {
+  1522→    "code": "VALIDATION_ERROR",
+  1523→    "message": "요청 본문이 올바르지 않습니다.",
+  1524→    "details": {
+  1525→      "phone": "010-XXXX-XXXX 형식으로 입력해주세요."
+  1526→    }
+  1527→  }
+  1528→}
+  1529→```
+  1530→
+  1531→**Error 409:**
+  1532→
+  1533→```json
+  1534→{
+  1535→  "error": {
+  1536→    "code": "CONFLICT",
+  1537→    "message": "동일한 전화번호의 사용자가 이미 존재합니다.",
+  1538→    "details": {
+  1539→      "existingUserId": "usr_01HX3N2B3C"
+  1540→    }
+  1541→  }
+  1542→}
+  1543→```
+  1544→
+  1545→---
+  1546→
+  1547→### 7.3 사용자 수정
+  1548→
+  1549→```
+  1550→PUT /api/admin/users/[id]
+  1551→```
+  1552→
+  1553→- **Required Role**: `admin` 이상
+  1554→- **Path Parameter**: `id` — 사용자 ID
+  1555→
+  1556→**Request Body:**
+  1557→
+  1558→```json
+  1559→{
+  1560→  "name": "박지훈",
+  1561→  "phone": "010-9876-5432",
+  1562→  "email": "jihoon_new@email.com",
+  1563→  "address": "서울시 서초구 반포동 456"
+  1564→}
+  1565→```
+  1566→
+  1567→> 모든 필드 선택적 (partial update)
+  1568→
+  1569→**Response 200:**
+  1570→
+  1571→```json
+  1572→{
+  1573→  "data": {
+  1574→    "id": "usr_01HX3N2B3C",
+  1575→    "memberNumber": "LIB-2025-00857",
+  1576→    "name": "박지훈",
+  1577→    "phone": "010-9876-5432",
+  1578→    "email": "jihoon_new@email.com",
+  1579→    "address": "서울시 서초구 반포동 456",
+  1580→    "status": "active",
+  1581→    "loanCount": 0,
+  1582→    "overdueCount": 0,
+  1583→    "createdAt": "2025-06-27T15:00:00Z",
+  1584→    "updatedAt": "2025-06-27T16:00:00Z"
+  1585→  }
+  1586→}
+  1587→```
+  1588→
+  1589→**Error 404:**
+  1590→
+  1591→```json
+  1592→{
+  1593→  "error": {
+  1594→    "code": "NOT_FOUND",
+  1595→    "message": "해당 사용자를 찾을 수 없습니다.",
+  1596→    "details": {
+  1597→      "id": "usr_invalid"
+  1598→    }
+  1599→  }
+  1600→}
+  1601→```
+  1602→
+  1603→---
+  1604→
+  1605→### 7.4 사용자 비활성화
+  1606→
+  1607→```
+  1608→DELETE /api/admin/users/[id]
+  1609→```
+  1610→
+  1611→- **Required Role**: `admin` 이상
+  1612→- **Path Parameter**: `id` — 사용자 ID
+  1613→- **Description**: 사용자를 비활성화(`deactivated`) 상태로 변경합니다. 미반납 도서가 있는 경우 비활성화할 수 없습니다.
+  1614→
+  1615→**Response 200:**
+  1616→
+  1617→```json
+  1618→{
+  1619→  "data": {
+  1620→    "id": "usr_01HX3N2B3C",
+  1621→    "name": "박지훈",
+  1622→    "status": "deactivated",
+  1623→    "updatedAt": "2025-06-27T16:30:00Z"
+  1624→  }
+  1625→}
+  1626→```
+  1627→
+  1628→**Error 400:**
+  1629→
+  1630→```json
+  1631→{
+  1632→  "error": {
+  1633→    "code": "CONFLICT",
+  1634→    "message": "미반납 도서가 있는 사용자는 비활성화할 수 없습니다.",
+  1635→    "details": {
+  1636→      "activeLoans": 2
+  1637→    }
+  1638→  }
+  1639→}
+  1640→```
+  1641→
+  1642→**Error 404:**
+  1643→
+  1644→```json
+  1645→{
+  1646→  "error": {
+  1647→    "code": "NOT_FOUND",
+  1648→    "message": "해당 사용자를 찾을 수 없습니다.",
+  1649→    "details": {
+  1650→      "id": "usr_invalid"
+  1651→    }
+  1652→  }
+  1653→}
+  1654→```
+  1655→
+  1656→---
+  1657→
+  1658→## 8. 관리자 계정 API
+  1659→
+  1660→> 모든 엔드포인트는 `super_admin` role 전용입니다.
+  1661→
+  1662→### 8.1 관리자 목록 조회
+  1663→
+  1664→```
+  1665→GET /api/admin/admins
+  1666→```
+  1667→
+  1668→- **Required Role**: `super_admin`
+  1669→
+  1670→**Query Parameters:**
+  1671→
+  1672→| Parameter | Type | Required | 설명 |
+  1673→|-----------|------|----------|------|
+  1674→| `search` | string | ❌ | 이름/이메일 검색 |
+  1675→| `role` | string | ❌ | 역할 필터 (`super_admin` / `admin` / `viewer`) |
+  1676→| `page` | integer | ❌ | 페이지 번호 (default: 1) |
+  1677→| `limit` | integer | ❌ | 페이지당 항목 수 (default: 20) |
+  1678→
+  1679→**Response 200:**
+  1680→
+  1681→```json
+  1682→{
+  1683→  "data": [
+  1684→    {
+  1685→      "id": "adm_01HX3K8M2P",
+  1686→      "email": "admin@library.go.kr",
+  1687→      "name": "김관리",
+  1688→      "role": "admin",
+  1689→      "lastLoginAt": "2025-06-27T14:30:00Z",
+  1690→      "createdAt": "2024-01-15T09:00:00Z",
+  1691→      "updatedAt": "2024-01-15T09:00:00Z"
+  1692→    }
+  1693→  ],
+  1694→  "pagination": {
+  1695→    "page": 1,
+  1696→    "limit": 20,
+  1697→    "total": 5,
+  1698→    "totalPages": 1
+  1699→  }
+  1700→}
+  1701→```
+  1702→
+  1703→**Error 403:**
+  1704→
+  1705→```json
+  1706→{
+  1707→  "error": {
+  1708→    "code": "FORBIDDEN",
+  1709→    "message": "최고 관리자만 접근할 수 있습니다.",
+  1710→    "details": {
+  1711→      "requiredRole": "super_admin",
+  1712→      "currentRole": "admin"
+  1713→    }
+  1714→  }
+  1715→}
+  1716→```
+  1717→
+  1718→---
+  1719→
+  1720→### 8.2 관리자 계정 생성
+  1721→
+  1722→```
+  1723→POST /api/admin/admins
+  1724→```
+  1725→
+  1726→- **Required Role**: `super_admin`
+  1727→
+  1728→**Request Body:**
+  1729→
+  1730→```json
+  1731→{
+  1732→  "email": "newadmin@library.go.kr",
+  1733→  "name": "최새관리",
+  1734→  "password": "SecureP@ss456!",
+  1735→  "role": "viewer"
+  1736→}
+  1737→```
+  1738→
+  1739→| Field | Type | Required | Validation |
+  1740→|-------|------|----------|------------|
+  1741→| `email` | string | ✅ | 유효한 이메일, 중복 불가 |
+  1742→| `name` | string | ✅ | 1~50자 |
+  1743→| `password` | string | ✅ | 8자 이상, 대/소문자+숫자+특수문자 포함 |
+  1744→| `role` | string | ✅ | `admin` / `viewer` (`super_admin`은 직접 생성 불가) |
+  1745→
+  1746→**Response 201:**
+  1747→
+  1748→```json
+  1749→{
+  1750→  "data": {
+  1751→    "id": "adm_01HX4P0C3D",
+  1752→    "email": "newadmin@library.go.kr",
+  1753→    "name": "최새관리",
+  1754→    "role": "viewer",
+  1755→    "lastLoginAt": null,
+  1756→    "createdAt": "2025-06-27T15:00:00Z",
+  1757→    "updatedAt": "2025-06-27T15:00:00Z"
+  1758→  }
+  1759→}
+  1760→```
+  1761→
+  1762→**Error 400:**
+  1763→
+  1764→```json
+  1765→{
+  1766→  "error": {
+  1767→    "code": "VALIDATION_ERROR",
+  1768→    "message": "요청 본문이 올바르지 않습니다.",
+  1769→    "details": {
+  1770→      "password": "비밀번호는 8자 이상이며 대소문자, 숫자, 특수문자를 포함해야 합니다.",
+  1771→      "role": "super_admin 계정은 이 API로 생성할 수 없습니다."
+  1772→    }
+  1773→  }
+  1774→}
+  1775→```
+  1776→
+  1777→**Error 409:**
+  1778→
+  1779→```json
+  1780→{
+  1781→  "error": {
+  1782→    "code": "CONFLICT",
+  1783→    "message": "동일한 이메일의 관리자가 이미 존재합니다.",
+  1784→    "details": {
+  1785→      "email": "newadmin@library.go.kr"
+  1786→    }
+  1787→  }
+  1788→}
+  1789→```
+  1790→
+  1791→---
+  1792→
+  1793→### 8.3 관리자 역할 변경
+  1794→
+  1795→```
+  1796→PUT /api/admin/admins/[id]
+  1797→```
+  1798→
+  1799→- **Required Role**: `super_admin`
+  1800→- **Path Parameter**: `id` — 관리자 ID
+  1801→
+  1802→**Request Body:**
+  1803→
+  1804→```json
+  1805→{
+  1806→  "role": "admin",
+  1807→  "name": "최새관리"
+  1808→}
+  1809→```
+  1810→
+  1811→| Field | Type | Required | 설명 |
+  1812→|-------|------|----------|------|
+  1813→| `role` | string | ❌ | 변경할 역할 (`admin` / `viewer`) |
+  1814→| `name` | string | ❌ | 변경할 이름 |
+  1815→
+  1816→> 자기 자신의 역할은 변경할 수 없습니다.
+  1817→
+  1818→**Response 200:**
+  1819→
+  1820→```json
+  1821→{
+  1822→  "data": {
+  1823→    "id": "adm_01HX4P0C3D",
+  1824→    "email": "newadmin@library.go.kr",
+  1825→    "name": "최새관리",
+  1826→    "role": "admin",
+  1827→    "lastLoginAt": null,
+  1828→    "createdAt": "2025-06-27T15:00:00Z",
+  1829→    "updatedAt": "2025-06-27T16:00:00Z"
+  1830→  }
+  1831→}
+  1832→```
+  1833→
+  1834→**Error 400:**
+  1835→
+  1836→```json
+  1837→{
+  1838→  "error": {
+  1839→    "code": "BAD_REQUEST",
+  1840→    "message": "자기 자신의 역할은 변경할 수 없습니다.",
+  1841→    "details": {}
+  1842→  }
+  1843→}
+  1844→```
+  1845→
+  1846→**Error 404:**
+  1847→
+  1848→```json
+  1849→{
+  1850→  "error": {
+  1851→    "code": "NOT_FOUND",
+  1852→    "message": "해당 관리자를 찾을 수 없습니다.",
+  1853→    "details": {
+  1854→      "id": "adm_invalid"
+  1855→    }
+  1856→  }
+  1857→}
+  1858→```
+  1859→
+  1860→---
+  1861→
+  1862→### 8.4 관리자 비밀번호 변경
+  1863→
+  1864→```
+  1865→PUT /api/admin/admins/[id]/password
+  1866→```
+  1867→
+  1868→- **Required Role**: `super_admin`
+  1869→- **Path Parameter**: `id` — 관리자 ID
+  1870→- **Description**: 최고 관리자가 다른 관리자의 비밀번호를 강제로 변경합니다.
+  1871→
+  1872→**Request Body:**
+  1873→
+  1874→```json
+  1875→{
+  1876→  "newPassword": "NewSecureP@ss789!"
+  1877→}
+  1878→```
+  1879→
+  1880→| Field | Type | Required | Validation |
+  1881→|-------|------|----------|------------|
+  1882→| `newPassword` | string | ✅ | 8자 이상, 대/소문자+숫자+특수문자 포함 |
+  1883→
+  1884→**Response 200:**
+  1885→
+  1886→```json
+  1887→{
+  1888→  "data": {
+  1889→    "message": "비밀번호가 변경되었습니다.",
+  1890→    "id": "adm_01HX4P0C3D"
+  1891→  }
+  1892→}
+  1893→```
+  1894→
+  1895→**Error 400:**
+  1896→
+  1897→```json
+  1898→{
+  1899→  "error": {
+  1900→    "code": "VALIDATION_ERROR",
+  1901→    "message": "비밀번호가 정책을 충족하지 않습니다.",
+  1902→    "details": {
+  1903→      "newPassword": "8자 이상이며 대소문자, 숫자, 특수문자를 포함해야 합니다."
+  1904→    }
+  1905→  }
+  1906→}
+  1907→```
+  1908→
+  1909→**Error 404:**
+  1910→
+  1911→```json
+  1912→{
+  1913→  "error": {
+  1914→    "code": "NOT_FOUND",
+  1915→    "message": "해당 관리자를 찾을 수 없습니다.",
+  1916→    "details": {
+  1917→      "id": "adm_invalid"
+  1918→    }
+  1919→  }
+  1920→}
+  1921→```
+  1922→
+  1923→---
+  1924→
+  1925→## 9. 통계 API
+  1926→
+  1927→### 9.1 오늘의 개요
+  1928→
+  1929→```
+  1930→GET /api/admin/stats/overview
+  1931→```
+  1932→
+  1933→- **Required Role**: `viewer` 이상
+  1934→- **Description**: 대시보드 메인 화면에 표시되는 오늘의 요약 통계입니다.
+  1935→
+  1936→**Response 200:**
+  1937→
+  1938→```json
+  1939→{
+  1940→  "data": {
+  1941→    "date": "2025-06-27",
+  1942→    "todayLoans": 42,
+  1943→    "todayReturns": 38,
+  1944→    "todayNewUsers": 3,
+  1945→    "activeLoans": 187,
+  1946→    "overdueLoans": 12,
+  1947→    "totalBooks": 4520,
+  1948→    "totalUsers": 856,
+  1949→    "availableBooks": 3890,
+  1950→    "kioskSessions": 215,
+  1951→    "changesFromYesterday": {
+  1952→      "todayLoans": 5.0,
+  1953→      "todayReturns": -2.6,
+  1954→      "todayNewUsers": 50.0,
+  1955→      "activeLoans": 1.1,
+  1956→      "overdueLoans": -7.7
+  1957→    }
+  1958→  }
+  1959→}
+  1960→```
+  1961→
+  1962→> `changesFromYesterday`의 값은 퍼센트(%)입니다.
+  1963→
+  1964→**Error 401:**
+  1965→
+  1966→```json
+  1967→{
+  1968→  "error": {
+  1969→    "code": "UNAUTHORIZED",
+  1970→    "message": "인증이 필요합니다.",
+  1971→    "details": {}
+  1972→  }
+  1973→}
+  1974→```
+  1975→
+  1976→---
+  1977→
+  1978→### 9.2 대출 추이
+  1979→
+  1980→```
+  1981→GET /api/admin/stats/loans
+  1982→```
+  1983→
+  1984→- **Required Role**: `viewer` 이상
+  1985→
+  1986→**Query Parameters:**
+  1987→
+  1988→| Parameter | Type | Required | 설명 |
+  1989→|-----------|------|----------|------|
+  1990→| `period` | string | ❌ | 기간 (`7d` / `30d` / `90d` / `1y`, default: `30d`) |
+  1991→| `startDate` | string | ❌ | 시작일 (ISO 8601, `period` 대신 사용 가능) |
+  1992→| `endDate` | string | ❌ | 종료일 (ISO 8601, `period` 대신 사용 가능) |
+  1993→
+  1994→**Example Request:**
+  1995→
+  1996→```
+  1997→GET /api/admin/stats/loans?period=30d
+  1998→```
+  1999→
+  2000→**Response 200:**
+
+[showing lines 1-2000 of 2899; use offset=2001 with limit to continue reading]

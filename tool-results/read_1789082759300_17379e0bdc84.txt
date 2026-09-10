@@ -1,0 +1,1551 @@
+     1→# 스마트 도서관 키오스크 관리자 대시보드 — 데이터베이스 설계 문서
+     2→
+     3→> **버전**: v1.0.0  
+     4→> **작성일**: 2026-03-04  
+     5→> **DB 엔진**: SQLite 3.x (WAL 모드)  
+     6→> **ORM**: Prisma 5.x  
+     7→> **문서 상태**: Production-ready
+     8→
+     9→---
+    10→
+    11→## 목차
+    12→
+    13→1. [아키텍처 개요](#1-아키텍처-개요)
+    14→2. [기존 테이블 요약](#2-기존-테이블-요약)
+    15→3. [신규 테이블 상세 설계](#3-신규-테이블-상세-설계)
+    16→4. [ER 다이어그램](#4-er-다이어그램)
+    17→5. [Prisma Schema](#5-prisma-schema)
+    18→6. [인덱스 전략](#6-인덱스-전략)
+    19→7. [시드 데이터](#7-시드-데이터)
+    20→8. [마이그레이션 전략](#8-마이그레이션-전략)
+    21→9. [데이터 접근 패턴](#9-데이터-접근-패턴)
+    22→10. [성능 고려사항](#10-성능-고려사항)
+    23→11. [보안 고려사항](#11-보안-고려사항)
+    24→
+    25→---
+    26→
+    27→## 1. 아키텍처 개요
+    28→
+    29→### 1.1 설계 원칙
+    30→
+    31→| 원칙 | 설명 |
+    32→|------|------|
+    33→| **관심사 분리** | 키오스크 운영 데이터(SimUser, Book, SimLoan…)와 관리자 도메인(AdminUser, AuditLog…)을 명확히 분리 |
+    34→| **감사 추적 우선** | 모든 관리자 행위는 AuditLog에 기록되어 규제 대응 및 장애 원인 분석 보장 |
+    35→| **JSON 유연성** | CMS 콘텐츠, 키오스크 설정 등 스키마 변동이 잦은 영역은 JSON 컬럼 활용 |
+    36→| **SQLite 최적화** | SQLite 제약(단일 writer, JSON 지원 등)을 고려한 인덱스 및 트랜잭션 설계 |
+    37→
+    38→### 1.2 도메인 분류
+    39→
+    40→```
+    41→┌─────────────────────────────────────────────────────────┐
+    42→│                    Database Domains                      │
+    43→├──────────────┬──────────────┬───────────────────────────┤
+    44→│  Kiosk Core  │  Admin Ops   │  System Infra             │
+    45→├──────────────┼──────────────┼───────────────────────────┤
+    46→│  SimUser     │  AdminUser   │  SystemSetting            │
+    47→│  Book        │  AdminRole   │  AuditLog                 │
+    48→│  SimLoan     │  CmsContent  │  KioskDevice              │
+    49→│  Scenario    │  CmsImage    │  Notice                   │
+    50→│  LearningPro │  DashboardSt │                           │
+    51→│  gress       │              │                           │
+    52→└──────────────┴──────────────┴───────────────────────────┘
+    53→```
+    54→
+    55→---
+    56→
+    57→## 2. 기존 테이블 요약
+    58→
+    59→> 아래 테이블은 현재 `schema.prisma`에 이미 정의되어 있으며, 신규 테이블과의 관계만 추가로 명시한다.
+    60→
+    61→### 2.1 SimUser — 시뮬레이션 사용자
+    62→
+    63→| 컬럼 | 타입 | 제약 | 설명 |
+    64→|------|------|------|------|
+    65→| id | String | PK, cuid() | 사용자 고유 ID |
+    66→| name | String | NOT NULL | 성명 |
+    67→| birthDate | String | NOT NULL | 생년월일 (YYYY-MM-DD) |
+    68→| phone | String | NOT NULL | 연락처 |
+    69→| address | String | nullable | 주소 |
+    70→| cardType | String | default("mobile") | 카드 유형 |
+    71→| cardNumber | String | UNIQUE, nullable | 카드 번호 |
+    72→| cardIssued | String | nullable | 카드 발급일 |
+    73→| pin | String | UNIQUE, nullable | PIN 번호 |
+    74→| isActive | Boolean | default(true) | 활성 상태 |
+    75→| createdAt | DateTime | default(now()) | 생성 시각 |
+    76→| updatedAt | DateTime | @updatedAt | 갱신 시각 |
+    77→
+    78→### 2.2 Book — 도서
+    79→
+    80→| 컬럼 | 타입 | 제약 | 설명 |
+    81→|------|------|------|------|
+    82→| id | String | PK, cuid() | 도서 고유 ID |
+    83→| isbn | String | UNIQUE | ISBN |
+    84→| title | String | NOT NULL | 제목 |
+    85→| author | String | NOT NULL | 저자 |
+    86→| publisher | String | nullable | 출판사 |
+    87→| publishYear | Int | nullable | 출판 연도 |
+    88→| category | String | nullable | 분류 |
+    89→| coverUrl | String | nullable | 표지 이미지 URL |
+    90→| totalCopies | Int | default(3) | 총 보유 권수 |
+    91→| availableCopies | Int | default(3) | 대출 가능 권수 |
+    92→| shelfLocation | String | nullable | 서가 위치 |
+    93→| loans | SimLoan[] | — | 대출 관계 |
+    94→
+    95→### 2.3 SimLoan — 대출 기록
+    96→
+    97→| 컬럼 | 타입 | 제약 | 설명 |
+    98→|------|------|------|------|
+    99→| id | String | PK, cuid() | 대출 고유 ID |
+   100→| userId | String | FK → SimUser.id | 사용자 참조 |
+   101→| bookId | String | FK → Book.id | 도서 참조 |
+   102→| loanDate | String | NOT NULL | 대출일 |
+   103→| dueDate | String | NOT NULL | 반납 예정일 |
+   104→| returnDate | String | nullable | 실제 반납일 |
+   105→| status | String | default("active") | 상태 (active/returned/overdue) |
+   106→| method | String | default("counter") | 대출 방식 |
+   107→| extended | Boolean | default(false) | 연장 여부 |
+   108→| createdAt | DateTime | default(now()) | 생성 시각 |
+   109→| updatedAt | DateTime | @updatedAt | 갱신 시각 |
+   110→
+   111→### 2.4 LearningProgress — 학습 진도
+   112→
+   113→| 컬럼 | 타입 | 제약 | 설명 |
+   114→|------|------|------|------|
+   115→| id | String | PK, cuid() | 진도 고유 ID |
+   116→| userId | String | FK → SimUser.id | 사용자 참조 |
+   117→| scenarioId | String | FK → Scenario.id | 시나리오 참조 |
+   118→| stepIndex | Int | default(0) | 현재 스텝 인덱스 |
+   119→| completed | Boolean | default(false) | 완료 여부 |
+   120→| attempts | Int | default(0) | 시도 횟수 |
+   121→| bestTimeSec | Int | nullable | 최단 소요 시간(초) |
+   122→| stars | Int | default(0) | 획득 별점 (0~3) |
+   123→| updatedAt | DateTime | @updatedAt | 갱신 시각 |
+   124→
+   125→### 2.5 Scenario — 시나리오
+   126→
+   127→| 컬럼 | 타입 | 제약 | 설명 |
+   128→|------|------|------|------|
+   129→| id | String | PK, cuid() | 시나리오 고유 ID |
+   130→| title | String | NOT NULL | 제목 |
+   131→| description | String | nullable | 설명 |
+   132→| difficulty | String | default("beginner") | 난이도 |
+   133→| stepsJson | String | NOT NULL | 스텝 정의 JSON |
+   134→| category | String | nullable | 카테고리 |
+   135→| orderIndex | Int | default(0) | 정렬 순서 |
+   136→
+   137→---
+   138→
+   139→## 3. 신규 테이블 상세 설계
+   140→
+   141→### 3.1 AdminUser — 관리자 계정
+   142→
+   143→관리자 대시보드에 로그인하는 모든 계정을 관리한다. RBAC(Role-Based Access Control)의 주체 엔티티이다.
+   144→
+   145→| 컬럼 | 타입 | 제약 | 기본값 | 설명 |
+   146→|------|------|------|--------|------|
+   147→| id | String | **PK**, cuid() | 자동 생성 | 관리자 고유 ID |
+   148→| email | String | **UNIQUE**, NOT NULL | — | 로그인 이메일 |
+   149→| passwordHash | String | NOT NULL | — | bcrypt 해시 (cost=12) |
+   150→| name | String | NOT NULL | — | 표시 이름 |
+   151→| role | String | NOT NULL | "operator" | 권한 등급: `super_admin` / `admin` / `operator` |
+   152→| isActive | Boolean | NOT NULL | true | 계정 활성 여부 (비활성 시 로그인 불가) |
+   153→| lastLoginAt | DateTime | nullable | null | 마지막 로그인 시각 |
+   154→| createdAt | DateTime | NOT NULL | now() | 생성 시각 |
+   155→| updatedAt | DateTime | NOT NULL | @updatedAt | 갱신 시각 |
+   156→
+   157→**관계**:
+   158→- `AdminUser 1:N AuditLog` — 관리자의 모든 감사 로그
+   159→- `AdminUser 1:N CmsContent` — CMS 콘텐츠 최종 수정자
+   160→- `AdminUser 1:N CmsImage` — 이미지 업로더
+   161→- `AdminUser 1:N Notice` — 공지 작성자
+   162→
+   163→**비즈니스 규칙**:
+   164→- `super_admin` 계정은 최소 1개 존재해야 함 (시드 데이터로 보장)
+   165→- `email` 형식은 애플리케이션 레이어에서 검증 (Prisma 수준에서는 String)
+   166→- 비밀번호는 평문 저장 절대 금지 — 반드시 bcrypt hash
+   167→- `isActive = false`인 계정은 인증 미들웨어에서 차단
+   168→
+   169→---
+   170→
+   171→### 3.2 AdminRole — 권한 역할 정의
+   172→
+   173→세분화된 권한(permission)을 역할 단위로 그룹화한다. `AdminUser.role`과 연계되어 사용된다.
+   174→
+   175→| 컬럼 | 타입 | 제약 | 기본값 | 설명 |
+   176→|------|------|------|--------|------|
+   177→| id | String | **PK**, cuid() | 자동 생성 | 역할 고유 ID |
+   178→| name | String | **UNIQUE**, NOT NULL | — | 역할 식별자 (예: `super_admin`, `admin`, `operator`) |
+   179→| displayName | String | NOT NULL | — | UI 표시명 (예: "최고 관리자") |
+   180→| description | String | nullable | null | 역할 설명 |
+   181→| permissions | String | NOT NULL | "[]" | 권한 목록 JSON 배열 (예: `["user:read","user:write","loan:read"]`) |
+   182→| createdAt | DateTime | NOT NULL | now() | 생성 시각 |
+   183→
+   184→**permissions JSON 스키마**:
+   185→
+   186→```json
+   187→{
+   188→  "type": "array",
+   189→  "items": {
+   190→    "type": "string",
+   191→    "pattern": "^[a-z]+:(read|write|delete|manage)$"
+   192→  },
+   193→  "examples": [
+   194→    ["user:read", "user:write", "loan:read", "loan:write", "book:read", "book:write", "cms:manage", "system:manage"],
+   195→    ["user:read", "loan:read", "book:read"],
+   196→    ["loan:read"]
+   197→  ]
+   198→}
+   199→```
+   200→
+   201→**권한 매트릭스**:
+   202→
+   203→| 권한 코드 | super_admin | admin | operator |
+   204→|-----------|:-----------:|:-----:|:--------:|
+   205→| user:read | O | O | O |
+   206→| user:write | O | O | X |
+   207→| user:delete | O | X | X |
+   208→| loan:read | O | O | O |
+   209→| loan:write | O | O | O |
+   210→| book:read | O | O | O |
+   211→| book:write | O | O | X |
+   212→| book:delete | O | X | X |
+   213→| cms:manage | O | O | X |
+   214→| system:manage | O | X | X |
+   215→| audit:read | O | O | X |
+   216→| kiosk:manage | O | O | X |
+   217→
+   218→---
+   219→
+   220→### 3.3 AuditLog — 감사 추적 로그
+   221→
+   222→관리자 대시보드에서 발생하는 모든 데이터 변경 사항을 기록한다. 복구, 규제 대응, 장애 원인 분석의 핵심 데이터이다.
+   223→
+   224→| 컬럼 | 타입 | 제약 | 기본값 | 설명 |
+   225→|------|------|------|--------|------|
+   226→| id | String | **PK**, cuid() | 자동 생성 | 로그 고유 ID |
+   227→| adminUserId | String | FK → AdminUser.id, NOT NULL | — | 행위자 관리자 ID |
+   228→| action | String | NOT NULL | — | 행위 유형: `create` / `update` / `delete` / `login` / `logout` / `export` |
+   229→| entity | String | NOT NULL | — | 대상 엔티티명 (예: `SimUser`, `Book`, `CmsContent`) |
+   230→| entityId | String | nullable | null | 대상 엔티티 ID (엔티티가 특정 인스턴스인 경우) |
+   231→| oldValue | String | nullable | null | 변경 전 값 JSON (create의 경우 null) |
+   232→| newValue | String | nullable | null | 변경 후 값 JSON (delete의 경우 null) |
+   233→| ip | String | nullable | null | 클라이언트 IP 주소 |
+   234→| userAgent | String | nullable | null | 클라이언트 User-Agent |
+   235→| createdAt | DateTime | NOT NULL | now() | 로그 발생 시각 |
+   236→
+   237→**관계**:
+   238→- `AuditLog N:1 AdminUser` — 행위자 참조
+   239→
+   240→**비즈니스 규칙**:
+   241→- AuditLog은 **절대 UPDATE/DELETE 불가** (append-only)
+   242→- `oldValue`/`newValue`는 변경된 필드만 포함하는 diff 형식 권장
+   243→- 대량 변경(bulk update) 시 행 단위로 개별 AuditLog 레코드 생성
+   244→- 90일 이상 된 로그는 아카이브 테이블로 이관 (애플리케이션 배치 잡)
+   245→
+   246→**AuditLog 예시**:
+   247→
+   248→```json
+   249→{
+   250→  "id": "clxyz123",
+   251→  "adminUserId": "cladmin001",
+   252→  "action": "update",
+   253→  "entity": "CmsContent",
+   254→  "entityId": "clcms0042",
+   255→  "oldValue": "{\"value\": \"#1E40AF\"}",
+   256→  "newValue": "{\"value\": \"#2563EB\"}",
+   257→  "ip": "192.168.1.100",
+   258→  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ...",
+   259→  "createdAt": "2026-03-04T09:15:00.000Z"
+   260→}
+   261→```
+   262→
+   263→---
+   264→
+   265→### 3.4 CmsContent — CMS 콘텐츠 항목
+   266→
+   267→대시보드 화면의 텍스트, 색상, 수치 등 커스터마이징 가능한 모든 콘텐츠를 key-value 형태로 관리한다. 코드 배포 없이 UI 변경이 가능하다.
+   268→
+   269→| 컬럼 | 타입 | 제약 | 기본값 | 설명 |
+   270→|------|------|------|--------|------|
+   271→| id | String | **PK**, cuid() | 자동 생성 | 콘텐츠 고유 ID |
+   272→| key | String | **UNIQUE**, NOT NULL | — | 콘텐츠 식별자 (예: `home.heroTitle`, `theme.primaryColor`) |
+   273→| screen | String | NOT NULL | — | 소속 화면 (예: `home`, `stats`, `loan`, `book`) |
+   274→| type | String | NOT NULL | "text" | 값 타입: `text` / `image` / `color` / `number` / `json` |
+   275→| value | String | nullable | null | 현재 값 |
+   276→| defaultValue | String | nullable | null | 초기값 (복원 기준) |
+   277→| description | String | nullable | null | 항목 설명 (관리자 UI에서 표시) |
+   278→| updatedAt | DateTime | NOT NULL | @updatedAt | 최종 갱신 시각 |
+   279→| updatedBy | String | FK → AdminUser.id, nullable | null | 최종 수정 관리자 ID |
+   280→
+   281→**key 네이밍 컨벤션**:
+   282→
+   283→```
+   284→{screen}.{section}.{field}
+   285→
+   286→예:
+   287→  home.heroTitle          — 홈 화면 히어로 타이틀
+   288→  home.heroSubtitle       — 홈 화면 히어로 서브타이틀
+   289→  theme.primaryColor      — 테마 기본 색상
+   290→  theme.secondaryColor    — 테마 보조 색상
+   291→  stats.showPeakHour      — 통계 화면 피크 시간 표시 여부
+   292→  loan.maxExtendCount     — 대출 연장 최대 횟수
+   293→  kiosk.idleTimeout       — 키오스크 유휴 타임아웃(초)
+   294→```
+   295→
+   296→**관계**:
+   297→- `CmsContent N:1 AdminUser` — 최종 수정자 참조 (updatedBy)
+   298→
+   299→---
+   300→
+   301→### 3.5 CmsImage — CMS 이미지 관리
+   302→
+   303→대시보드 및 키오스크 화면에 사용되는 이미지 리소스를 관리한다. 파일은 로컬 디스크 또는 OSS에 저장하고, 메타데이터를 DB에서 관리한다.
+   304→
+   305→| 컬럼 | 타입 | 제약 | 기본값 | 설명 |
+   306→|------|------|------|--------|------|
+   307→| id | String | **PK**, cuid() | 자동 생성 | 이미지 고유 ID |
+   308→| key | String | **UNIQUE**, NOT NULL | — | 이미지 식별자 (예: `home.heroBg`, `logo.main`) |
+   309→| originalName | String | NOT NULL | — | 원본 파일명 |
+   310→| storedPath | String | NOT NULL | — | 저장 경로 (예: `/uploads/cms/2026/03/abc.webp`) |
+   311→| mimeType | String | NOT NULL | — | MIME 타입 (예: `image/webp`, `image/png`) |
+   312→| sizeBytes | Int | NOT NULL | — | 파일 크기 (바이트) |
+   313→| width | Int | nullable | null | 이미지 너비 (px) |
+   314→| height | Int | nullable | null | 이미지 높이 (px) |
+   315→| alt | String | nullable | null | 대체 텍스트 (접근성) |
+   316→| updatedAt | DateTime | NOT NULL | @updatedAt | 최종 갱신 시각 |
+   317→| uploadedBy | String | FK → AdminUser.id, nullable | null | 업로드 관리자 ID |
+   318→
+   319→**비즈니스 규칙**:
+   320→- 허용 MIME 타입: `image/jpeg`, `image/png`, `image/webp`, `image/svg+xml`
+   321→- 최대 파일 크기: 5MB (애플리케이션 레이어에서 검증)
+   322→- 업로드 시 WebP 자동 변환 권장 (SVG 제외)
+   323→- 이미지 교체 시 기존 파일은 소프트 삭제 후 30일 경과 시 물리 삭제
+   324→
+   325→---
+   326→
+   327→### 3.6 KioskDevice — 키오스크 기기 관리
+   328→
+   329→현장에 설치된 키오스크 단말기의 등록, 상태 모니터링, 원격 설정을 지원한다.
+   330→
+   331→| 컬럼 | 타입 | 제약 | 기본값 | 설명 |
+   332→|------|------|------|--------|------|
+   333→| id | String | **PK**, cuid() | 자동 생성 | 기기 고유 ID |
+   334→| name | String | NOT NULL | — | 기기 표시명 (예: "1층 로비 A") |
+   335→| location | String | NOT NULL | — | 설치 위치 (예: "1층 로비", "3층 아동실") |
+   336→| ipAddress | String | nullable | null | 기기 IP 주소 |
+   337→| status | String | NOT NULL | "offline" | 상태: `online` / `offline` / `maintenance` |
+   338→| lastHeartbeat | DateTime | nullable | null | 마지막 heartbeat 수신 시각 |
+   339→| settings | String | nullable | null | 기기별 설정 JSON (예:idle 타임아웃, 볼륨 등) |
+   340→| createdAt | DateTime | NOT NULL | now() | 등록 시각 |
+   341→
+   342→**settings JSON 스키마**:
+   343→
+   344→```json
+   345→{
+   346→  "type": "object",
+   347→  "properties": {
+   348→    "idleTimeout": { "type": "number", "default": 120, "description": "유휴 타임아웃 (초)" },
+   349→    "volume": { "type": "number", "default": 80, "minimum": 0, "maximum": 100 },
+   350→    "brightness": { "type": "number", "default": 100, "minimum": 0, "maximum": 100 },
+   351→    "autoRestart": { "type": "boolean", "default": true },
+   352→    "restartHour": { "type": "number", "default": 3, "minimum": 0, "maximum": 23 }
+   353→  }
+   354→}
+   355→```
+   356→
+   357→**비즈니스 규칙**:
+   358→- heartbeat: 키오스크가 30초 간격으로 PATCH 요청 → `lastHeartbeat` 갱신, `status = "online"`
+   359→- `lastHeartbeat`가 2분 이상 갱신 없으면 → `status = "offline"` (서버 사이드 감지)
+   360→- `maintenance` 상태는 관리자가 수동 설정 → 해당 기기 서비스 중단 페이지 표시
+   361→
+   362→---
+   363→
+   364→### 3.7 SystemSetting — 시스템 설정
+   365→
+   366→시스템 전반에 걸친 설정 항목을 category + key 복합 유일 키로 관리한다. `CmsContent`가 화면 커스터마이징이라면, `SystemSetting`은 백엔드 로직 제어에 사용된다.
+   367→
+   368→| 컬럼 | 타입 | 제약 | 기본값 | 설명 |
+   369→|------|------|------|--------|------|
+   370→| id | String | **PK**, cuid() | 자동 생성 | 설정 고유 ID |
+   371→| category | String | NOT NULL | — | 설정 카테고리 (예: `loan`, `kiosk`, `notification`) |
+   372→| key | String | NOT NULL | — | 설정 키 (카테고리 내 유일) |
+   373→| value | String | nullable | null | 현재 값 |
+   374→| defaultValue | String | nullable | null | 초기값 |
+   375→| type | String | NOT NULL | "string" | 값 타입: `string` / `number` / `boolean` / `json` |
+   376→| description | String | nullable | null | 설정 설명 |
+   377→| updatedAt | DateTime | NOT NULL | @updatedAt | 갱신 시각 |
+   378→
+   379→**유일 제약**: `@@unique([category, key])` — 동일 카테고리 내 키 중복 불가
+   380→
+   381→**설정 항목 예시**:
+   382→
+   383→| category | key | defaultValue | type | 설명 |
+   384→|----------|-----|-------------|------|------|
+   385→| loan | maxLoanCount | "5" | number | 1인 최대 대출 권수 |
+   386→| loan | loanPeriodDays | "14" | number | 기본 대출 기간 (일) |
+   387→| loan | extendDays | "7" | number | 연장 기간 (일) |
+   388→| loan | maxExtendCount | "2" | number | 최대 연장 횟수 |
+   389→| kiosk | heartbeatIntervalSec | "30" | number | heartbeat 간격 (초) |
+   390→| kiosk | offlineThresholdSec | "120" | number | 오프라인 판정 임계값 (초) |
+   391→| notification | overdueReminderDay | "3" | number | 연체 알림 시작일 |
+   392→| notification | smtpEnabled | "false" | boolean | SMTP 알림 사용 여부 |
+   393→
+   394→---
+   395→
+   396→### 3.8 Notice — 공지/알림
+   397→
+   398→관리자가 작성하는 공지사항으로, 대시보드 및 키오스크 화면에 표시된다.
+   399→
+   400→| 컬럼 | 타입 | 제약 | 기본값 | 설명 |
+   401→|------|------|------|--------|------|
+   402→| id | String | **PK**, cuid() | 자동 생성 | 공지 고유 ID |
+   403→| title | String | NOT NULL | — | 제목 |
+   404→| content | String | NOT NULL | — | 본문 (Markdown 지원) |
+   405→| type | String | NOT NULL | "info" | 유형: `info` / `warning` / `urgent` |
+   406→| isActive | Boolean | NOT NULL | true | 활성 여부 |
+   407→| startAt | DateTime | NOT NULL | now() | 게시 시작 시각 |
+   408→| endAt | DateTime | nullable | null | 게시 종료 시각 (null = 무기한) |
+   409→| createdAt | DateTime | NOT NULL | now() | 생성 시각 |
+   410→| createdBy | String | FK → AdminUser.id, nullable | null | 작성 관리자 ID |
+   411→
+   412→**비즈니스 규칙**:
+   413→- 화면에 표시할 공지 조회 조건: `isActive = true AND startAt <= now() AND (endAt IS NULL OR endAt > now())`
+   414→- `urgent` 타입 공지는 항상 최상단에 표시
+   415→- `endAt` 도달 시 자동으로 `isActive = false` 처리 (배치 또는 조회 시 평가)
+   416→
+   417→---
+   418→
+   419→### 3.9 DashboardStat — 대시보드 통계 스냅샷
+   420→
+   421→대시보드 렌더링 성능을 위해, 원시 트랜잭션 데이터(SimLoan 등)를 일 단위로 집계하여 스냅샷으로 저장한다. 실시간 집계 쿼리 부하를 방지한다.
+   422→
+   423→| 컬럼 | 타입 | 제약 | 기본값 | 설명 |
+   424→|------|------|------|--------|------|
+   425→| id | String | **PK**, cuid() | 자동 생성 | 통계 고유 ID |
+   426→| date | String | NOT NULL | — | 집계 일자 (YYYY-MM-DD, 유일) |
+   427→| totalLoans | Int | NOT NULL | 0 | 당일 총 대출 건수 |
+   428→| activeLoans | Int | NOT NULL | 0 | 현재 활성 대출 건수 |
+   429→| returns | Int | NOT NULL | 0 | 당일 반납 건수 |
+   430→| overdue | Int | NOT NULL | 0 | 현재 연체 건수 |
+   431→| newUsers | Int | NOT NULL | 0 | 당일 신규 가입자 수 |
+   432→| peakHour | Int | nullable | null | 당일 피크 시간대 (0~23) |
+   433→| createdAt | DateTime | NOT NULL | now() | 레코드 생성 시각 |
+   434→
+   435→**유일 제약**: `@@unique([date])` — 일별 단일 스냅샷
+   436→
+   437→**비즈니스 규칙**:
+   438→- 매일 00:05 (KST)에 전일 집계 배치 실행 → upsert
+   439→- 대시보드 로딩 시 별도 실시간 쿼리 없이 `DashboardStat`만 조회
+   440→- 피크 시간대는 당일 시간별 대출 건수 중 최빈 시간으로 산출
+   441→- 최근 30일 데이터는 인메모리 캐시에 유지 (TTL = 5분)
+   442→
+   443→---
+   444→
+   445→## 4. ER 다이어그램
+   446→
+   447→```
+   448→┌──────────────────────────────────────────────────────────────────────────────────────┐
+   449→│                              ER Diagram — Smart Library Kiosk Admin                  │
+   450→└──────────────────────────────────────────────────────────────────────────────────────┘
+   451→
+   452→ ╔═══════════╗       ╔═══════════╗       ╔═══════════╗
+   453→ ║  SimUser  ║       ║   Book    ║       ║ Scenario  ║
+   454→ ╠═══════════╣       ╠═══════════╣       ╠═══════════╣
+   455→ ║ PK id     ║       ║ PK id     ║       ║ PK id     ║
+   456→ ║ name      ║       ║ isbn (UQ) ║       ║ title     ║
+   457→ ║ birthDate ║       ║ title     ║       ║ stepsJson ║
+   458→ ║ phone     ║       ║ author    ║       ║ difficulty║
+   459→ ║ cardNum(U)║       ║ totalCop  ║       ║ orderIdx  ║
+   460→ ║ pin (UQ)  ║       ║ availCop  ║       ╚══════╤════╝
+   461→ ╚════╤══════╝       ╚════╤══════╝              │
+   462→      │ 1                  │ 1                    │
+   463→      │                    │                      │
+   464→      │ N                  │ N                    │ N
+   465→ ╔════╧══════╗       ╔════╧══════╗       ╔══════╧══════╗
+   466→ ║  SimLoan  ║       ║           ║       ║  Learning   ║
+   467→ ╠═══════════╣       ║           ║       ║  Progress   ║
+   468→ ║ PK id     ║       ║           ║       ╠═════════════╣
+   469→ ║ FK userId ║───────║───────────║───────║ FK userId   ║
+   470→ ║ FK bookId ║───────║           ║       ║ FK scenId   ║
+   471→ ║ status    ║       ║           ║       ║ stepIndex   ║
+   472→ ╚═══════════╝       ║           ║       ║ completed   ║
+   473→                     ║           ║       ╚═════════════╝
+   474→                     ║           ║
+   475→ ╔═══════════════════╧═══════════╧══════════════════════════════╗
+   476→ ║                    Admin Domain                               ║
+   477→ ╠══════════════════════════════════════════════════════════════╣
+   478→ ║                                                              ║
+   479→ ║  ╔════════════╗        ╔════════════╗                       ║
+   480→ ║  ║ AdminUser  ║        ║ AdminRole  ║                       ║
+   481→ ║  ╠════════════╣        ╠════════════╣                       ║
+   482→ ║  ║ PK id      ║        ║ PK id      ║                       ║
+   483→ ║  ║ email (UQ) ║        ║ name (UQ)  ║                       ║
+   484→ ║  ║ passHash   ║        ║ displayNm  ║                       ║
+   485→ ║  ║ name       ║        ║ perms[JSON]║                       ║
+   486→ ║  ║ role       ║        ╚════════════╝                       ║
+   487→ ║  ║ isActive   ║                                             ║
+   488→ ║  ╚════╤═══════╝                                             ║
+   489→ ║       │ 1                                                    ║
+   490→ ║       │                                                      ║
+   491→ ║       ├──────────── N ────────────┐                          ║
+   492→ ║       │                           │                          ║
+   493→ ║  ╔════╧══════╗  ╔════════════════╧═════╗  ╔════════════╗  ║
+   494→ ║  ║ AuditLog  ║  ║     CmsContent      ║  ║  CmsImage   ║  ║
+   495→ ║  ╠═══════════╣  ╠═════════════════════╣  ╠═════════════╣  ║
+   496→ ║  ║ PK id     ║  ║ PK id              ║  ║ PK id        ║  ║
+   497→ ║  ║ FK adminId║  ║ key (UQ)           ║  ║ key (UQ)     ║  ║
+   498→ ║  ║ action    ║  ║ screen             ║  ║ storedPath   ║  ║
+   499→ ║  ║ entity    ║  ║ type               ║  ║ mimeType     ║  ║
+   500→ ║  ║ old[JSON] ║  ║ value              ║  ║ sizeBytes    ║  ║
+   501→ ║  ║ new[JSON] ║  ║ FK updatedBy       ║  ║ FK uploadedBy║  ║
+   502→ ║  ╚═══════════╝  ╚═════════════════════╝  ╚═════════════╝  ║
+   503→ ║                                                              ║
+   504→ ║  ╔════════════╗  ╔════════════════╗  ╔════════════════╗    ║
+   505→ ║  ║KioskDevice║  ║ SystemSetting  ║  ║ DashboardStat  ║    ║
+   506→ ║  ╠════════════╣  ╠════════════════╣  ╠════════════════╣    ║
+   507→ ║  ║ PK id      ║  ║ PK id         ║  ║ PK id          ║    ║
+   508→ ║  ║ name       ║  ║ category      ║  ║ date (UQ)      ║    ║
+   509→ ║  ║ location   ║  ║ key           ║  ║ totalLoans     ║    ║
+   510→ ║  ║ status     ║  ║ @@unique(cat, ║  ║ activeLoans    ║    ║
+   511→ ║  ║ settings   ║  ║         key)  ║  ║ returns        ║    ║
+   512→ ║  ║ lastHeart  ║  ║ value         ║  ║ overdue        ║    ║
+   513→ ║  ╚════════════╝  ╚════════════════╝  ╚════════════════╝    ║
+   514→ ║                                                              ║
+   515→ ║  ╔════════════╗                                             ║
+   516→ ║  ║  Notice    ║                                             ║
+   517→ ║  ╠════════════╣                                             ║
+   518→ ║  ║ PK id      ║                                             ║
+   519→ ║  ║ title      ║                                             ║
+   520→ ║  ║ content    ║                                             ║
+   521→ ║  ║ type       ║                                             ║
+   522→ ║  ║ startAt    ║                                             ║
+   523→ ║  ║ endAt      ║                                             ║
+   524→ ║  ║ FK createdBy║                                            ║
+   525→ ║  ╚════════════╝                                             ║
+   526→ ╚══════════════════════════════════════════════════════════════╝
+   527→
+   528→ 관계 요약:
+   529→ ─────────────────────────────────────────────────────────────
+   530→ AdminUser ──1:N──▶ AuditLog       (adminUserId)
+   531→ AdminUser ──1:N──▶ CmsContent     (updatedBy)
+   532→ AdminUser ──1:N──▶ CmsImage       (uploadedBy)
+   533→ AdminUser ──1:N──▶ Notice         (createdBy)
+   534→ SimUser   ──1:N──▶ SimLoan        (userId)
+   535→ SimUser   ──1:N──▶ LearningProgress (userId)
+   536→ Book      ──1:N──▶ SimLoan        (bookId)
+   537→ Scenario  ──1:N──▶ LearningProgress (scenarioId)
+   538→```
+   539→
+   540→---
+   541→
+   542→## 5. Prisma Schema
+   543→
+   544→아래는 기존 스키마에 신규 모델을 추가한 전체 내용이다.
+   545→
+   546→```prisma
+   547→generator client {
+   548→  provider = "prisma-client-js"
+   549→}
+   550→
+   551→datasource db {
+   552→  provider = "sqlite"
+   553→  url      = env("DATABASE_URL")
+   554→}
+   555→
+   556→// ─────────────────────────────────────────────
+   557→//  Kiosk Core Domain (기존)
+   558→// ─────────────────────────────────────────────
+   559→
+   560→model SimUser {
+   561→  id          String   @id @default(cuid())
+   562→  name        String
+   563→  birthDate   String
+   564→  phone       String
+   565→  address     String?
+   566→  cardType    String?  @default("mobile")
+   567→  cardNumber  String?  @unique
+   568→  cardIssued  String?
+   569→  pin         String?  @unique
+   570→  isActive    Boolean  @default(true)
+   571→  createdAt   DateTime @default(now())
+   572→  updatedAt   DateTime @updatedAt
+   573→
+   574→  loans    SimLoan[]
+   575→  progress LearningProgress[]
+   576→}
+   577→
+   578→model Book {
+   579→  id              String   @id @default(cuid())
+   580→  isbn            String   @unique
+   581→  title           String
+   582→  author          String
+   583→  publisher       String?
+   584→  publishYear     Int?
+   585→  category        String?
+   586→  coverUrl        String?
+   587→  totalCopies     Int      @default(3)
+   588→  availableCopies Int      @default(3)
+   589→  shelfLocation   String?
+   590→
+   591→  loans SimLoan[]
+   592→}
+   593→
+   594→model SimLoan {
+   595→  id         String   @id @default(cuid())
+   596→  userId     String
+   597→  bookId     String
+   598→  loanDate   String
+   599→  dueDate    String
+   600→  returnDate String?
+   601→  status     String   @default("active")
+   602→  method     String?  @default("counter")
+   603→  extended   Boolean  @default(false)
+   604→  createdAt  DateTime @default(now())
+   605→  updatedAt  DateTime @updatedAt
+   606→
+   607→  user SimUser @relation(fields: [userId], references: [id])
+   608→  book Book    @relation(fields: [bookId], references: [id])
+   609→}
+   610→
+   611→model LearningProgress {
+   612→  id          String   @id @default(cuid())
+   613→  userId      String
+   614→  scenarioId  String
+   615→  stepIndex   Int      @default(0)
+   616→  completed   Boolean  @default(false)
+   617→  attempts    Int      @default(0)
+   618→  bestTimeSec Int?
+   619→  stars       Int      @default(0)
+   620→  updatedAt   DateTime @updatedAt
+   621→
+   622→  user     SimUser  @relation(fields: [userId], references: [id])
+   623→  scenario Scenario @relation(fields: [scenarioId], references: [id])
+   624→}
+   625→
+   626→model Scenario {
+   627→  id          String   @id @default(cuid())
+   628→  title       String
+   629→  description String?
+   630→  difficulty  String   @default("beginner")
+   631→  stepsJson   String
+   632→  category    String?
+   633→  orderIndex  Int      @default(0)
+   634→
+   635→  progress LearningProgress[]
+   636→}
+   637→
+   638→// ─────────────────────────────────────────────
+   639→//  Admin Domain (신규)
+   640→// ─────────────────────────────────────────────
+   641→
+   642→model AdminUser {
+   643→  id           String    @id @default(cuid())
+   644→  email        String    @unique
+   645→  passwordHash String
+   646→  name         String
+   647→  role         String    @default("operator")
+   648→  isActive     Boolean   @default(true)
+   649→  lastLoginAt  DateTime?
+   650→  createdAt    DateTime  @default(now())
+   651→  updatedAt    DateTime  @updatedAt
+   652→
+   653→  auditLogs   AuditLog[]   @relation("AdminAuditLogs")
+   654→  cmsContents CmsContent[] @relation("AdminCmsUpdates")
+   655→  cmsImages   CmsImage[]   @relation("AdminCmsUploads")
+   656→  notices     Notice[]     @relation("AdminNotices")
+   657→}
+   658→
+   659→model AdminRole {
+   660→  id          String   @id @default(cuid())
+   661→  name        String   @unique
+   662→  displayName String
+   663→  description String?
+   664→  permissions String   @default("[]")
+   665→  createdAt   DateTime @default(now())
+   666→}
+   667→
+   668→model AuditLog {
+   669→  id           String    @id @default(cuid())
+   670→  adminUserId  String
+   671→  action       String
+   672→  entity       String
+   673→  entityId     String?
+   674→  oldValue     String?
+   675→  newValue     String?
+   676→  ip           String?
+   677→  userAgent    String?
+   678→  createdAt    DateTime  @default(now())
+   679→
+   680→  adminUser AdminUser @relation("AdminAuditLogs", fields: [adminUserId], references: [id])
+   681→
+   682→  @@index([adminUserId])
+   683→  @@index([entity, entityId])
+   684→  @@index([action])
+   685→  @@index([createdAt])
+   686→}
+   687→
+   688→model CmsContent {
+   689→  id           String    @id @default(cuid())
+   690→  key          String    @unique
+   691→  screen       String
+   692→  type         String    @default("text")
+   693→  value        String?
+   694→  defaultValue String?
+   695→  description  String?
+   696→  updatedAt    DateTime  @updatedAt
+   697→  updatedBy    String?
+   698→
+   699→  adminUser AdminUser? @relation("AdminCmsUpdates", fields: [updatedBy], references: [id])
+   700→
+   701→  @@index([screen])
+   702→  @@index([type])
+   703→}
+   704→
+   705→model CmsImage {
+   706→  id           String    @id @default(cuid())
+   707→  key          String    @unique
+   708→  originalName String
+   709→  storedPath   String
+   710→  mimeType     String
+   711→  sizeBytes    Int
+   712→  width        Int?
+   713→  height       Int?
+   714→  alt          String?
+   715→  updatedAt    DateTime  @updatedAt
+   716→  uploadedBy   String?
+   717→
+   718→  adminUser AdminUser? @relation("AdminCmsUploads", fields: [uploadedBy], references: [id])
+   719→
+   720→  @@index([mimeType])
+   721→}
+   722→
+   723→model KioskDevice {
+   724→  id            String    @id @default(cuid())
+   725→  name          String
+   726→  location      String
+   727→  ipAddress     String?
+   728→  status        String    @default("offline")
+   729→  lastHeartbeat DateTime?
+   730→  settings      String?
+   731→  createdAt     DateTime  @default(now())
+   732→
+   733→  @@index([status])
+   734→  @@index([location])
+   735→}
+   736→
+   737→model SystemSetting {
+   738→  id           String   @id @default(cuid())
+   739→  category     String
+   740→  key          String
+   741→  value        String?
+   742→  defaultValue String?
+   743→  type         String   @default("string")
+   744→  description  String?
+   745→  updatedAt    DateTime @updatedAt
+   746→
+   747→  @@unique([category, key])
+   748→  @@index([category])
+   749→}
+   750→
+   751→model Notice {
+   752→  id         String    @id @default(cuid())
+   753→  title      String
+   754→  content    String
+   755→  type       String    @default("info")
+   756→  isActive   Boolean   @default(true)
+   757→  startAt    DateTime  @default(now())
+   758→  endAt      DateTime?
+   759→  createdAt  DateTime  @default(now())
+   760→  createdBy  String?
+   761→
+   762→  adminUser AdminUser? @relation("AdminNotices", fields: [createdBy], references: [id])
+   763→
+   764→  @@index([isActive, startAt])
+   765→  @@index([type])
+   766→}
+   767→
+   768→model DashboardStat {
+   769→  id          String   @id @default(cuid())
+   770→  date        String   @unique
+   771→  totalLoans  Int      @default(0)
+   772→  activeLoans Int      @default(0)
+   773→  returns     Int      @default(0)
+   774→  overdue     Int      @default(0)
+   775→  newUsers    Int      @default(0)
+   776→  peakHour    Int?
+   777→  createdAt   DateTime @default(now())
+   778→
+   779→  @@index([date])
+   780→}
+   781→```
+   782→
+   783→---
+   784→
+   785→## 6. 인덱스 전략
+   786→
+   787→### 6.1 인덱스 설계 원칙
+   788→
+   789→| 원칙 | 설명 |
+   790→|------|------|
+   791→| **쿼리 주도 설계** | 실제 데이터 접근 패턴(9장)을 기준으로 필요 인덱스만 생성 |
+   792→| **SQLite B-Tree** | SQLite는 단일 인덱스당 하나의 B-Tree 사용, 복합 조건은 복합 인덱스로 대응 |
+   793→| **쓰기 오버헤드 최소화** | 과도한 인덱스는 INSERT/UPDATE 성능 저하, 핵심 쿼리에만 추가 |
+   794→
+   795→### 6.2 인덱스 목록
+   796→
+   797→| 테이블 | 인덱스 | 컬럼 | 유형 | 근거 |
+   798→|--------|--------|------|------|------|
+   799→| **AuditLog** | `idx_audit_admin` | adminUserId | 단일 | 관리자별 감사 로그 조회 |
+   800→| **AuditLog** | `idx_audit_entity` | entity, entityId | 복합 | 특정 엔티티 변경 이력 추적 |
+   801→| **AuditLog** | `idx_audit_action` | action | 단일 | 행위 유형별 필터링 |
+   802→| **AuditLog** | `idx_audit_created` | createdAt | 단일 | 기간별 감사 로그 조회 (최신순) |
+   803→| **CmsContent** | `idx_cms_screen` | screen | 단일 | 화면별 콘텐츠 일괄 조회 |
+   804→| **CmsContent** | `idx_cms_type` | type | 단일 | 타입별 필터링 |
+   805→| **KioskDevice** | `idx_kiosk_status` | status | 단일 | 온라인/오프라인 기기 필터링 |
+   806→| **KioskDevice** | `idx_kiosk_location` | location | 단일 | 위치별 기기 조회 |
+   807→| **SystemSetting** | `idx_setting_category` | category | 단일 | 카테고리별 설정 일괄 조회 |
+   808→| **Notice** | `idx_notice_active_start` | isActive, startAt | 복합 | 활성 공지 시간 범위 조회 |
+   809→| **Notice** | `idx_notice_type` | type | 단일 | 유형별 공지 필터링 |
+   810→| **DashboardStat** | `idx_stat_date` | date | 단일 | 날짜 범위 조회 (차트 데이터) |
+   811→| **SimLoan** | `idx_loan_status` | status | 단일 | 활성/연체 대출 필터링 |
+   812→| **SimLoan** | `idx_loan_user` | userId | 단일 | 사용자별 대출 이력 |
+   813→| **SimLoan** | `idx_loan_book` | bookId | 단일 | 도서별 대출 이력 |
+   814→
+   815→### 6.3 추가 인덱스 (성능 튜닝 단계)
+   816→
+   817→마이그레이션 부하를 최소화하기 위해, 초기 릴리즈 이후 쿼리 프로파일링 결과에 따라 추가를 검토한다.
+   818→
+   819→| 검토 인덱스 | 트리거 조건 |
+   820→|------------|------------|
+   821→| `SimLoan(loanDate)` | 일별 대출 집계 쿼리 지연 시 |
+   822→| `AuditLog(adminUserId, createdAt)` | 관리자별 최근 활동 조회 지연 시 |
+   823→| `LearningProgress(userId, scenarioId)` | 사용자-시나리오 조합 조회 지연 시 |
+   824→
+   825→---
+   826→
+   827→## 7. 시드 데이터
+   828→
+   829→### 7.1 AdminRole 시드
+   830→
+   831→```json
+   832→[
+   833→  {
+   834→    "name": "super_admin",
+   835→    "displayName": "최고 관리자",
+   836→    "description": "시스템 전체 권한 보유. 모든 엔티티 생성/수정/삭제 가능",
+   837→    "permissions": "[\"user:read\",\"user:write\",\"user:delete\",\"loan:read\",\"loan:write\",\"book:read\",\"book:write\",\"book:delete\",\"cms:manage\",\"system:manage\",\"audit:read\",\"kiosk:manage\"]"
+   838→  },
+   839→  {
+   840→    "name": "admin",
+   841→    "displayName": "관리자",
+   842→    "description": "일반 관리 권한. 사용자/대출/도서/CMS 관리 가능, 시스템 설정 불가",
+   843→    "permissions": "[\"user:read\",\"user:write\",\"loan:read\",\"loan:write\",\"book:read\",\"book:write\",\"cms:manage\",\"audit:read\",\"kiosk:manage\"]"
+   844→  },
+   845→  {
+   846→    "name": "operator",
+   847→    "displayName": "운영자",
+   848→    "description": "조회 및 대출/반납 처리만 가능. 설정 및 CMS 변경 불가",
+   849→    "permissions": "[\"user:read\",\"loan:read\",\"loan:write\",\"book:read\"]"
+   850→  }
+   851→]
+   852→```
+   853→
+   854→### 7.2 AdminUser 시드
+   855→
+   856→```json
+   857→[
+   858→  {
+   859→    "email": "superadmin@smartlib.go.kr",
+   860→    "passwordHash": "$2b$12$...bcrypt_hash_of_SmartLib2026!...",
+   861→    "name": "시스템 최고관리자",
+   862→    "role": "super_admin",
+   863→    "isActive": true
+   864→  },
+   865→  {
+   866→    "email": "admin@smartlib.go.kr",
+   867→    "passwordHash": "$2b$12$...bcrypt_hash_of_Admin2026!...",
+   868→    "name": "도서관 관리자",
+   869→    "role": "admin",
+   870→    "isActive": true
+   871→  }
+   872→]
+   873→```
+   874→
+   875→> **보안 주의**: 실제 배포 시 반드시 강력한 초기 비밀번호를 사용하고, 첫 로그인 후 즉시 변경하도록 강제한다.
+   876→
+   877→### 7.3 SystemSetting 시드
+   878→
+   879→```json
+   880→[
+   881→  { "category": "loan", "key": "maxLoanCount", "value": "5", "defaultValue": "5", "type": "number", "description": "1인 최대 대출 권수" },
+   882→  { "category": "loan", "key": "loanPeriodDays", "value": "14", "defaultValue": "14", "type": "number", "description": "기본 대출 기간 (일)" },
+   883→  { "category": "loan", "key": "extendDays", "value": "7", "defaultValue": "7", "type": "number", "description": "연장 기간 (일)" },
+   884→  { "category": "loan", "key": "maxExtendCount", "value": "2", "defaultValue": "2", "type": "number", "description": "최대 연장 횟수" },
+   885→  { "category": "kiosk", "key": "heartbeatIntervalSec", "value": "30", "defaultValue": "30", "type": "number", "description": "heartbeat 간격 (초)" },
+   886→  { "category": "kiosk", "key": "offlineThresholdSec", "value": "120", "defaultValue": "120", "type": "number", "description": "오프라인 판정 임계값 (초)" },
+   887→  { "category": "kiosk", "key": "autoRestartEnabled", "value": "true", "defaultValue": "true", "type": "boolean", "description": "키오스크 자동 재시작 사용 여부" },
+   888→  { "category": "kiosk", "key": "restartHour", "value": "3", "defaultValue": "3", "type": "number", "description": "자동 재시작 시간 (0~23)" },
+   889→  { "category": "notification", "key": "overdueReminderDay", "value": "3", "defaultValue": "3", "type": "number", "description": "연체 알림 시작일 (반납예정일 + N일)" },
+   890→  { "category": "notification", "key": "smtpEnabled", "value": "false", "defaultValue": "false", "type": "boolean", "description": "SMTP 알림 사용 여부" },
+   891→  { "category": "notification", "key": "smtpHost", "value": null, "defaultValue": "", "type": "string", "description": "SMTP 서버 호스트" },
+   892→  { "category": "notification", "key": "smtpPort", "value": null, "defaultValue": "587", "type": "number", "description": "SMTP 서버 포트" },
+   893→  { "category": "dashboard", "key": "statRetentionDays", "value": "365", "defaultValue": "365", "type": "number", "description": "통계 스냅샷 보존 일수" },
+   894→  { "category": "dashboard", "key": "cacheTtlSec", "value": "300", "defaultValue": "300", "type": "number", "description": "대시보드 캐시 TTL (초)" }
+   895→]
+   896→```
+   897→
+   898→### 7.4 CmsContent 시드
+   899→
+   900→```json
+   901→[
+   902→  { "key": "home.heroTitle", "screen": "home", "type": "text", "value": "스마트 도서관에 오신 것을 환영합니다", "defaultValue": "스마트 도서관에 오신 것을 환영합니다", "description": "홈 화면 메인 타이틀" },
+   903→  { "key": "home.heroSubtitle", "screen": "home", "type": "text", "value": "키오스크로 간편하게 대출·반납하세요", "defaultValue": "키오스크로 간편하게 대출·반납하세요", "description": "홈 화면 서브 타이틀" },
+   904→  { "key": "theme.primaryColor", "screen": "global", "type": "color", "value": "#1E40AF", "defaultValue": "#1E40AF", "description": "테마 기본 색상" },
+   905→  { "key": "theme.secondaryColor", "screen": "global", "type": "color", "value": "#059669", "defaultValue": "#059669", "description": "테마 보조 색상" },
+   906→  { "key": "theme.borderRadius", "screen": "global", "type": "number", "value": "8", "defaultValue": "8", "description": "컴포넌트 border-radius (px)" },
+   907→  { "key": "kiosk.idleMessage", "screen": "kiosk", "type": "text", "value": "화면을 터치하여 시작하세요", "defaultValue": "화면을 터치하여 시작하세요", "description": "키오스크 유휴 화면 메시지" },
+   908→  { "key": "kiosk.idleTimeoutSec", "screen": "kiosk", "type": "number", "value": "120", "defaultValue": "120", "description": "키오스크 유휴 타임아웃 (초)" }
+   909→]
+   910→```
+   911→
+   912→### 7.5 KioskDevice 시드
+   913→
+   914→```json
+   915→[
+   916→  { "name": "1층 로비 A", "location": "1층 로비", "ipAddress": "192.168.10.101", "status": "offline", "settings": "{\"idleTimeout\":120,\"volume\":80,\"brightness\":100,\"autoRestart\":true,\"restartHour\":3}" },
+   917→  { "name": "1층 로비 B", "location": "1층 로비", "ipAddress": "192.168.10.102", "status": "offline", "settings": "{\"idleTimeout\":120,\"volume\":80,\"brightness\":100,\"autoRestart\":true,\"restartHour\":3}" },
+   918→  { "name": "2층 종합자료실", "location": "2층 종합자료실", "ipAddress": "192.168.10.201", "status": "offline", "settings": "{\"idleTimeout\":120,\"volume\":70,\"brightness\":100,\"autoRestart\":true,\"restartHour\":3}" },
+   919→  { "name": "3층 아동실", "location": "3층 아동실", "ipAddress": "192.168.10.301", "status": "offline", "settings": "{\"idleTimeout\":90,\"volume\":90,\"brightness\":100,\"autoRestart\":true,\"restartHour\":3}" }
+   920→]
+   921→```
+   922→
+   923→---
+   924→
+   925→## 8. 마이그레이션 전략
+   926→
+   927→### 8.1 전체 로드맵
+   928→
+   929→```
+   930→Phase 1                    Phase 2                    Phase 3
+   931→초기 마이그레이션          관계 추가 및 인덱스        운영 안정화
+   932→───────────────          ─────────────────          ──────────────
+   933→• 신규 테이블 9개 CREATE   • FK 제약 활성화           • 인덱스 튜닝
+   934→• 시드 데이터 INSERT       • 누락 인덱스 추가          • 배치 잡 연동
+   935→• 기존 스키마 호환성 확인  • 기존 모델에 relation 추가  • 아카이브 파이프라인
+   936→```
+   937→
+   938→### 8.2 Phase 1: 초기 마이그레이션
+   939→
+   940→```bash
+   941→# 1. 신규 모델이 포함된 schema로 마이그레이션 생성
+   942→npx prisma migrate dev \
+   943→  --name add_admin_dashboard_tables \
+   944→  --create-only
+   945→
+   946→# 2. 생성된 SQL 검토
+   947→cat prisma/migrations/*/migration.sql
+   948→
+   949→# 3. 시드 스크립트 작성
+   950→#    prisma/seed.ts 에 AdminRole, AdminUser, SystemSetting, CmsContent, KioskDevice 시드 추가
+   951→
+   952→# 4. 마이그레이션 적용
+   953→npx prisma migrate dev \
+   954→  --name add_admin_dashboard_tables
+   955→
+   956→# 5. 시드 실행
+   957→npx prisma db seed
+   958→```
+   959→
+   960→### 8.3 Phase 2: 관계 및 인덱스 보강
+   961→
+   962→```bash
+   963→# 기존 LearningProgress → Scenario 역관계 추가
+   964→npx prisma migrate dev \
+   965→  --name add_scenario_progress_relation
+   966→
+   967→# 인덱스 추가
+   968→npx prisma migrate dev \
+   969→  --name add_performance_indexes
+   970→```
+   971→
+   972→### 8.4 마이그레이션 SQL (Phase 1 생성 예상)
+   973→
+   974→```sql
+   975→-- AdminUser
+   976→CREATE TABLE "AdminUser" (
+   977→  "id"          TEXT NOT NULL PRIMARY KEY,
+   978→  "email"       TEXT NOT NULL,
+   979→  "passwordHash" TEXT NOT NULL,
+   980→  "name"        TEXT NOT NULL,
+   981→  "role"        TEXT NOT NULL DEFAULT 'operator',
+   982→  "isActive"    BOOLEAN NOT NULL DEFAULT 1,
+   983→  "lastLoginAt" DATETIME,
+   984→  "createdAt"   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+   985→  "updatedAt"   DATETIME NOT NULL
+   986→);
+   987→CREATE UNIQUE INDEX "AdminUser_email_key" ON "AdminUser"("email");
+   988→
+   989→-- AdminRole
+   990→CREATE TABLE "AdminRole" (
+   991→  "id"          TEXT NOT NULL PRIMARY KEY,
+   992→  "name"        TEXT NOT NULL,
+   993→  "displayName" TEXT NOT NULL,
+   994→  "description" TEXT,
+   995→  "permissions" TEXT NOT NULL DEFAULT '[]',
+   996→  "createdAt"   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+   997→);
+   998→CREATE UNIQUE INDEX "AdminRole_name_key" ON "AdminRole"("name");
+   999→
+  1000→-- AuditLog
+  1001→CREATE TABLE "AuditLog" (
+  1002→  "id"           TEXT NOT NULL PRIMARY KEY,
+  1003→  "adminUserId"  TEXT NOT NULL,
+  1004→  "action"       TEXT NOT NULL,
+  1005→  "entity"       TEXT NOT NULL,
+  1006→  "entityId"     TEXT,
+  1007→  "oldValue"     TEXT,
+  1008→  "newValue"     TEXT,
+  1009→  "ip"           TEXT,
+  1010→  "userAgent"    TEXT,
+  1011→  "createdAt"    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  1012→  FOREIGN KEY ("adminUserId") REFERENCES "AdminUser"("id") ON UPDATE CASCADE ON DELETE CASCADE
+  1013→);
+  1014→CREATE INDEX "AuditLog_adminUserId_idx" ON "AuditLog"("adminUserId");
+  1015→CREATE INDEX "AuditLog_entity_entityId_idx" ON "AuditLog"("entity", "entityId");
+  1016→CREATE INDEX "AuditLog_action_idx" ON "AuditLog"("action");
+  1017→CREATE INDEX "AuditLog_createdAt_idx" ON "AuditLog"("createdAt");
+  1018→
+  1019→-- CmsContent
+  1020→CREATE TABLE "CmsContent" (
+  1021→  "id"           TEXT NOT NULL PRIMARY KEY,
+  1022→  "key"          TEXT NOT NULL,
+  1023→  "screen"       TEXT NOT NULL,
+  1024→  "type"         TEXT NOT NULL DEFAULT 'text',
+  1025→  "value"        TEXT,
+  1026→  "defaultValue" TEXT,
+  1027→  "description"  TEXT,
+  1028→  "updatedAt"    DATETIME NOT NULL,
+  1029→  "updatedBy"    TEXT,
+  1030→  FOREIGN KEY ("updatedBy") REFERENCES "AdminUser"("id") ON UPDATE CASCADE ON DELETE SET NULL
+  1031→);
+  1032→CREATE UNIQUE INDEX "CmsContent_key_key" ON "CmsContent"("key");
+  1033→CREATE INDEX "CmsContent_screen_idx" ON "CmsContent"("screen");
+  1034→CREATE INDEX "CmsContent_type_idx" ON "CmsContent"("type");
+  1035→
+  1036→-- CmsImage
+  1037→CREATE TABLE "CmsImage" (
+  1038→  "id"           TEXT NOT NULL PRIMARY KEY,
+  1039→  "key"          TEXT NOT NULL,
+  1040→  "originalName" TEXT NOT NULL,
+  1041→  "storedPath"   TEXT NOT NULL,
+  1042→  "mimeType"     TEXT NOT NULL,
+  1043→  "sizeBytes"    INTEGER NOT NULL,
+  1044→  "width"        INTEGER,
+  1045→  "height"       INTEGER,
+  1046→  "alt"          TEXT,
+  1047→  "updatedAt"    DATETIME NOT NULL,
+  1048→  "uploadedBy"   TEXT,
+  1049→  FOREIGN KEY ("uploadedBy") REFERENCES "AdminUser"("id") ON UPDATE CASCADE ON DELETE SET NULL
+  1050→);
+  1051→CREATE UNIQUE INDEX "CmsImage_key_key" ON "CmsImage"("key");
+  1052→CREATE INDEX "CmsImage_mimeType_idx" ON "CmsImage"("mimeType");
+  1053→
+  1054→-- KioskDevice
+  1055→CREATE TABLE "KioskDevice" (
+  1056→  "id"            TEXT NOT NULL PRIMARY KEY,
+  1057→  "name"          TEXT NOT NULL,
+  1058→  "location"      TEXT NOT NULL,
+  1059→  "ipAddress"     TEXT,
+  1060→  "status"        TEXT NOT NULL DEFAULT 'offline',
+  1061→  "lastHeartbeat" DATETIME,
+  1062→  "settings"      TEXT,
+  1063→  "createdAt"     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  1064→);
+  1065→CREATE INDEX "KioskDevice_status_idx" ON "KioskDevice"("status");
+  1066→CREATE INDEX "KioskDevice_location_idx" ON "KioskDevice"("location");
+  1067→
+  1068→-- SystemSetting
+  1069→CREATE TABLE "SystemSetting" (
+  1070→  "id"           TEXT NOT NULL PRIMARY KEY,
+  1071→  "category"     TEXT NOT NULL,
+  1072→  "key"          TEXT NOT NULL,
+  1073→  "value"        TEXT,
+  1074→  "defaultValue" TEXT,
+  1075→  "type"         TEXT NOT NULL DEFAULT 'string',
+  1076→  "description"  TEXT,
+  1077→  "updatedAt"    DATETIME NOT NULL
+  1078→);
+  1079→CREATE UNIQUE INDEX "SystemSetting_category_key_key" ON "SystemSetting"("category", "key");
+  1080→CREATE INDEX "SystemSetting_category_idx" ON "SystemSetting"("category");
+  1081→
+  1082→-- Notice
+  1083→CREATE TABLE "Notice" (
+  1084→  "id"         TEXT NOT NULL PRIMARY KEY,
+  1085→  "title"      TEXT NOT NULL,
+  1086→  "content"    TEXT NOT NULL,
+  1087→  "type"       TEXT NOT NULL DEFAULT 'info',
+  1088→  "isActive"   BOOLEAN NOT NULL DEFAULT 1,
+  1089→  "startAt"    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  1090→  "endAt"      DATETIME,
+  1091→  "createdAt"  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  1092→  "createdBy"  TEXT,
+  1093→  FOREIGN KEY ("createdBy") REFERENCES "AdminUser"("id") ON UPDATE CASCADE ON DELETE SET NULL
+  1094→);
+  1095→CREATE INDEX "Notice_isActive_startAt_idx" ON "Notice"("isActive", "startAt");
+  1096→CREATE INDEX "Notice_type_idx" ON "Notice"("type");
+  1097→
+  1098→-- DashboardStat
+  1099→CREATE TABLE "DashboardStat" (
+  1100→  "id"          TEXT NOT NULL PRIMARY KEY,
+  1101→  "date"        TEXT NOT NULL,
+  1102→  "totalLoans"  INTEGER NOT NULL DEFAULT 0,
+  1103→  "activeLoans" INTEGER NOT NULL DEFAULT 0,
+  1104→  "returns"     INTEGER NOT NULL DEFAULT 0,
+  1105→  "overdue"     INTEGER NOT NULL DEFAULT 0,
+  1106→  "newUsers"    INTEGER NOT NULL DEFAULT 0,
+  1107→  "peakHour"    INTEGER,
+  1108→  "createdAt"   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  1109→);
+  1110→CREATE UNIQUE INDEX "DashboardStat_date_key" ON "DashboardStat"("date");
+  1111→CREATE INDEX "DashboardStat_date_idx" ON "DashboardStat"("date");
+  1112→```
+  1113→
+  1114→### 8.5 롤백 전략
+  1115→
+  1116→| 시나리오 | 대응 |
+  1117→|---------|------|
+  1118→| 마이그레이션 적용 전 문제 발견 | `npx prisma migrate resolve --rolled-back <migration_name>` |
+  1119→| 적용 후 롤백 필요 | `npx prisma migrate diff`로 역방향 SQL 생성 후 수동 실행 |
+  1120→| 프로덕션 장애 | SQLite 백업 복원 + `prisma migrate status`로 동기화 확인 |
+  1121→
+  1122→### 8.6 SQLite WAL 모드 설정
+  1123→
+  1124→```sql
+  1125→-- 성능 향상: WAL 모드 활성화 (읽기-쓰기 동시성 향상)
+  1126→PRAGMA journal_mode = WAL;
+  1127→
+  1128→-- 체크포인트 빈도 설정
+  1129→PRAGMA wal_autocheckpoint = 1000;
+  1130→
+  1131→-- Busy timeout 설정 (쓰기 경합 시 대기)
+  1132→PRAGMA busy_timeout = 5000;
+  1133→```
+  1134→
+  1135→---
+  1136→
+  1137→## 9. 데이터 접근 패턴
+  1138→
+  1139→### 9.1 인증 및 권한
+  1140→
+  1141→```typescript
+  1142→// 이메일로 관리자 조회 (로그인)
+  1143→const admin = await prisma.adminUser.findUnique({
+  1144→  where: { email },
+  1145→  select: {
+  1146→    id: true, email: true, passwordHash: true,
+  1147→    name: true, role: true, isActive: true,
+  1148→  },
+  1149→});
+  1150→
+  1151→// 역할 권한 조회
+  1152→const role = await prisma.adminRole.findUnique({
+  1153→  where: { name: admin.role },
+  1154→  select: { permissions: true },
+  1155→});
+  1156→
+  1157→// 로그인 시각 갱신
+  1158→await prisma.adminUser.update({
+  1159→  where: { id: admin.id },
+  1160→  data: { lastLoginAt: new Date() },
+  1161→});
+  1162→```
+  1163→
+  1164→### 9.2 감사 로그 기록
+  1165→
+  1166→```typescript
+  1167→// 범용 감사 로그 작성 헬퍼
+  1168→async function writeAuditLog(params: {
+  1169→  adminUserId: string;
+  1170→  action: 'create' | 'update' | 'delete' | 'login' | 'logout' | 'export';
+  1171→  entity: string;
+  1172→  entityId?: string;
+  1173→  oldValue?: Record<string, unknown>;
+  1174→  newValue?: Record<string, unknown>;
+  1175→  ip?: string;
+  1176→  userAgent?: string;
+  1177→}) {
+  1178→  return prisma.auditLog.create({
+  1179→    data: {
+  1180→      ...params,
+  1181→      oldValue: params.oldValue ? JSON.stringify(params.oldValue) : null,
+  1182→      newValue: params.newValue ? JSON.stringify(params.newValue) : null,
+  1183→    },
+  1184→  });
+  1185→}
+  1186→
+  1187→// 감사 로그 조회 (페이지네이션)
+  1188→const logs = await prisma.auditLog.findMany({
+  1189→  where: {
+  1190→    adminUserId: adminId,           // 선택: 특정 관리자
+  1191→    entity: entityName,              // 선택: 특정 엔티티
+  1192→    createdAt: { gte: from, lte: to }, // 기간 필터
+  1193→  },
+  1194→  include: { adminUser: { select: { name: true, email: true } } },
+  1195→  orderBy: { createdAt: 'desc' },
+  1196→  take: 50,
+  1197→  skip: (page - 1) * 50,
+  1198→});
+  1199→```
+  1200→
+  1201→### 9.3 대시보드 통계
+  1202→
+  1203→```typescript
+  1204→// 최근 N일 통계 조회 (차트 데이터)
+  1205→const stats = await prisma.dashboardStat.findMany({
+  1206→  where: {
+  1207→    date: { gte: startDate, lte: endDate },
+  1208→  },
+  1209→  orderBy: { date: 'asc' },
+  1210→});
+  1211→
+  1212→// 오늘 실시간 요약 (스냅샷 + 실시간 보정)
+  1213→const todaySnapshot = await prisma.dashboardStat.findUnique({
+  1214→  where: { date: todayStr },
+  1215→});
+  1216→
+  1217→// 활성 대출 수 (실시간)
+  1218→const activeLoanCount = await prisma.simLoan.count({
+  1219→  where: { status: 'active' },
+  1220→});
+  1221→
+  1222→// 연체 수 (실시간)
+  1223→const overdueCount = await prisma.simLoan.count({
+  1224→  where: { status: 'overdue' },
+  1225→});
+  1226→```
+  1227→
+  1228→### 9.4 CMS 콘텐츠 관리
+  1229→
+  1230→```typescript
+  1231→// 화면별 콘텐츠 일괄 조회 (프론트엔드 렌더링용)
+  1232→const contents = await prisma.cmsContent.findMany({
+  1233→  where: { screen: 'home' },
+  1234→});
+  1235→
+  1236→// 콘텐츠 값 업데이트 (감사 로그 동시 기록)
+  1237→await prisma.$transaction([
+  1238→  prisma.cmsContent.update({
+  1239→    where: { key: 'home.heroTitle' },
+  1240→    data: {
+  1241→      value: '새로운 환영 메시지',
+  1242→      updatedBy: adminId,
+  1243→    },
+  1244→  }),
+  1245→  prisma.auditLog.create({
+  1246→    data: {
+  1247→      adminUserId: adminId,
+  1248→      action: 'update',
+  1249→      entity: 'CmsContent',
+  1250→      entityId: contentId,
+  1251→      oldValue: JSON.stringify({ value: oldValue }),
+  1252→      newValue: JSON.stringify({ value: '새로운 환영 메시지' }),
+  1253→      ip: clientIp,
+  1254→    },
+  1255→  }),
+  1256→]);
+  1257→
+  1258→// 키로 단일 조회
+  1259→const color = await prisma.cmsContent.findUnique({
+  1260→  where: { key: 'theme.primaryColor' },
+  1261→  select: { value: true },
+  1262→});
+  1263→```
+  1264→
+  1265→### 9.5 키오스크 기기 관리
+  1266→
+  1267→```typescript
+  1268→// 전체 기기 상태 조회 (모니터링 대시보드)
+  1269→const devices = await prisma.kioskDevice.findMany({
+  1270→  orderBy: [{ location: 'asc' }, { name: 'asc' }],
+  1271→});
+  1272→
+  1273→// 상태별 기기 수 집계
+  1274→const onlineCount = await prisma.kioskDevice.count({ where: { status: 'online' } });
+  1275→const offlineCount = await prisma.kioskDevice.count({ where: { status: 'offline' } });
+  1276→const maintenanceCount = await prisma.kioskDevice.count({ where: { status: 'maintenance' } });
+  1277→
+  1278→// heartbeat 수신
+  1279→await prisma.kioskDevice.update({
+  1280→  where: { id: deviceId },
+  1281→  data: {
+  1282→    status: 'online',
+  1283→    lastHeartbeat: new Date(),
+  1284→  },
+  1285→});
+  1286→
+  1287→// 오프라인 기기 자동 감지 (배치)
+  1288→const threshold = new Date(Date.now() - 120_000); // 2분 전
+  1289→await prisma.kioskDevice.updateMany({
+  1290→  where: {
+  1291→    status: 'online',
+  1292→    lastHeartbeat: { lt: threshold },
+  1293→  },
+  1294→  data: { status: 'offline' },
+  1295→});
+  1296→```
+  1297→
+  1298→### 9.6 공지 관리
+  1299→
+  1300→```typescript
+  1301→// 현재 활성 공지 조회 (대시보드 및 키오스크 표시용)
+  1302→const now = new Date();
+  1303→const activeNotices = await prisma.notice.findMany({
+  1304→  where: {
+  1305→    isActive: true,
+  1306→    startAt: { lte: now },
+  1307→    OR: [
+  1308→      { endAt: null },
+  1309→      { endAt: { gt: now } },
+  1310→    ],
+  1311→  },
+  1312→  orderBy: [
+  1313→    { type: 'desc' },  // urgent 먼저
+  1314→    { createdAt: 'desc' },
+  1315→  ],
+  1316→});
+  1317→
+  1318→// 공지 생성
+  1319→await prisma.notice.create({
+  1320→  data: {
+  1321→    title: '시스템 점검 안내',
+  1322→    content: '3월 10일 02:00~06:00 시스템 점검으로 인해 서비스가 일시 중단됩니다.',
+  1323→    type: 'warning',
+  1324→    startAt: new Date('2026-03-08T00:00:00Z'),
+  1325→    endAt: new Date('2026-03-10T06:00:00Z'),
+  1326→    createdBy: adminId,
+  1327→  },
+  1328→});
+  1329→```
+  1330→
+  1331→### 9.7 시스템 설정
+  1332→
+  1333→```typescript
+  1334→// 카테고리별 설정 일괄 조회
+  1335→const loanSettings = await prisma.systemSetting.findMany({
+  1336→  where: { category: 'loan' },
+  1337→});
+  1338→
+  1339→// 단일 설정 조회 (타입 캐스팅 포함)
+  1340→async function getSetting<T>(category: string, key: string): Promise<T | null> {
+  1341→  const setting = await prisma.systemSetting.findUnique({
+  1342→    where: { category_key: { category, key } },
+  1343→  });
+  1344→  if (!setting?.value) return null;
+  1345→  switch (setting.type) {
+  1346→    case 'number': return Number(setting.value) as T;
+  1347→    case 'boolean': return (setting.value === 'true') as unknown as T;
+  1348→    case 'json': return JSON.parse(setting.value) as T;
+  1349→    default: return setting.value as unknown as T;
+  1350→  }
+  1351→}
+  1352→
+  1353→// 사용 예
+  1354→const maxLoan = await getSetting<number>('loan', 'maxLoanCount'); // 5
+  1355→const smtpOn = await getSetting<boolean>('notification', 'smtpEnabled'); // false
+  1356→```
+  1357→
+  1358→### 9.8 사용자·대출 관리 (기존 테이블)
+  1359→
+  1360→```typescript
+  1361→// 활성 대출 목록 (사용자별)
+  1362→const userLoans = await prisma.simLoan.findMany({
+  1363→  where: { userId, status: 'active' },
+  1364→  include: {
+  1365→    book: { select: { title: true, author: true, coverUrl: true } },
+  1366→    user: { select: { name: true, phone: true } },
+  1367→  },
+  1368→  orderBy: { dueDate: 'asc' },
+  1369→});
+  1370→
+  1371→// 연체 도서 목록
+  1372→const overdueLoans = await prisma.simLoan.findMany({
+  1373→  where: {
+  1374→    status: 'active',
+  1375→    dueDate: { lt: todayStr },
+  1376→  },
+  1377→  include: {
+  1378→    user: { select: { name: true, phone: true } },
+  1379→    book: { select: { title: true, author: true } },
+  1380→  },
+  1381→  orderBy: { dueDate: 'asc' },
+  1382→  take: 100,
+  1383→});
+  1384→
+  1385→// 도서 검색 (제목/저자/ISBN)
+  1386→const books = await prisma.book.findMany({
+  1387→  where: {
+  1388→    OR: [
+  1389→      { title: { contains: keyword } },
+  1390→      { author: { contains: keyword } },
+  1391→      { isbn: { contains: keyword } },
+  1392→    ],
+  1393→  },
+  1394→  take: 20,
+  1395→});
+  1396→
+  1397→// 학습 진도 요약 (시나리오별)
+  1398→const progressSummary = await prisma.learningProgress.groupBy({
+  1399→  by: ['scenarioId'],
+  1400→  _count: { completed: true },
+  1401→  _avg: { stars: true, attempts: true },
+  1402→  where: { completed: true },
+  1403→});
+  1404→```
+  1405→
+  1406→---
+  1407→
+  1408→## 10. 성능 고려사항
+  1409→
+  1410→### 10.1 SQLite 특성 기반 최적화
+  1411→
+  1412→| 항목 | 전략 |
+  1413→|------|------|
+  1414→| **동시 쓰기** | SQLite는 단일 writer. 대량 INSERT는 트랜잭션으로 묶어 lock 횟수 최소화 |
+  1415→| **읽기 동시성** | WAL 모드 사용 시 읽기-쓰기 동시 가능. 기본으로 활성화 |
+  1416→| **JSON 컬럼** | SQLite는 JSON 함수 지원. 단, WHERE 조건에서 JSON 내부 필드 탐색은 인덱스 미적용 → 애플리케이션 레이어에서 필터링 |
+  1417→| **COUNT 쿼리** | 대량 데이터에서 COUNT(*)는 풀 스캔. `DashboardStat` 스냅샷 활용 |
+  1418→| **커넥션 풀** | Prisma 기본 풀 크기 = num_cpus * 2 + 1. SQLite는 단일 파일이므로 과도한 풀 크기는 의미 없음 |
+  1419→
+  1420→### 10.2 대시보드 로딩 최적화
+  1421→
+  1422→```
+  1423→요청 → 인메모리 캐시 확인 (TTL 5분)
+  1424→         │ Hit  → 캐시 데이터 반환
+  1425→         │ Miss → DashboardStat 조회 + 실시간 보정 쿼리
+  1426→                 → 캐시 저장 → 반환
+  1427→```
+  1428→
+  1429→- 첫 화면 로딩: `DashboardStat` 최근 30건 + 활성 대출/연체 COUNT (2건) = **3 쿼리**
+  1430→- 상세 화면: 개별 테이블 조회 (페이지네이션, take=50)
+  1431→
+  1432→### 10.3 대량 데이터 처리
+  1433→
+  1434→```typescript
+  1435→// 대량 AuditLog INSERT — 트랜잭션으로 일괄 처리
+  1436→await prisma.$transaction(
+  1437→  logEntries.map(entry =>
+  1438→    prisma.auditLog.create({ data: entry })
+  1439→  )
+  1440→);
+  1441→
+  1442→// 대량 사용자 EXPORT — 커서 기반 스트리밍
+  1443→async function* exportUsers() {
+  1444→  let cursor: string | undefined;
+  1445→  while (true) {
+  1446→    const batch = await prisma.simUser.findMany({
+  1447→      take: 1000,
+  1448→      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+  1449→      orderBy: { id: 'asc' },
+  1450→    });
+  1451→    if (batch.length === 0) break;
+  1452→    yield batch;
+  1453→    cursor = batch[batch.length - 1].id;
+  1454→  }
+  1455→}
+  1456→```
+  1457→
+  1458→---
+  1459→
+  1460→## 11. 보안 고려사항
+  1461→
+  1462→### 11.1 비밀번호 저장
+  1463→
+  1464→| 항목 | 정책 |
+  1465→|------|------|
+  1466→| 해시 알고리즘 | bcrypt (cost factor = 12) |
+  1467→| 평문 저장 | **절대 금지** |
+  1468→| 전송 | HTTPS만 허용 (HTTP 요청은 301 리다이렉트) |
+  1469→| 초기 비밀번호 | 시드 비밀번호는 첫 로그인 시 강제 변경 |
+  1470→
+  1471→### 11.2 감사 로그 보호
+  1472→
+  1473→- AuditLog 테이블에 대한 UPDATE/DELETE 권한은 **애플리케이션 레이어에서 차단**
+  1474→- Prisma 미들웨어로 AuditLog 대상 update/delete 작업 시 에러 throw
+  1475→- DB 수준에서는 추가 보호 불가 (SQLite는 행 수준 보안 미지원)
+  1476→
+  1477→```typescript
+  1478→// Prisma 미들웨어 — AuditLog 쓰기 금지
+  1479→prisma.$use(async (params, next) => {
+  1480→  if (params.model === 'AuditLog' && params.action !== 'create' && params.action !== 'findMany' && params.action !== 'findUnique' && params.action !== 'count') {
+  1481→    throw new Error('AuditLog은 append-only입니다. UPDATE/DELETE가 금지됩니다.');
+  1482→  }
+  1483→  return next(params);
+  1484→});
+  1485→```
+  1486→
+  1487→### 11.3 권한 검증
+  1488→
+  1489→```typescript
+  1490→// 권한 체크 헬퍼
+  1491→async function checkPermission(adminId: string, required: string): Promise<boolean> {
+  1492→  const admin = await prisma.adminUser.findUnique({
+  1493→    where: { id: adminId },
+  1494→    select: { role: true, isActive: true },
+  1495→  });
+  1496→  if (!admin?.isActive) return false;
+  1497→
+  1498→  const role = await prisma.adminRole.findUnique({
+  1499→    where: { name: admin.role },
+  1500→    select: { permissions: true },
+  1501→  });
+  1502→  const perms: string[] = JSON.parse(role?.permissions ?? '[]');
+  1503→  return perms.includes(required);
+  1504→}
+  1505→
+  1506→// 사용 예 — API 라우트 가드
+  1507→if (!await checkPermission(req.adminId, 'book:write')) {
+  1508→  return res.status(403).json({ error: '권한이 없습니다.' });
+  1509→}
+  1510→```
+  1511→
+  1512→### 11.4 민감 데이터 마스킹
+  1513→
+  1514→| 컬럼 | 마스킹 정책 |
+  1515→|------|------------|
+  1516→| AdminUser.passwordHash | API 응답에서 **항상 제외** (select에서 미포함) |
+  1517→| SimUser.phone | 목록 화면에서 `010-****-5678` 형태로 부분 마스킹 |
+  1518→| SimUser.pin | API 응답에서 **절대 노출 금지** |
+  1519→| AuditLog.oldValue/newValue | 민감 필드(passwordHash 등)는 로그 기록 시 제외 |
+  1520→
+  1521→---
+  1522→
+  1523→## 부록 A: 테이블 요약
+  1524→
+  1525→| # | 테이블 | 도메인 | 컬럼 수 | 주요 용도 |
+  1526→|---|--------|--------|---------|----------|
+  1527→| 1 | SimUser | Kiosk Core | 12 | 이용자 정보 |
+  1528→| 2 | Book | Kiosk Core | 12 | 도서 정보 |
+  1529→| 3 | SimLoan | Kiosk Core | 11 | 대출 기록 |
+  1530→| 4 | LearningProgress | Kiosk Core | 9 | 학습 진도 |
+  1531→| 5 | Scenario | Kiosk Core | 7 | 시나리오 정의 |
+  1532→| 6 | AdminUser | Admin | 9 | 관리자 계정 |
+  1533→| 7 | AdminRole | Admin | 6 | 권한 역할 |
+  1534→| 8 | AuditLog | Admin | 10 | 감사 추적 |
+  1535→| 9 | CmsContent | Admin | 9 | CMS 콘텐츠 |
+  1536→| 10 | CmsImage | Admin | 10 | CMS 이미지 |
+  1537→| 11 | KioskDevice | System | 8 | 키오스크 기기 |
+  1538→| 12 | SystemSetting | System | 8 | 시스템 설정 |
+  1539→| 13 | Notice | System | 9 | 공지/알림 |
+  1540→| 14 | DashboardStat | System | 9 | 통계 스냅샷 |
+  1541→
+  1542→**총 14개 테이블, 129개 컬럼**
+  1543→
+  1544→---
+  1545→
+  1546→## 부록 B: 변경 이력
+  1547→
+  1548→| 버전 | 일자 | 변경 내용 | 작성자 |
+  1549→|------|------|-----------|--------|
+  1550→| v1.0.0 | 2026-03-04 | 초기 설계 문서 작성 | 시스템 설계팀 |
+  1551→

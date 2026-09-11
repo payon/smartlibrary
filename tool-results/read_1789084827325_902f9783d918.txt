@@ -1,0 +1,801 @@
+     1→# 관리자 대시보드 에이전트 설정
+     2→
+     3→> 스마트 도서관 무인 키오스크 — 관리자 대시보드 Agent Configuration Document  
+     4→> **버전**: v1.0.0  
+     5→> **작성일**: 2026-03-05  
+     6→> **상태**: Production-ready  
+     7→> **상위 문서**: [기본 에이전트 설정](../agent.md)  
+     8→> **참조**: [대시보드 아키텍처](./architect.md) · [API 명세](./api.md) · [DB 설계](./database.md) · [PRD](./prd.md)
+     9→
+    10→---
+    11→
+    12→> **📌 본 문서는 `/doc/agent.md`의 대시보드 확장입니다. 공통 에이전트 지침은 상위 문서를 참조하고,  
+    13→> 본 문서는 대시보드(`/admin/*`) 개발에 특화된 역할·워크플로우·지침을 정의합니다.**
+    14→
+    15→---
+    16→
+    17→## 목차
+    18→
+    19→1. [에이전트 개요](#1-에이전트-개요)
+    20→2. [워크플로우](#2-워크플로우)
+    21→3. [작업 추적](#3-작업-추적)
+    22→4. [서브에이전트 지침](#4-서브에이전트-지침)
+    23→5. [디버깅 가이드](#5-디버깅-가이드)
+    24→6. [배포 체크리스트](#6-배포-체크리스트)
+    25→
+    26→---
+    27→
+    28→## 1. 에이전트 개요
+    29→
+    30→### 1.1 역할 정의
+    31→
+    32→대시보드 개발에 투입되는 에이전트와 역할을 정의한다. 기본 에이전트 설정의 역할을 계승하며, 대시보드 특성에 맞게 역할 범위를 한정한다.
+    33→
+    34→| 에이전트 | 역할 | 기술 | 대시보드 담당 영역 |
+    35→|---|---|---|---|
+    36→| **개발 에이전트** | 관리자 UI + API 전체 구현 | full-stack-developer | Prisma schema, Admin API Routes, Admin UI 컴포넌트, JWT/RBAC, CMS CRUD, 통계/감사 로그 |
+    37→| **스타일링 에이전트** | 반응형 관리자 레이아웃, 차트 스타일링 | frontend-styling-expert | 21"/24" 데스크톱, 태블릿(768px), 모바일(375px) 반응형, recharts 테마, shadcn/ui 커스터마이징 |
+    38→| **브라우저 에이전트** | 대시보드 E2E 검증 | agent-browser | 로그인 플로우, CMS 편집→키오스크 반영, RBAC 권한 차단, 반응형 레이아웃 스냅샷 |
+    39→
+    40→### 1.2 에이전트 책임 매트릭스
+    41→
+    42→```
+    43→                        개발      스타일링    브라우저
+    44→                        에이전트   에이전트    에이전트
+    45→─────────────────────────────────────────────────────────
+    46→Prisma 스키마 설계        ●         ○         ○
+    47→DB 마이그레이션           ●         ○         ○
+    48→Admin API Route          ●         ○         ○
+    49→JWT 인증 구현            ●         ○         ○
+    50→RBAC 권한 체계           ●         ○         ○
+    51→Admin UI 컴포넌트        ●         △         ○
+    52→shadcn/ui 커스터마이징    △         ●         ○
+    53→반응형 레이아웃          △         ●         △
+    54→recharts 차트 스타일      ○         ●         ○
+    55→CMS 편집 인터페이스      ●         △         ○
+    56→이미지 업로드             ●         ○         ○
+    57→통계 대시보드             ●         △         ○
+    58→감사 로그 UI             ●         △         ○
+    59→E2E 로그인 플로우        ○         ○         ●
+    60→E2E CMS→키오스크 반영    ○         ○         ●
+    61→E2E RBAC 차단 확인       ○         ○         ●
+    62→반응형 스냅샷 검증       ○         ○         ●
+    63→
+    64→● = 주 담당   △ = 협업   ○ = 미참여
+    65→```
+    66→
+    67→### 1.3 에이전트 간 통신 규칙
+    68→
+    69→```
+    70→1. 개발 에이전트가 API 구현 완료 → 브라우저 에이전트에 E2E 검증 요청
+    71→2. 개발 에이전트가 UI 컴포넌트 작성 완료 → 스타일링 에이전트에 반응형 조정 요청
+    72→3. 스타일링 에이전트 조정 완료 → 브라우저 에이전트에 반응형 스냅샷 검증 요청
+    73→4. 브라우저 에이전트 오류 발견 → 개발 에이전트에 수정 요청 (워크로그에 기록)
+    74→5. 모든 에이전트는 worklog.md를 통해 비동기적으로 상태 공유
+    75→```
+    76→
+    77→---
+    78→
+    79→## 2. 워크플로우
+    80→
+    81→### 2.1 대시보드 개발 워크플로우 (7 Phase)
+    82→
+    83→```
+    84→요청 수신: 관리자 대시보드 기능 구현
+    85→    │
+    86→    ▼
+    87→┌────────────────────────────────────┐
+    88→│ Phase 1: Prisma Schema + DB       │
+    89→│ 마이그레이션                       │
+    90→│                                    │
+    91→│ • AdminUser, AdminRole 모델 정의   │
+    92→│ • CmsContent, CmsImage 모델 정의   │
+    93→│ • AuditLog, SystemSetting 정의     │
+    94→│ • DashboardStat, Notice 정의       │
+    95→│ • npx prisma migrate dev 실행     │
+    96→│ • npx prisma generate 실행         │
+    97→│ • 시드 스크립트 작성               │
+    98→└──────────────┬─────────────────────┘
+    99→                │
+   100→                ▼
+   101→┌────────────────────────────────────┐
+   102→│ Phase 2: Admin Auth                │
+   103→│                                    │
+   104→│ • JWT 발급/검증 미들웨어 구현      │
+   105→│ • withAdminAuth 미들웨어 작성      │
+   106→│ • RBAC 권한 검사 미들웨어 작성     │
+   107→│ • /api/admin/auth/login 구현       │
+   108→│ • /api/admin/auth/logout 구현      │
+   109→│ • /api/admin/auth/me 구현          │
+   110→│ • 로그인 페이지 UI 작성            │
+   111→│ • AdminLayout (사이드바+헤더) 작성  │
+   112→└──────────────┬─────────────────────┘
+   113→                │
+   114→                ▼
+   115→┌────────────────────────────────────┐
+   116→│ Phase 3: CMS API + Kiosk Polling   │
+   117→│                                    │
+   118→│ • /api/admin/cms CRUD 구현         │
+   119→│ • /api/cms (공개, 키오스크용) 구현  │
+   120→│ • ETag 기반 조건부 요청 로직       │
+   121→│ • Polling 인터벌 설정 로직         │
+   122→│ • useCmsContent() 훅 작성          │
+   123→│ • CMS 편집 → 키오스크 즉시 반영    │
+   124→│   동기화 로직                      │
+   125→└──────────────┬─────────────────────┘
+   126→                │
+   127→                ▼
+   128→┌────────────────────────────────────┐
+   129→│ Phase 4: Admin Dashboard UI        │
+   130→│                                    │
+   131→│ • /admin 대시보드 홈 (통계 카드)   │
+   132→│ • /admin/cms 콘텐츠 관리 페이지    │
+   133→│ • /admin/books 도서 관리 페이지    │
+   134→│ • /admin/users 사용자 관리 페이지  │
+   135→│ • /admin/notices 공지 관리 페이지  │
+   136→│ • /admin/settings 시스템 설정      │
+   137→│ • /admin/audit 감사 로그 페이지    │
+   138→│ • /admin/admins 관리자 계정 관리   │
+   139→│   (super_admin 전용)               │
+   140→└──────────────┬─────────────────────┘
+   141→                │
+   142→                ▼
+   143→┌────────────────────────────────────┐
+   144→│ Phase 5: Image Upload              │
+   145→│                                    │
+   146→│ • /api/admin/cms/images 구현       │
+   147→│ • /public/uploads/cms/ 디렉토리    │
+   148→│ • 파일 크기 검증 (최대 5MB)        │
+   149→│ • MIME 타입 검증                   │
+   150→│ • CmsImage DB 레코드 생성          │
+   151→│ • 클라이언트 이미지 프리뷰         │
+   152→│ • 업로드 실패 시 에러 처리          │
+   153→└──────────────┬─────────────────────┘
+   154→                │
+   155→                ▼
+   156→┌────────────────────────────────────┐
+   157→│ Phase 6: Statistics + Audit Log    │
+   158→│                                    │
+   159→│ • /api/admin/stats 엔드포인트      │
+   160→│ • 대출/반납 추이 차트 (recharts)   │
+   161→│ • 도서 카테고리 분포 차트          │
+   162→│ • 일별 이용 통계 차트              │
+   163→│ • withAuditLog 래퍼 구현          │
+   164→│ • 모든 mutation에 감사 로그 자동   │
+   165→│   기록 연결                        │
+   166→│ • 감사 로그 조회/필터 UI           │
+   167→└──────────────┬─────────────────────┘
+   168→                │
+   169→                ▼
+   170→┌────────────────────────────────────┐
+   171→│ Phase 7: E2E 검증                  │
+   172→│                                    │
+   173→│ • 브라우저 에이전트로 로그인 플로우 │
+   174→│   검증                             │
+   175→│ • CMS 편집 → 키오스크 폴링 반영    │
+   176→│   E2E 검증                         │
+   177→│ • RBAC 권한 차단 E2E 검증          │
+   178→│ • 반응형 레이아웃 스냅샷 검증      │
+   179→│   (375px, 768px, 1024px, 1920px)   │
+   180→│ • 이미지 업로드 E2E 검증           │
+   181→│ • 감사 로그 기록 E2E 검증          │
+   182→└──────────────┬─────────────────────┘
+   183→                │
+   184→                ▼
+   185→            완료
+   186→```
+   187→
+   188→### 2.2 Phase 간 병렬 실행 전략
+   189→
+   190→Phase 내에서 독립적인 작업은 병렬로 실행한다:
+   191→
+   192→```
+   193→Phase 1 (직렬):
+   194→  └── 스키마 작성 → 마이그레이션 → 시드 (순차 의존)
+   195→
+   196→Phase 2 (병렬 그룹 A):
+   197→  ├── JWT/RBAC 미들웨어 구현
+   198→  └── Admin API 인증 엔드포인트 구현
+   199→
+   200→Phase 2 (병렬 그룹 B, A 완료 후):
+   201→  ├── 로그인 페이지 UI 작성
+   202→  └── AdminLayout 컴포넌트 작성
+   203→
+   204→Phase 3 (병렬 그룹 A):
+   205→  ├── /api/admin/cms CRUD 구현
+   206→  └── /api/cms (공개) 구현
+   207→
+   208→Phase 3 (병렬 그룹 B, A 완료 후):
+   209→  ├── useCmsContent() 훅 작성
+   210→  └── Polling/ETag 로직 구현
+   211→
+   212→Phase 4 (병렬 — 페이지 간 독립):
+   213→  ├── /admin 대시보드 홈
+   214→  ├── /admin/cms 콘텐츠 관리
+   215→  ├── /admin/books 도서 관리
+   216→  ├── /admin/users 사용자 관리
+   217→  ├── /admin/notices 공지 관리
+   218→  └── /admin/settings 시스템 설정
+   219→
+   220→Phase 5 (직렬):
+   221→  └── 업로드 API → 프리뷰 UI → 에러 처리
+   222→
+   223→Phase 6 (병렬 그룹 A):
+   224→  ├── 통계 API + 차트 컴포넌트
+   225→  └── 감사 로그 API + UI
+   226→
+   227→Phase 7 (직렬 — 순차 검증):
+   228→  └── 로그인 → CMS → RBAC → 반응형 → 업로드 → 감사 로그
+   229→```
+   230→
+   231→### 2.3 Phase 전환 조건
+   232→
+   233→| 현재 Phase | 완료 조건 | 다음 Phase |
+   234→|---|---|---|
+   235→| Phase 1 | `npx prisma migrate dev` 성공, 시드 데이터 조회 확인 | Phase 2 |
+   236→| Phase 2 | 로그인 → JWT 발급 → `/api/admin/auth/me` 응답 성공 | Phase 3 |
+   237→| Phase 3 | CMS CRUD 동작, `/api/cms` ETag 응답 확인 | Phase 4 |
+   238→| Phase 4 | 모든 `/admin/*` 페이지 렌더링, 네비게이션 동작 | Phase 5 |
+   239→| Phase 5 | 이미지 업로드 → DB 레코드 → 파일 저장 확인 | Phase 6 |
+   240→| Phase 6 | 통계 차트 렌더링, 감사 로그 자동 기록 확인 | Phase 7 |
+   241→| Phase 7 | 모든 E2E 검증 통과 | **완료** |
+   242→
+   243→---
+   244→
+   245→## 3. 작업 추적
+   246→
+   247→### 3.1 Todo 시스템 — 대시보드 확장
+   248→
+   249→기본 에이전트 설정의 Todo 시스템을 계승하며, 대시보드 Phase 기반 Task ID 체계를 사용한다.
+   250→
+   251→```typescript
+   252→interface DashboardTodo {
+   253→  id: string;           // "{phase}-{seq}" 형식
+   254→                       // 예: "1-1" (Phase 1, 작업 1)
+   255→                       //     "2-a" (Phase 2, 병렬 A)
+   256→                       //     "2-b" (Phase 2, 병렬 B)
+   257→                       //     "4-3" (Phase 4, 페이지 3)
+   258→  content: string;      // 작업 설명 (한국어)
+   259→  status: 'pending' | 'in_progress' | 'completed';
+   260→  priority: 'high' | 'medium' | 'low';
+   261→  phase: 1 | 2 | 3 | 4 | 5 | 6 | 7;  // 대시보드 Phase 번호
+   262→  agent: 'dev' | 'style' | 'browser';  // 담당 에이전트
+   263→  blocks?: string[];    // 차단하는 후속 Task ID 목록
+   264→  blockedBy?: string[]; // 선행 Task ID 목록
+   265→}
+   266→```
+   267→
+   268→### 3.2 Phase별 기본 Todo 목록
+   269→
+   270→```typescript
+   271→const dashboardTodos: DashboardTodo[] = [
+   272→  // Phase 1: Prisma Schema + DB Migration
+   273→  { id: "1-1", content: "AdminUser, AdminRole 모델 정의",           phase: 1, agent: "dev",    priority: "high" },
+   274→  { id: "1-2", content: "CmsContent, CmsImage 모델 정의",           phase: 1, agent: "dev",    priority: "high" },
+   275→  { id: "1-3", content: "AuditLog, SystemSetting, DashboardStat 정의", phase: 1, agent: "dev",    priority: "high" },
+   276→  { id: "1-4", content: "Notice, KioskDevice 모델 정의",            phase: 1, agent: "dev",    priority: "high" },
+   277→  { id: "1-5", content: "prisma migrate dev + generate 실행",       phase: 1, agent: "dev",    priority: "high" },
+   278→  { id: "1-6", content: "시드 스크립트 작성 및 실행",               phase: 1, agent: "dev",    priority: "high" },
+   279→
+   280→  // Phase 2: Admin Auth
+   281→  { id: "2-a1", content: "JWT 발급/검증 미들웨어 구현",             phase: 2, agent: "dev",    priority: "high" },
+   282→  { id: "2-a2", content: "withAdminAuth 미들웨어 작성",             phase: 2, agent: "dev",    priority: "high" },
+   283→  { id: "2-a3", content: "RBAC 권한 검사 미들웨어 작성",            phase: 2, agent: "dev",    priority: "high" },
+   284→  { id: "2-a4", content: "/api/admin/auth/login·logout·me 구현",    phase: 2, agent: "dev",    priority: "high" },
+   285→  { id: "2-b1", content: "로그인 페이지 UI 작성",                   phase: 2, agent: "dev",    priority: "high" },
+   286→  { id: "2-b2", content: "AdminLayout (사이드바+헤더+RBAC 네비) 작성", phase: 2, agent: "dev",  priority: "high" },
+   287→
+   288→  // Phase 3: CMS API + Kiosk Polling
+   289→  { id: "3-a1", content: "/api/admin/cms CRUD 구현",                phase: 3, agent: "dev",    priority: "high" },
+   290→  { id: "3-a2", content: "/api/cms (공개, 키오스크용) 구현",        phase: 3, agent: "dev",    priority: "high" },
+   291→  { id: "3-b1", content: "ETag 기반 조건부 요청 로직",              phase: 3, agent: "dev",    priority: "medium" },
+   292→  { id: "3-b2", content: "useCmsContent() 훅 작성",                 phase: 3, agent: "dev",    priority: "high" },
+   293→  { id: "3-b3", content: "Polling 인터벌 설정 로직",                phase: 3, agent: "dev",    priority: "medium" },
+   294→
+   295→  // Phase 4: Admin Dashboard UI
+   296→  { id: "4-1", content: "/admin 대시보드 홈 (통계 카드)",           phase: 4, agent: "dev",    priority: "high" },
+   297→  { id: "4-2", content: "/admin/cms 콘텐츠 관리 페이지",            phase: 4, agent: "dev",    priority: "high" },
+   298→  { id: "4-3", content: "/admin/books 도서 관리 페이지",            phase: 4, agent: "dev",    priority: "high" },
+   299→  { id: "4-4", content: "/admin/users 사용자 관리 페이지",          phase: 4, agent: "dev",    priority: "medium" },
+   300→  { id: "4-5", content: "/admin/notices 공지 관리 페이지",          phase: 4, agent: "dev",    priority: "medium" },
+   301→  { id: "4-6", content: "/admin/settings 시스템 설정 페이지",       phase: 4, agent: "dev",    priority: "medium" },
+   302→  { id: "4-7", content: "/admin/audit 감사 로그 페이지",            phase: 4, agent: "dev",    priority: "medium" },
+   303→  { id: "4-8", content: "/admin/admins 관리자 계정 관리 (super_admin)", phase: 4, agent: "dev", priority: "low" },
+   304→
+   305→  // Phase 5: Image Upload
+   306→  { id: "5-1", content: "/api/admin/cms/images 업로드 API 구현",    phase: 5, agent: "dev",    priority: "high" },
+   307→  { id: "5-2", content: "파일 크기·MIME 검증 + 에러 처리",         phase: 5, agent: "dev",    priority: "high" },
+   308→  { id: "5-3", content: "클라이언트 이미지 프리뷰 UI",             phase: 5, agent: "dev",    priority: "medium" },
+   309→
+   310→  // Phase 6: Statistics + Audit Log
+   311→  { id: "6-a1", content: "/api/admin/stats 엔드포인트 구현",        phase: 6, agent: "dev",    priority: "medium" },
+   312→  { id: "6-a2", content: "recharts 통계 차트 컴포넌트",             phase: 6, agent: "dev",    priority: "medium" },
+   313→  { id: "6-b1", content: "withAuditLog 래퍼 구현",                  phase: 6, agent: "dev",    priority: "high" },
+   314→  { id: "6-b2", content: "감사 로그 자동 기록 연결",                phase: 6, agent: "dev",    priority: "high" },
+   315→  { id: "6-b3", content: "감사 로그 조회/필터 UI",                  phase: 6, agent: "dev",    priority: "medium" },
+   316→
+   317→  // Phase 7: E2E 검증
+   318→  { id: "7-1", content: "로그인 플로우 E2E 검증",                   phase: 7, agent: "browser", priority: "high" },
+   319→  { id: "7-2", content: "CMS 편집 → 키오스크 반영 E2E 검증",       phase: 7, agent: "browser", priority: "high" },
+   320→  { id: "7-3", content: "RBAC 권한 차단 E2E 검증",                  phase: 7, agent: "browser", priority: "high" },
+   321→  { id: "7-4", content: "반응형 레이아웃 스냅샷 검증",             phase: 7, agent: "browser", priority: "medium" },
+   322→  { id: "7-5", content: "이미지 업로드 E2E 검증",                   phase: 7, agent: "browser", priority: "medium" },
+   323→  { id: "7-6", content: "감사 로그 기록 E2E 검증",                  phase: 7, agent: "browser", priority: "medium" },
+   324→];
+   325→```
+   326→
+   327→### 3.3 상태 전환 규칙
+   328→
+   329→기본 에이전트 설정의 규칙을 계승. 대시보드 확장 규칙:
+   330→
+   331→```
+   332→1. Phase N의 모든 Todo가 completed여야 Phase N+1의 Todo를 in_progress로 전환 가능
+   333→2. blockedBy가 지정된 Todo는 선행 Todo가 모두 completed여야 in_progress로 전환 가능
+   334→3. 브라우저 에이전트 Todo는 개발 에이전트가 해당 Phase 완료 후에만 in_progress로 전환
+   335→4. 오류로 인한 수정 시, 해당 Phase의 관련 Todo를 in_progress로 재설정 가능
+   336→```
+   337→
+   338→### 3.4 우선순위 기준 (대시보드 확장)
+   339→
+   340→| 우선순위 | 기준 | 대시보드 예시 |
+   341→|---|---|---|
+   342→| **high** | 인증/인가 차단, 데이터 무결성, 코어 플로우 차단 | JWT 발급 실패, CMS 저장 불가, RBAC 미적용 |
+   343→| **medium** | 기능 동작, UI 가시성, 규칙 준수 | 차트 미렌더링, 반응형 깨짐, 감사 로그 누락 |
+   344→| **low** | 관리 편의, 개선 사항, 한정적 영향 | 관리자 계정 관리 UI, 컬러 테마 조정 |
+   345→
+   346→---
+   347→
+   348→## 4. 서브에이전트 지침
+   349→
+   350→### 4.1 공통 지침 (대시보드 모든 서브에이전트)
+   351→
+   352→기본 에이전트 설정의 공통 지침(`6.1`)을 모두 계승. 추가 지침:
+   353→
+   354→```
+   355→1. Admin API Route는 반드시 /api/admin/* 경로에 위치
+   356→2. Admin 페이지는 반드시 /admin/* 경로에 위치 (app/admin/ 디렉토리)
+   357→3. 모든 관리자 API는 withAdminAuth 미들웨어로 보호
+   358→4. 모든 mutation(생성/수정/삭제)은 AuditLog 레코드 생성
+   359→5. CMS 콘텐츠 key는 CmsContent 테이블 key 형식 준수
+   360→   (예: "idle_title", "main_menu_subtitle", "loan_guide_text")
+   361→6. 키오스크 컴포넌트에서 CMS 콘텐츠 참조 시 useCmsContent() 훅 사용
+   362→7. 한국어 UI 텍스트 유지 (관리자 UI도 한국어)
+   363→8. 에러 응답은 공통 에러 형식 준수
+   364→   { error: { code: "ERROR_CODE", message: "...", details: {} } }
+   365→```
+   366→
+   367→### 4.2 개발 에이전트 추가 지침
+   368→
+   369→기본 에이전트 설정의 개발 에이전트 지침(`6.2`)을 계승. 대시보드 추가 지침:
+   370→
+   371→```
+   372→1. [인증] Admin API Route에 withAdminAuth 미들웨어 필수 적용
+   373→   - 예: export const GET = withAdminAuth(handler, 'content.read')
+   374→   - 인증 없는 공개 API는 /api/cms/* 경로 사용
+   375→
+   376→2. [RBAC] 권한이 필요한 엔드포인트에 requiredPermission 지정
+   377→   - super_admin: 모든 권한
+   378→   - admin: content.*, book.*, user.read, notice.*, settings.read
+   379→   - viewer: *.read 만 허용
+   380→
+   381→3. [감사 로그] 모든 mutation 핸들러에 withAuditLog 래퍼 적용
+   382→   - 예: export const PUT = withAuditLog(withAdminAuth(handler, 'content.update'))
+   383→   - 자동으로 AuditLog 테이블에 action, entity, entityId, changes 기록
+   384→
+   385→4. [CMS 키] CmsContent.key 네이밍 컨벤션
+   386→   - 형식: "{screen}_{element}" (snake_case)
+   387→   - 예시:
+   388→     * idle_title, idle_subtitle, idle_background_image
+   389→     * main_menu_subtitle, main_menu_help_text
+   390→     * loan_guide_title, loan_guide_text
+   391→     * return_complete_message
+   392→   - 신규 키 추가 시 반드시 시드 데이터에도 포함
+   393→
+   394→5. [키오스크 연동] 키오스크에서 CMS 콘텐츠 사용 시
+   395→   - useCmsContent("idle_title") 훅 호출
+   396→   - 훅이 /api/cms 엔드포인트에서 폴링으로 데이터 갱신
+   397→   - ETag 기반 조건부 요청으로 불필요한 전송 최소화
+   398→   - 직접 하드코딩 금지 (대체 텍스트만 기본값으로 허용)
+   399→
+   400→6. [API Route 구조] 파일 업로드를 제외한 모든 요청은 JSON
+   401→   - Content-Type: application/json
+   402→   - 이미지 업로드만 multipart/form-data 허용
+   403→
+   404→7. [Prisma] 트랜잭션이 필요한 mutation은 prisma.$transaction 사용
+   405→   - CMS 콘텐츠 bulk update
+   406→   - 관리자 계정 생성 (AdminUser + AdminRole 매핑)
+   407→   - 감사 로그 + 실제 mutation 동시 실행
+   408→
+   409→8. [shadcn/ui] 관리자 UI 컴포넌트는 shadcn/ui 우선 사용
+   410→   - DataTable: 데이터 목록 (정렬, 필터, 페이지네이션)
+   411→   - Form: 폼 입력 (react-hook-form + zod 검증)
+   412→   - Dialog: 모달 (삭제 확인, 상세 보기)
+   413→   - Card: 통계 카드, 정보 카드
+   414→   - Badge: 상태 표시
+   415→   - Tabs: 탭 전환 (CMS 카테고리 등)
+   416→   - Select: 드롭다운 (역할 선택 등)
+   417→   - Toast: 알림 (저장 성공, 에러)
+   418→   - Avatar: 관리자 프로필
+   419→
+   420→9. [recharts] 통계 차트 컴포넌트
+   421→   - LineChart: 대출/반납 일별 추이
+   422→   - BarChart: 카테고리별 도서 수
+   423→   - PieChart: 대출 상태 분포
+   424→   - AreaChart: 시간대별 이용량
+   425→   - 반응형: Container width 기반 auto-resize
+   426→```
+   427→
+   428→### 4.3 스타일링 에이전트 추가 지침
+   429→
+   430→기본 에이전트 설정의 스타일링 에이전트 지침(`6.3`)을 계승. 대시보드 추가 지침:
+   431→
+   432→```
+   433→1. [반응형 브레이크포인트] 관리자 대시보드 전용 브레이크포인트
+   434→   - 모바일: 375px ~ 767px (단 컬럼, 사이드바 숨김, 햄버거 메뉴)
+   435→   - 태블릿: 768px ~ 1023px (2 컬럼, 축소 사이드바)
+   436→   - 소형 데스크톱: 1024px ~ 1279px (사이드바 + 메인, 통계 카드 2열)
+   437→   - 대형 데스크톱: 1280px ~ 1919px (21" 모니터, 통계 카드 4열)
+   438→   - 풀 HD: 1920px+ (24" 모니터, 최대 너비 제한 1440px)
+   439→
+   440→2. [반응형 테스트 필수] 모든 페이지는 아해 4개 너비에서 레이아웃 확인
+   441→   - 375px (iPhone SE)
+   442→   - 768px (iPad)
+   443→   - 1024px (소형 노트북)
+   444→   - 1920px (24" 모니터)
+   445→
+   446→3. [AdminLayout 반응형]
+   447→   - 768px 미만: 사이드바 숨김, 햄버거 버튼으로 토글
+   448→   - 768px~1023px: 사이드바 축소 (아이콘만 표시)
+   449→   - 1024px+: 사이드바 확장 (아이콘 + 라벨)
+   450→
+   451→4. [shadcn/ui 테마] 관리자 대시보드 테마
+   452→   - 라이트 모드 기본 (다크 모드는 Phase 2에서 고려)
+   453→   - Primary: 도서관 브랜드 컬러 (ECO 초록 계열과 구분)
+   454→   - 차트 컬러: recharts 기본 팔레트 + 브랜드 컬러
+   455→
+   456→5. [차트 반응형]
+   457→   - recharts <ResponsiveContainer> 사용
+   458→   - 최소 너비: 300px (모바일)
+   459→   - 모바일에서는 범례(legend) 축소 또는 숨김
+   460→   - 태블릿 이상에서 툴팁(tooltip) 표시
+   461→
+   462→6. [DataTable 반응형]
+   463→   - 768px 미만: 카드 레이아웃으로 전환 (행 단위 카드)
+   464→   - 768px+: 테이블 레이아웃 유지
+   465→   - 페이지네이션: 모바일에서는 "더 보기" 버튼, 데스크톱에서는 페이지 번호
+   466→
+   467→7. [폼 반응형]
+   468→   - 입력 필드: 모바일에서는 전체 너비
+   469→   - 데스크톱에서는 라벨-입력 2컬럼 레이아웃
+   470→   - 제출 버튼: 모바일 하단 고정 (sticky)
+   471→
+   472→8. [Tailwind CSS 4] 문법 준수
+   473→   - @theme 지시문으로 커스텀 토큰 정의
+   474→   - CSS 변수 기반 컬러 토큰 사용
+   475→   - 관리자 전용 유틸리티 클래스는 .admin-* 접두사
+   476→```
+   477→
+   478→### 4.4 브라우저 에이전트 추가 지침
+   479→
+   480→기본 에이전트 설정의 브라우저 에이전트 지침(`6.4`)을 계승. 대시보드 추가 지침:
+   481→
+   482→```
+   483→1. [시작 경로] /admin 에서 시작 (비인증 상태 → 로그인 페이지 리다이렉트 확인)
+   484→
+   485→2. [로그인 플로우 E2E]
+   486→   a. /admin 접근 → 로그인 페이지 리다이렉트 확인
+   487→   b. 잘못된 자격증명 입력 → 에러 메시지 확인
+   488→   c. 올바른 자격증명 입력 → 대시보드 홈 리다이렉트 확인
+   489→   d. JWT 만료 상태에서 API 호출 → 401 응답 → 로그인 페이지 리다이렉트 확인
+   490→   e. 로그아웃 → 로그인 페이지 리다이렉트 확인
+   491→
+   492→3. [CMS 편집 → 키오스크 반영 E2E]
+   493→   a. /admin/cms 접근 → 콘텐츠 목록 로드 확인
+   494→   b. 대기 화면 제목("idle_title") 편집 → 저장
+   495→   c. 새 탭에서 / (키오스크) 열기 → 변경된 제목 반영 확인
+   496→   d. Polling 인터벌 대기 후 자동 갱신 확인
+   497→
+   498→4. [RBAC 권한 차단 E2E]
+   499→   a. viewer 역할로 로그인
+   500→   b. /admin/cms 접근 → 읽기 가능, 편집 버튼 비활성화 확인
+   501→   c. 편집 API 직접 호출 → 403 Forbidden 응답 확인
+   502→   d. /admin/admins 접근 → 접근 차단 또는 메뉴 숨김 확인
+   503→
+   504→5. [반응형 레이아웃 스냅샷 E2E]
+   505→   a. 375px 너비에서 /admin 열기 → 모바일 레이아웃 스냅샷
+   506→   b. 768px 너비에서 /admin 열기 → 태블릿 레이아웃 스냅샷
+   507→   c. 1024px 너비에서 /admin 열기 → 소형 데스크톱 스냅샷
+   508→   d. 1920px 너비에서 /admin 열기 → 풀 HD 스냅샷
+   509→   e. 각 너비에서 사이드바 동작 확인 (숨김/축소/확장)
+   510→
+   511→6. [이미지 업로드 E2E]
+   512→   a. /admin/cms 이미지 업로드 영역 확인
+   513→   b. 정상 이미지 (PNG, <5MB) 업로드 → 성공 확인
+   514→   c. 초과 이미지 (JPG, >5MB) 업로드 → 에러 메시지 확인
+   515→   d. 허용되지 않은 파일 (.txt) 업로드 → 에러 메시지 확인
+   516→
+   517→7. [감사 로그 기록 E2E]
+   518→   a. /admin/cms에서 콘텐츠 수정
+   519→   b. /admin/audit 접근 → 방금 수정한 내용의 AuditLog 레코드 확인
+   520→   c. 로그에 action, entity, entityId, adminEmail, timestamp 포함 확인
+   521→
+   522→8. [콘솔 오류 확인]
+   523→   - 모든 E2E 검증 후 브라우저 콘솔에 에러/경고 0건 확인
+   524→   - React hydration 미스매치 없음 확인
+   525→   - 네트워크 요청 실패 0건 확인
+   526→```
+   527→
+   528→### 4.5 에이전트별 금지 사항
+   529→
+   530→```
+   531→[개발 에이전트]
+   532→✗ /api/admin/* 이외의 경로에 관리자 API 배치
+   533→✗ withAdminAuth 없는 Admin API Route 작성
+   534→✗ AuditLog 기록 없는 mutation 핸들러 작성
+   535→✗ 키오스크 컴포넌트에 CMS 콘텐츠 하드코딩
+   536→✗ CmsContent.key에 camelCase 또는 한국어 사용
+   537→✗ 파일 업로드 시 /public/uploads/cms/ 이외 경로 사용
+   538→
+   539→[스타일링 에이전트]
+   540→✗ 키오스크 프레임 (.kiosk-frame) 스타일 수정
+   541→✗ ECO 색상 팔레트를 관리자 UI에 적용
+   542→✗ 375px 미만 너비 미고려
+   543→✗ shadcn/ui 컴포넌트 구조 임의 변경
+   544→✗ recharts 없이 자체 차트 구현
+   545→
+   546→[브라우저 에이전트]
+   547→✗ 키오스크 코어 플로우(대출/반납) 생략
+   548→✗ 관리자 자격증명을 소스코드에 하드코딩
+   549→✗ 1920px 반응형 검증 생략
+   550→✗ 감사 로그 기록 확인 생략
+   551→```
+   552→
+   553→---
+   554→
+   555→## 5. 디버깅 가이드
+   556→
+   557→### 5.1 대시보드 특화 오류 대응
+   558→
+   559→| 오류 | 원인 | 대응 | 담당 에이전트 |
+   560→|---|---|---|---|
+   561→| **JWT token expired** | JWT 만료 (기본 8시간) | 1. `/api/admin/auth/login` 재호출로 갱신<br>2. 클라이언트에서 401 감지 시 자동 리다이렉트<br>3. JWT_EXPIRES_IN 환경변수 확인 | 개발 |
+   562→| **RBAC permission denied** | 역할에 권한 없음 | 1. AdminRole.permissions 필드 확인<br>2. withAdminAuth의 requiredPermission 파라미터 확인<br>3. super_admin으로 로그인 후 권한 재확인 | 개발 |
+   563→| **CMS content not reflecting** | 키오스크에 변경 미반영 | 1. Polling 인터벌 확인 (기본 30초)<br>2. ETag 응답 헤더 확인 (304 vs 200)<br>3. /api/cms 응답 데이터 확인<br>4. useCmsContent() 훅 마운트 상태 확인<br>5. 브라우저 캐시 강제 갱신 (Ctrl+Shift+R) | 개발 |
+   564→| **Image upload fail — file size** | 파일 크기 초과 (최대 5MB) | 1. 클라이언트에서 파일 크기 사전 검증<br>2. MAX_UPLOAD_SIZE 환경변수 확인<br>3. 서버에서 Content-Length 확인 | 개발 |
+   565→| **Image upload fail — MIME type** | 허용되지 않은 파일 형식 | 1. ALLOWED_MIME_TYPES 확인 (image/jpeg, image/png, image/webp, image/svg+xml)<br>2. 파일 확장자와 실제 MIME 일치 확인 | 개발 |
+   566→| **Audit log missing** | withAuditLog 래퍼 미적용 | 1. mutation 핸들러에 withAuditLog 적용 여부 확인<br>2. withAuditLog 내부에서 트랜잭션 롤백 시 AuditLog도 롤백되는지 확인<br>3. prisma.auditLog.create 호출 확인 | 개발 |
+   567→| **Admin page blank** | 인증 미완료 또는 컴포넌트 오류 | 1. JWT localStorage 존재 확인<br>2. 브라우저 콘솔 React 에러 확인<br>3. AdminLayout 렌더링 조건 확인 | 개발 |
+   568→| **Sidebar navigation broken** | RBAC 필터링 오류 | 1. 사용자 역할의 permissions 확인<br>2. 메뉴 항목의 requiredPermission 확인<br>3. AdminLayout 내 네비게이션 필터 로직 확인 | 개발 |
+   569→| **Chart not rendering** | recharts 데이터 형식 오류 | 1. API 응답 데이터 구조 확인<br>2. recharts 컴포넌트 data prop 형식 확인<br>3. ResponsiveContainer 높이 설정 확인<br>4. 데이터 빈 배열 시 빈 상태 UI 확인 | 스타일링 |
+   570→| **Responsive layout broken** | 브레이크포인트 누락 | 1. Tailwind 반응형 클래스(sm/md/lg/xl/2xl) 확인<br>2. 지정 너비(375/768/1024/1920)에서 렌더링 확인<br>3. AdminLayout 사이드바 상태 확인 | 스타일링 |
+   571→
+   572→### 5.2 인증/인가 디버깅 순서
+   573→
+   574→```
+   575→1. 브라우저 localStorage에서 JWT 존재 확인
+   576→   localStorage.getItem('admin_token')
+   577→
+   578→2. JWT 디코딩으로 만료 시간 확인
+   579→   // jwt.io에서 수동 디코딩 또는
+   580→   JSON.parse(atob(token.split('.')[1]))
+   581→
+   582→3. /api/admin/auth/me 호출로 토큰 유효성 확인
+   583→   curl -H "Authorization: Bearer {token}" http://localhost:3000/api/admin/auth/me
+   584→
+   585→4. AdminUser 레코드 확인
+   586→   npx prisma studio → AdminUser 테이블
+   587→
+   588→5. AdminRole.permissions 확인
+   589→   npx prisma studio → AdminRole 테이블
+   590→
+   591→6. withAdminAuth 미들웨어 동작 확인
+   592→   - 콘솔에 디버그 로그 추가
+   593→   - requiredPermission 파라미터 확인
+   594→```
+   595→
+   596→### 5.3 CMS 동기화 디버깅 순서
+   597→
+   598→```
+   599→1. 관리자 대시보드에서 CMS 편집 → 저장 성공 확인
+   600→
+   601→2. /api/cms 엔드포인트 직접 호출로 데이터 확인
+   602→   curl http://localhost:3000/api/cms
+   603→
+   604→3. ETag 응답 헤더 확인
+   605→   curl -I http://localhost:3000/api/cms
+   606→   # ETag: "..." 헤더 존재 확인
+   607→
+   608→4. 조건부 요청 (If-None-Match) 테스트
+   609→   curl -H "If-None-Match: {etag}" http://localhost:3000/api/cms
+   610→   # 304 Not Modified 응답 확인
+   611→
+   612→5. useCmsContent() 훅 폴링 동작 확인
+   613→   - 브라우저 Network 탭에서 /api/cms 요청 간격 확인
+   614→   - 기본 인터벌: 30초 (KioskSetting에서 설정 가능)
+   615→
+   616→6. 키오스크 화면에서 변경 내용 반영 확인
+   617→   - 강제 갱신: /api/cms?nocache=1
+   618→   - 키오스크 컴포넌트 remount: 화면 전환 후 복귀
+   619→```
+   620→
+   621→### 5.4 감사 로그 디버깅 순서
+   622→
+   623→```
+   624→1. /api/admin/audit-log 호출로 최근 로그 확인
+   625→   curl -H "Authorization: Bearer {token}" \
+   626→     http://localhost:3000/api/admin/audit-log?limit=10
+   627→
+   628→2. 특정 mutation 후 AuditLog 레코드 존재 확인
+   629→   npx prisma studio → AuditLog 테이블
+   630→
+   631→3. withAuditLog 래퍼 적용 여부 확인
+   632→   - 핸들러 소스 코드에서 withAuditLog 호출 확인
+   633→   - 래퍼 순서: withAuditLog(withAdminAuth(handler, perm))
+   634→
+   635→4. AuditLog 필드 확인
+   636→   - action: "CREATE" | "UPDATE" | "DELETE"
+   637→   - entity: "CmsContent" | "Book" | "AdminUser" | ...
+   638→   - entityId: 변경 대상 ID
+   639→   - adminEmail: 실행자 이메일
+   640→   - changes: 변경 전후 값 (JSON)
+   641→   - timestamp: 실행 시간
+   642→```
+   643→
+   644→### 5.5 로그 확인 순서 (대시보드 확장)
+   645→
+   646→기본 에이전트 설정의 로그 확인 순서(`7.2`)를 확장:
+   647→
+   648→```
+   649→1. dev.log 최신 로그 읽기
+   650→2. 브라우저 콘솔 오류 확인 (특히 /admin/* 페이지)
+   651→3. API 응답 상태 코드 확인 (401/403에 주목)
+   652→4. JWT 토큰 유효성 확인 (만료, 서명 오류)
+   653→5. RBAC 권한 확인 (role.permissions 필드)
+   654→6. Prisma 쿼리 로그 확인 (log: ['query'] 변경)
+   655→7. AuditLog 최신 레코드 확인 (감사 추적)
+   656→8. /api/cms 응답 ETag 확인 (캐시 동작)
+   657→```
+   658→
+   659→---
+   660→
+   661→## 6. 배포 체크리스트
+   662→
+   663→### 6.1 대시보드 릴리즈 전 확인
+   664→
+   665→```markdown
+   666→□ 1. Admin 시드 데이터 생성
+   667→     - AdminUser: super_admin 1명, admin 1명, viewer 1명
+   668→     - AdminRole: 3개 역할과 권한 매핑
+   669→     - 시드 스크립트: npx tsx prisma/seed-admin.ts
+   670→
+   671→□ 2. CMS 기본값 DB 마이그레이션
+   672→     - CmsContent: 모든 화면 키별 기본값 INSERT
+   673→     - KioskSetting: polling 인터벌, 기본 설정값
+   674→     - 시드 스크립트: npx tsx prisma/seed-cms.ts
+   675→
+   676→□ 3. JWT Secret 환경변수 설정
+   677→     - JWT_SECRET: 32자 이상 랜덤 문자열
+   678→     - JWT_EXPIRES_IN: "8h" (운영 환경)
+   679→     - .env.production에 설정 확인
+   680→
+   681→□ 4. Admin 로그인 동작 확인
+   682→     - /admin → 로그인 페이지 리다이렉트
+   683→     - 올바른 자격증명 → 대시보드 홈 리다이렉트
+   684→     - 잘못된 자격증명 → 에러 메시지 표시
+   685→     - 로그아웃 → 로그인 페이지 리다이렉트
+   686→
+   687→□ 5. CMS 편집 → 키오스크 반영 확인
+   688→     - /admin/cms에서 콘텐츠 수정 → 저장
+   689→     - / (키오스크)에서 변경 내용 반영 확인
+   690→     - Polling 인터벌(30초) 내 자동 갱신 확인
+   691→     - ETag 기반 304 응답 동작 확인
+   692→
+   693→□ 6. RBAC 권한 적용 확인
+   694→     - super_admin: 모든 기능 접근 가능
+   695→     - admin: 콘텐츠/도서/공지/설정 편집 가능, 관리자 계정 관리 불가
+   696→     - viewer: 읽기 전용, 편집 버튼 비활성화
+   697→     - 권한 없는 API 직접 호출 → 403 응답
+   698→
+   699→□ 7. 반응형 레이아웃 확인 (모든 /admin/* 페이지)
+   700→     - 375px: 모바일 레이아웃 (사이드바 숨김)
+   701→     - 768px: 태블릿 레이아웃 (사이드바 축소)
+   702→     - 1024px: 소형 데스크톱 (사이드바 확장)
+   703→     - 1920px: 풀 HD (최적 레이아웃)
+   704→
+   705→□ 8. Audit 로깅 동작 확인
+   706→     - CMS 콘텐츠 수정 → AuditLog 레코드 생성
+   707→     - 도서 정보 수정 → AuditLog 레코드 생성
+   708→     - 관리자 계정 생성 → AuditLog 레코드 생성
+   709→     - /admin/audit에서 로그 조회 가능
+   710→
+   711→□ 9. 이미지 업로드 동작 확인
+   712→     - 정상 이미지 업로드 → /public/uploads/cms/ 저장
+   713→     - CmsImage DB 레코드 생성 확인
+   714→     - 파일 크기 초과 → 에러 메시지
+   715→     - 허용되지 않은 MIME → 에러 메시지
+   716→
+   717→□ 10. 통계 대시보드 동작 확인
+   718→     - 대출/반납 추이 차트 렌더링
+   719→     - 카테고리 분포 차트 렌더링
+   720→     - 데이터 없을 시 빈 상태 UI 표시
+   721→
+   722→□ 11. 콘솔 오류 0건 확인
+   723→     - /admin/* 모든 페이지에서 콘솔 에러/경고 0건
+   724→     - React hydration 미스매치 0건
+   725→     - 네트워크 요청 실패 0건
+   726→
+   727→□ 12. bun run lint 통과
+   728→     - ESLint 오류 0건
+   729→     - TypeScript 타입 오류 0건
+   730→
+   731→□ 13. worklog.md 최신 상태
+   732→     - 모든 Phase 작업 완료 기록
+   733→     - 워크로그에 배포 체크리스트 결과 기록
+   734→```
+   735→
+   736→### 6.2 환경변수 체크리스트
+   737→
+   738→```bash
+   739→# 필수 환경변수
+   740→JWT_SECRET=          # 32자 이상 랜덤 문자열 (운영 필수)
+   741→JWT_EXPIRES_IN=8h    # JWT 만료 시간 (기본 8시간)
+   742→MAX_UPLOAD_SIZE=5242880  # 최대 업로드 크기 (5MB, 바이트)
+   743→ALLOWED_MIME_TYPES=image/jpeg,image/png,image/webp,image/svg+xml
+   744→
+   745→# 선택 환경변수
+   746→CMS_POLLING_INTERVAL=30000  # 키오스크 폴링 인터벌 (ms, 기본 30초)
+   747→ADMIN_SESSION_TIMEOUT=28800 # 세션 타임아웃 (초, 기본 8시간)
+   748→UPLOAD_DIR=/public/uploads/cms  # 업로드 디렉토리 (기본값)
+   749→```
+   750→
+   751→### 6.3 알려진 제약 (대시보드 확장)
+   752→
+   753→```
+   754→1. JWT는 localStorage에 저장 (XSS 공격에 취약, httpOnly 쿠키 미사용)
+   755→   → 차기 개선: httpOnly + Secure 쿠키 전환 검토
+   756→
+   757→2. 이미지 업로드는 로컬 파일시스템에 저장 (클라우드 스토리지 미사용)
+   758→   → 차기 개선: S3/OSS 클라우드 스토리지 연동 검토
+   759→
+   760→3. RBAC 권한은 코드에 정적 정의 (동적 권한 할당 미지원)
+   761→   → 차기 개선: 관리자 UI에서 권한 편집 기능 검토
+   762→
+   763→4. CMS 폴링은 클라이언트 기반 (WebSocket 미사용)
+   764→   → 차기 개선: Server-Sent Events 또는 WebSocket 도입 검토
+   765→
+   766→5. 통계 데이터는 실시간 집계 (별도 집계 테이블 미사용)
+   767→   → 차기 개선: DashboardStat 테이블로 배치 집계 검토
+   768→
+   769→6. 다국어 미지원 (관리자 UI 한국어만)
+   770→   → 차기 개선: i18n 도입 검토
+   771→
+   772→7. 관리자 대시보드와 키오스크가 동일 포트(3000)에서 실행
+   773→   → 분리 불가, Next.js 라우팅으로 경로 분리만 가능
+   774→
+   775→8. 감사 로그 보관 기간 미설정 (무한 증가 가능)
+   776→   → 차기 개선: 보관 기간 설정 + 자동 삭제 검토
+   777→```
+   778→
+   779→### 6.4 롤백 절차
+   780→
+   781→```
+   782→1. DB 롤백
+   783→   npx prisma migrate resolve --rolled-back <migration_name>
+   784→
+   785→2. 시드 데이터 재적재
+   786→   npx tsx prisma/seed-admin.ts
+   787→   npx tsx prisma/seed-cms.ts
+   788→
+   789→3. 환경변수 확인
+   790→   - JWT_SECRET 변경 시 모든 관리자 재로그인 필요
+   791→   - CMS_POLLING_INTERVAL 변경 시 키오스크 새로고침 필요
+   792→
+   793→4. 업로드 파일 롤백
+   794→   - /public/uploads/cms/ 디렉토리 백업 복원
+   795→   - CmsImage 테이블 레코드와 파일 동기화 확인
+   796→```
+   797→
+   798→---
+   799→
+   800→> **문서 끝** — 본 문서는 `/doc/agent.md`와 함께 읽으세요. 공통 에이전트 지침, 워크로그 형식, 스킬 활용 가이드는 상위 문서를 참조합니다.
+   801→

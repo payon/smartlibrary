@@ -1,0 +1,502 @@
+   201→   201→   201→│       ├── AdminLayout.tsx                 #   레이아웃 셸 (사이드바+헤더+메인)
+   202→   202→   202→│       ├── AdminSidebar.tsx                #   사이드바 내비게이션
+   203→   203→   203→│       ├── AdminHeader.tsx                 #   상단 헤더 (사용자 정보, 로그아웃)
+   204→   204→   204→│       ├── AdminGuard.tsx                  #   인증 가드 (미인증 시 /admin/login 리다이렉트)
+   205→   205→   205→│       │
+   206→   206→   206→│       ├── dashboard/                      #   대시보드 홈
+   207→   207→   207→│       │   ├── StatsCards.tsx              #     오늘의 현황 4개 지표 카드
+   208→   208→   208→│       │   ├── HourlyChart.tsx             #     시간대별 대출·반납 그래프
+   209→   209→   209→│       │   ├── TopBooksList.tsx            #     인기 도서 TOP 10
+   210→   210→   210→│       │   └── RecentActivity.tsx          #     최근 활동 로그
+   211→   211→   211→│       │
+   212→   212→   212→│       ├── content/                        #   CMS 콘텐츠 관리
+   213→   213→   213→│       │   ├── ContentEditor.tsx           #     콘텐츠 편집 메인
+   214→   214→   214→│       │   ├── ContentGroup.tsx            #     화면별 콘텐츠 그룹 (Idle, Menu, Auth…)
+   215→   215→   215→│       │   ├── TextFieldEditor.tsx         #     텍스트 타입 편집기
+   216→   216→   216→│       │   ├── ColorFieldEditor.tsx        #     컬러 피커 편집기
+   217→   217→   217→│       │   ├── ImageFieldEditor.tsx        #     이미지 업로드/교체 편집기
+   218→   218→   218→│       │   ├── NumberFieldEditor.tsx       #     숫자 입력 편집기
+   219→   219→   219→│       │   ├── BooleanFieldEditor.tsx      #     토글 스위치 편집기
+   220→   220→   220→│       │   ├── JsonFieldEditor.tsx         #     JSON 에디터 (카테고리 목록 등)
+   221→   221→   221→│       │   └── ContentDiffViewer.tsx       #     변경 전후 diff 뷰어
+   222→   222→   222→│       │
+   223→   223→   223→│       ├── books/                          #   도서 관리
+   224→   224→   224→│       │   ├── BookTable.tsx               #     도서 목록 테이블
+   225→   225→   225→│       │   ├── BookForm.tsx                #     도서 등록/수정 폼
+   226→   226→   226→│       │   └── BookImport.tsx              #     CSV 일괄 가져오기
+   227→   227→   227→│       │
+   228→   228→   228→│       ├── users/                          #   이용자 관리
+   229→   229→   229→│       │   ├── UserTable.tsx               #     이용자 목록 테이블
+   230→   230→   230→│       │   └── UserForm.tsx                #     이용자 등록/수정 폼
+   231→   231→   231→│       │
+   232→   232→   232→│       ├── settings/                       #   시스템 설정
+   233→   233→   233→│       │   ├── BorrowRulesEditor.tsx       #     대출 규칙 편집
+   234→   234→   234→│       │   └── SystemSettingsPanel.tsx     #     시스템 설정 패널
+   235→   235→   235→│       │
+   236→   236→   236→│       ├── audit-log/                      #   감사 로그
+   237→   237→   237→│       │   ├── AuditLogTable.tsx           #     감사 로그 테이블
+   238→   238→   238→│       │   └── AuditLogDetail.tsx          #     감사 로그 상세 (diff 뷰)
+   239→   239→   239→│       │
+   240→   240→   240→│       └── shared/                         #   관리자 공통 컴포넌트
+   241→   241→   241→│           ├── AdminDataTable.tsx           #     공통 데이터 테이블 (정렬/필터/페이지)
+   242→   242→   242→│           ├── AdminFormLayout.tsx          #     공통 폼 레이아웃
+   243→   243→   243→│           ├── AdminConfirmDialog.tsx       #     확인 다이얼로그
+   244→   244→   244→│           └── AdminEmptyState.tsx          #     빈 상태 플레이스홀더
+   245→   245→   245→│
+   246→   246→   246→├── stores/
+   247→   247→   247→│   ├── useAppStore.ts                      # 기존 키오스크 스토어 (변경 없음)
+   248→   248→   248→│   ├── useAdminStore.ts                    # ★ 관리자 대시보드 스토어
+   249→   249→   249→│   └── useCmsStore.ts                      # ★ CMS 콘텐츠 스토어 (키오스크에서 사용)
+   250→   250→   250→│
+   251→   251→   251→├── lib/
+   252→   252→   252→│   ├── db.ts                               # 기존 Prisma 싱글톤 (공유)
+   253→   253→   253→│   ├── constants.ts                        # 기존 상수 (공유)
+   254→   254→   254→│   ├── security.ts                         # 기존 보안 모듈 (공유)
+   255→   255→   255→│   ├── utils.ts                            # 기존 cn() 유틸리티 (공유)
+   256→   256→   256→│   ├── tts.ts                              # 기존 TTS 모듈 (공유)
+   257→   257→   257→│   │
+   258→   258→   258→│   ├── admin-auth.ts                       # ★ 관리자 인증 모듈
+   259→   259→   259→│   ├── admin-rbac.ts                       # ★ RBAC 권한 체크 모듈
+   260→   260→   260→│   ├── cms.ts                              # ★ CMS 콘텐츠 헬퍼
+   261→   261→   261→│   ├── cms-schema.ts                       # ★ CMS 키 스키마 정의 (key→type→default)
+   262→   262→   262→│   ├── audit.ts                            # ★ 감사 로그 기록 헬퍼
+   263→   263→   263→│   └── admin-middleware.ts                 # ★ 관리자 API 공통 미들웨어
+   264→   264→   264→│
+   265→   265→   265→└── hooks/
+   266→   266→   266→    ├── use-toast.ts                        # 기존
+   267→   267→   267→    ├── use-pwa.ts                          # 기존
+   268→   268→   268→    ├── use-mobile.ts                       # 기존
+   269→   269→   269→    └── use-cms-polling.ts                  # ★ CMS 폴링 훅 (키오스크에서 사용)
+   270→   270→   270→```
+   271→   271→   271→
+   272→   272→   272→### 2.2 모듈 의존성 그래프
+   273→   273→   273→
+   274→   274→   274→```
+   275→   275→   275→┌─────────────────────────────────────────────────────────────────┐
+   276→   276→   276→│                      Page Layer (app/admin/)                    │
+   277→   277→   277→│  /admin/login    /admin    /admin/content   /admin/books  ...   │
+   278→   278→   278→└────────┬────────────┬────────────┬────────────┬─────────────────┘
+   279→   279→   279→         │            │            │            │
+   280→   280→   280→         ▼            ▼            ▼            ▼
+   281→   281→   281→┌─────────────────────────────────────────────────────────────────┐
+   282→   282→   282→│                    Component Layer (components/admin/)           │
+   283→   283→   283→│  AdminGuard  AdminLayout  ContentEditor  BookTable  UserTable  │
+   284→   284→   284→└────────┬────────────┬────────────┬────────────┬─────────────────┘
+   285→   285→   285→         │            │            │            │
+   286→   286→   286→         ▼            ▼            ▼            ▼
+   287→   287→   287→┌─────────────────────────────────────────────────────────────────┐
+   288→   288→   288→│                      Store Layer (stores/)                      │
+   289→   289→   289→│         useAdminStore (auth, sidebar, UI 상태)                  │
+   290→   290→   290→│         useCmsStore   (CMS 콘텐츠 캐시, 폴링 상태)              │
+   291→   291→   291→└────────┬────────────────────────────────────────────────────────┘
+   292→   292→   292→         │
+   293→   293→   293→         ▼
+   294→   294→   294→┌─────────────────────────────────────────────────────────────────┐
+   295→   295→   295→│                      Lib Layer (lib/)                           │
+   296→   296→   296→│  admin-auth.ts  admin-rbac.ts  cms.ts  cms-schema.ts  audit.ts │
+   297→   297→   297→└────────┬────────────────────────────────────────────────────────┘
+   298→   298→   298→         │
+   299→   299→   299→         ▼
+   300→   300→   300→┌─────────────────────────────────────────────────────────────────┐
+   301→   301→   301→│                      Data Layer (lib/db.ts)                     │
+   302→   302→   302→│              Prisma Client → SQLite (custom.db)                 │
+   303→   303→   303→└─────────────────────────────────────────────────────────────────┘
+   304→   304→   304→```
+   305→   305→   305→
+   306→   306→   306→### 2.3 기존 코드 영향 범위
+   307→   307→   307→
+   308→   308→   308→| 영역 | 변경 여부 | 설명 |
+   309→   309→   309→|------|:---------:|------|
+   310→   310→   310→| `src/app/layout.tsx` | ❌ | 루트 레이아웃 변경 없음 |
+   311→   311→   311→| `src/app/page.tsx` | ❌ | 키오스크 진입점 변경 없음 |
+   312→   312→   312→| `src/components/kiosk/*` | ⚠️ 최소 | CMS 값 하드코딩 → `useCmsStore()` 참조로 교체 |
+   313→   313→   313→| `src/stores/useAppStore.ts` | ❌ | 키오스크 스토어 변경 없음 |
+   314→   314→   314→| `src/lib/db.ts` | ❌ | Prisma 싱글톤 공유 |
+   315→   315→   315→| `prisma/schema.prisma` | ✅ | AdminUser, CmsContent, AuditLog 등 신규 모델 추가 |
+   316→   316→   316→| `src/components/ui/*` | ❌ | 기존 shadcn/ui 공유, 신규 추가만 |
+   317→   317→   317→
+   318→   318→   318→---
+   319→   319→   319→
+   320→   320→   320→## 3. 데이터 흐름 아키텍처
+   321→   321→   321→
+   322→   322→   322→### 3.1 CMS 콘텐츠 변경 흐름 (관리자 → 키오스크)
+   323→   323→   323→
+   324→   324→   324→```
+   325→   325→   325→┌───────────────────────────────────────────────────────────────────────────┐
+   326→   326→   326→│                        ADMIN DASHBOARD                                    │
+   327→   327→   327→│                                                                           │
+   328→   328→   328→│  ContentEditor.tsx                                                        │
+   329→   329→   329→│    │ ① 사용자가 "대기 화면 타이틀"을 "스마트 도서관" → "행복한 도서관" 변경  │
+   330→   330→   330→│    │ ② "저장" 버튼 클릭                                                   │
+   331→   331→   331→│    ▼                                                                      │
+   332→   332→   332→│  PATCH /api/admin/cms/idle.title_text                                     │
+   333→   333→   333→│    { value: "행복한 도서관" }                                              │
+   334→   334→   334→│    │                                                                      │
+   335→   335→   335→│    ▼ ③ 미들웨어 체인                                                       │
+   336→   336→   336→│  ┌─────────────────────┐                                                  │
+   337→   337→   337→│  │ admin-middleware.ts  │                                                  │
+   338→   338→   338→│  │  1. JWT 검증         │                                                  │
+   339→   339→   339→│  │  2. RBAC 권한 체크   │  → 403 if 권한 없음                              │
+   340→   340→   340→│  │  3. Zod 입력 검증    │  → 400 if 유효하지 않음                           │
+   341→   341→   341→│  └──────────┬──────────┘                                                  │
+   342→   342→   342→│             ▼                                                             │
+   343→   343→   343→│  ┌─────────────────────┐                                                  │
+   344→   344→   344→│  │ cms.ts (헬퍼)       │                                                  │
+   345→   345→   345→│  │  db.cmsContent.upsert({                                                │
+   346→   346→   346→│  │    key: "idle.title_text",                                             │
+   347→   347→   347→│  │    value: "행복한 도서관",                                              │
+   348→   348→   348→│  │    updatedBy: adminUser.id                                             │
+   349→   349→   349→│  │  })                                                                    │
+   350→   350→   350→│  └──────────┬──────────┘                                                  │
+   351→   351→   351→│             ▼                                                             │
+   352→   352→   352→│  ┌─────────────────────┐                                                  │
+   353→   353→   353→│  │ audit.ts (감사 로그) │                                                  │
+   354→   354→   354→│  │  db.auditLog.create({                                                  │
+   355→   355→   355→│  │    action: "UPDATE",                                                   │
+   356→   356→   356→│  │    entity: "CmsContent",                                               │
+   357→   357→   357→│  │    oldValue: "스마트 도서관",                                           │
+   358→   358→   358→│  │    newValue: "행복한 도서관"                                            │
+   359→   359→   359→│  │  })                                                                    │
+   360→   360→   360→│  └──────────┬──────────┘                                                  │
+   361→   361→   361→│             ▼                                                             │
+   362→   362→   362→│  ④ 응답: 200 OK { key, value, updatedAt }                                 │
+   363→   363→   363→└───────────────────────────────────────────────────────────────────────────┘
+   364→   364→   364→
+   365→   365→   365→                ║  CmsContent 테이블 업데이트 완료 (SQLite WAL)
+   366→   366→   366→                ║
+   367→   367→   367→
+   368→   368→   368→┌───────────────────────────────────────────────────────────────────────────┐
+   369→   369→   369→│                        KIOSK FRONTEND                                     │
+   370→   370→   370→│                                                                           │
+   371→   371→   371→│  ⑤ use-cms-polling.ts (3초 간격)                                         │
+   372→   372→   372→│    GET /api/cms/content                                                   │
+   373→   373→   373→│    Header: If-None-Match: <이전 ETag>                                     │
+   374→   374→   374→│    │                                                                      │
+   375→   375→   375→│    ├── 304 Not Modified → 변경 없음, 폴링 계속                             │
+   376→   376→   376→│    │                                                                      │
+   377→   377→   377→│    └── 200 OK + ETag: <새 ETag>                                          │
+   378→   378→   378→│         { "idle.title_text": "행복한 도서관", ... }                       │
+   379→   379→   379→│         │                                                                 │
+   380→   380→   380→│         ▼ ⑥                                                              │
+   381→   381→   381→│    useCmsStore.setState({                                                 │
+   382→   382→   382→│      content: { ...prev, "idle.title_text": "행복한 도서관" },            │
+   383→   383→   383→│      etag: <새 ETag>                                                      │
+   384→   384→   384→│    })                                                                     │
+   385→   385→   385→│         │                                                                 │
+   386→   386→   386→│         ▼ ⑦                                                              │
+   387→   387→   387→│    KioskIdleScreen.tsx                                                    │
+   388→   388→   388→│      const title = useCmsStore(s => s.content['idle.title_text'])         │
+   389→   389→   389→│      // → "행복한 도서관"  ← 자동 Re-render!                              │
+   390→   390→   390→└───────────────────────────────────────────────────────────────────────────┘
+   391→   391→   391→```
+   392→   392→   392→
+   393→   393→   393→### 3.2 대시보드 통계 데이터 흐름
+   394→   394→   394→
+   395→   395→   395→```
+   396→   396→   396→┌──────────────┐     GET /api/admin/dashboard     ┌───────────────────────┐
+   397→   397→   397→│  StatsCards  │ ────────────────────────────────► │  Dashboard API       │
+   398→   398→   398→│  HourlyChart │ ◄───────────────────────────────  │                      │
+   399→   399→   399→│  TopBooksList│     { today, hourly, top, recent} │  ① SimLoan 집계     │
+   400→   400→   400→└──────────────┘                                   │  ② Book 대출 횟수    │
+   401→   401→   401→                                                   │  ③ 최근 20건 조회    │
+   402→   402→   402→                                                   └──────────┬──────────┘
+   403→   403→   403→                                                              │ Prisma
+   404→   404→   404→                                                              ▼
+   405→   405→   405→                                                   ┌───────────────────────┐
+   406→   406→   406→                                                   │  SimLoan + Book +     │
+   407→   407→   407→                                                   │  SimUser (집계 쿼리)  │
+   408→   408→   408→                                                   └───────────────────────┘
+   409→   409→   409→```
+   410→   410→   410→
+   411→   411→   411→### 3.3 감사 로그 기록 흐름
+   412→   412→   412→
+   413→   413→   413→```
+   414→   414→   414→모든 Admin API 쓰기 작업 (POST/PATCH/DELETE)
+   415→   415→   415→  │
+   416→   416→   416→  ▼
+   417→   417→   417→admin-middleware.ts (after hook)
+   418→   418→   418→  │
+   419→   419→   419→  ▼
+   420→   420→   420→audit.ts → db.auditLog.create({
+   421→   421→   421→    action:    "UPDATE" | "CREATE" | "DELETE",
+   422→   422→   422→    entity:    "CmsContent" | "Book" | "SimUser" | "AdminUser" | ...,
+   423→   423→   423→    entityId:  "clxxxx...",
+   424→   424→   424→    oldValue:  JSON.stringify(before),
+   425→   425→   425→    newValue:  JSON.stringify(after),
+   426→   426→   426→    performedBy: adminUser.id,
+   427→   427→   427→    performedAt: new Date()
+   428→   428→   428→  })
+   429→   429→   429→```
+   430→   430→   430→
+   431→   431→   431→---
+   432→   432→   432→
+   433→   433→   433→## 4. 인증 아키텍처
+   434→   434→   434→
+   435→   435→   435→### 4.1 인증 흐름 다이어그램
+   436→   436→   436→
+   437→   437→   437→```
+   438→   438→   438→┌──────────────┐                                           ┌──────────────────┐
+   439→   439→   439→│  /admin/login│                                           │  AdminUser Table  │
+   440→   440→   440→│  (이메일 +   │                                           │  email            │
+   441→   441→   441→│   비밀번호    │                                           │  passwordHash     │
+   442→   442→   442→│   입력 폼)   │                                           │  role             │
+   443→   443→   443→└──────┬───────┘                                           │  isActive         │
+   444→   444→   444→       │ POST /api/admin/auth/login                        └────────┬─────────┘
+   445→   445→   445→       │ { email, password }                                        │
+   446→   446→   446→       ▼                                                            │
+   447→   447→   447→┌──────────────────────────────────────────────────────────────────┤
+   448→   448→   448→│  ① 이메일로 AdminUser 조회                                       │
+   449→   449→   449→│  ② bcrypt.compare(password, passwordHash) 검증                   │
+   450→   450→   450→│  ③ isActive === true 확인                                        │
+   451→   451→   451→│  ④ 로그인 실패 횟수 확인 (5회 초과 시 15분 잠금)                  │
+   452→   452→   452→│  ⑤ JWT Access Token + Refresh Token 발급                         │
+   453→   453→   453→│  ⑥ httpOnly 쿠키에 토큰 저장                                     │
+   454→   454→   454→│  ⑦ lastLoginAt 갱신                                               │
+   455→   455→   455→│  ⑧ AuditLog 기록 (LOGIN 이벤트)                                   │
+   456→   456→   456→└──────────────────────────────────────────────────────────────────┘
+   457→   457→   457→       │
+   458→   458→   458→       ▼ 302 Redirect → /admin
+   459→   459→   459→       Set-Cookie: admin_access_token=<jwt>; HttpOnly; Secure; SameSite=Strict; Path=/admin; Max-Age=900
+   460→   460→   460→       Set-Cookie: admin_refresh_token=<jwt>; HttpOnly; Secure; SameSite=Strict; Path=/api/admin/auth; Max-Age=604800
+   461→   461→   461→```
+   462→   462→   462→
+   463→   463→   463→### 4.2 JWT 토큰 구조
+   464→   464→   464→
+   465→   465→   465→```typescript
+   466→   466→   466→// Access Token Payload
+   467→   467→   467→interface AdminAccessTokenPayload {
+   468→   468→   468→  sub: string;        // AdminUser.id
+   469→   469→   469→  email: string;      // AdminUser.email
+   470→   470→   470→  role: AdminRole;    // 'super_admin' | 'admin' | 'operator'
+   471→   471→   471→  iat: number;        // 발급 시간
+   472→   472→   472→  exp: number;        // 만료 시간 (발급 + 15분)
+   473→   473→   473→}
+   474→   474→   474→
+   475→   475→   475→// Refresh Token Payload
+   476→   476→   476→interface AdminRefreshTokenPayload {
+   477→   477→   477→  sub: string;        // AdminUser.id
+   478→   478→   478→  type: 'refresh';
+   479→   479→   479→  iat: number;
+   480→   480→   480→  exp: number;        // 만료 시간 (발급 + 7일)
+   481→   481→   481→}
+   482→   482→   482→```
+   483→   483→   483→
+   484→   484→   484→### 4.3 세션 관리 전략
+   485→   485→   485→
+   486→   486→   486→```
+   487→   487→   487→┌───────────────────────────────────────────────────────────────┐
+   488→   488→   488→│                     세션 라이프사이클                          │
+   489→   489→   489→│                                                               │
+   490→   490→   490→│  [로그인]                                                     │
+   491→   491→   491→│    │  Access Token 발급 (15분)                                │
+   492→   492→   492→│    │  Refresh Token 발급 (7일)                                │
+   493→   493→   493→│    │  httpOnly 쿠키 2개 설정                                  │
+   494→   494→   494→│    ▼                                                          │
+   495→   495→   495→│  [API 요청]                                                   │
+   496→   496→   496→│    │  Authorization: Bearer <access_token>                    │
+   497→   497→   497→│    │  ├─ 유효 → 요청 처리                                     │
+   498→   498→   498→│    │  ├─ 만료 (401) → Refresh Token으로 자동 갱신              │
+   499→   499→   499→│    │  └─ 무효 → 401 → /admin/login 리다이렉트                 │
+   500→   500→   500→│    ▼                                                          │
+   501→   501→   501→│  [비활동 감지]                                                │
+   502→   502→   502→│    │  30분間 사용자 액션 없음                                  │
+   503→   503→   503→│    │  → 자동 로그아웃 → /admin/login                          │
+   504→   504→   504→│    ▼                                                          │
+   505→   505→   505→│  [명시적 로그아웃]                                             │
+   506→   506→   506→│       쿠키 삭제 + AuditLog 기록 (LOGOUT 이벤트)               │
+   507→   507→   507→└───────────────────────────────────────────────────────────────┘
+   508→   508→   508→```
+   509→   509→   509→
+   510→   510→   510→| 항목 | 값 | 설명 |
+   511→   511→   511→|------|-----|------|
+   512→   512→   512→| Access Token 수명 | **15분** | 짧은 수명으로 탈취 피해 최소화 |
+   513→   513→   513→| Refresh Token 수명 | **7일** | 장기 세션 유지 (자동 갱신) |
+   514→   514→   514→| 비활동 로그아웃 | **30분** | 마지막 API 요청 후 30분 경과 시 자동 로그아웃 |
+   515→   515→   515→| 비밀번호 정책 | 8자 이상, 대소문자+숫자+특수문자 | Zod 스키마 검증 |
+   516→   516→   516→| 로그인 실패 잠금 | 5회 연속 실패 시 15분 잠금 | brute-force 방어 |
+   517→   517→   517→| 쿠키 속성 | `HttpOnly; Secure; SameSite=Strict` | XSS·CSRF 방어 |
+   518→   518→   518→
+   519→   519→   519→### 4.4 RBAC 권한 체크 미들웨어
+   520→   520→   520→
+   521→   521→   521→```typescript
+   522→   522→   522→// src/lib/admin-rbac.ts
+   523→   523→   523→
+   524→   524→   524→type AdminRole = 'super_admin' | 'admin' | 'operator';
+   525→   525→   525→
+   526→   526→   526→// 리소스-액션 권한 매핑
+   527→   527→   527→const RBAC_TABLE: Record<AdminRole, Record<string, string[]>> = {
+   528→   528→   528→  super_admin: {
+   529→   529→   529→    // 모든 리소스에 모든 액션 허용
+   530→   530→   530→    cms:       ['read', 'write'],
+   531→   531→   531→    books:     ['read', 'write', 'delete'],
+   532→   532→   532→    users:     ['read', 'write', 'delete'],
+   533→   533→   533→    accounts:  ['read', 'write', 'delete'],
+   534→   534→   534→    audit:     ['read', 'export'],
+   535→   535→   535→    settings:  ['read', 'write'],
+   536→   536→   536→    dashboard: ['read'],
+   537→   537→   537→  },
+   538→   538→   538→  admin: {
+   539→   539→   539→    cms:       ['read', 'write'],
+   540→   540→   540→    books:     ['read', 'write', 'delete'],
+   541→   541→   541→    users:     ['read', 'write', 'delete'],
+   542→   542→   542→    accounts:  [],                   // 계정 관리 불가
+   543→   543→   543→    audit:     ['read'],             // 내보내기 불가
+   544→   544→   544→    settings:  ['read'],             // 쓰기 불가 (대출 규칙은 cms 채널로)
+   545→   545→   545→    dashboard: ['read'],
+   546→   546→   546→  },
+   547→   547→   547→  operator: {
+   548→   548→   548→    cms:       ['read'],             // 읽기 전용
+   549→   549→   549→    books:     ['read'],
+   550→   550→   550→    users:     ['read'],
+   551→   551→   551→    accounts:  [],
+   552→   552→   552→    audit:     [],
+   553→   553→   553→    settings:  ['read'],
+   554→   554→   554→    dashboard: ['read'],
+   555→   555→   555→  },
+   556→   556→   556→};
+   557→   557→   557→
+   558→   558→   558→export function checkPermission(
+   559→   559→   559→  role: AdminRole,
+   560→   560→   560→  resource: string,
+   561→   561→   561→  action: string
+   562→   562→   562→): boolean {
+   563→   563→   563→  return RBAC_TABLE[role]?.[resource]?.includes(action) ?? false;
+   564→   564→   564→}
+   565→   565→   565→```
+   566→   566→   566→
+   567→   567→   567→```typescript
+   568→   568→   568→// src/lib/admin-middleware.ts — API Route 공통 미들웨어
+   569→   569→   569→
+   570→   570→   570→import { verifyToken } from './admin-auth';
+   571→   571→   571→import { checkPermission } from './admin-rbac';
+   572→   572→   572→import { logAudit } from './audit';
+   573→   573→   573→
+   574→   574→   574→export async function withAdminAuth(
+   575→   575→   575→  request: NextRequest,
+   576→   576→   576→  handler: (req: NextRequest, admin: AdminUser) => Promise<NextResponse>,
+   577→   577→   577→  options: { resource: string; action: string }
+   578→   578→   578→): Promise<NextResponse> {
+   579→   579→   579→  // ① JWT 검증
+   580→   580→   580→  const token = request.cookies.get('admin_access_token')?.value;
+   581→   581→   581→  const payload = verifyToken(token);
+   582→   582→   582→  if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+   583→   583→   583→
+   584→   584→   584→  // ② AdminUser 조회 (isActive 확인)
+   585→   585→   585→  const admin = await db.adminUser.findUnique({ where: { id: payload.sub } });
+   586→   586→   586→  if (!admin || !admin.isActive) {
+   587→   587→   587→    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+   588→   588→   588→  }
+   589→   589→   589→
+   590→   590→   590→  // ③ RBAC 권한 체크
+   591→   591→   591→  if (!checkPermission(admin.role, options.resource, options.action)) {
+   592→   592→   592→    return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
+   593→   593→   593→  }
+   594→   594→   594→
+   595→   595→   595→  // ④ 핸들러 실행
+   596→   596→   596→  const response = await handler(request, admin);
+   597→   597→   597→
+   598→   598→   598→  // ⑤ 쓰기 작업 시 감사 로그 기록 (after hook)
+   599→   599→   599→  if (['POST', 'PATCH', 'DELETE'].includes(request.method)) {
+   600→   600→   600→    await logAudit(request, admin, response);
+   601→   601→   601→  }
+   602→   602→   602→
+   603→   603→   603→  return response;
+   604→   604→   604→}
+   605→   605→   605→```
+   606→   606→   606→
+   607→   607→   607→---
+   608→   608→   608→
+   609→   609→   609→## 5. 컴포넌트 아키텍처
+   610→   610→   610→
+   611→   611→   611→### 5.1 컴포넌트 계층 구조
+   612→   612→   612→
+   613→   613→   613→```
+   614→   614→   614→<AdminLayout>                                  ← /admin/layout.tsx
+   615→   615→   615→  ├── <AdminGuard>                             ← 인증 가드 (미인증 시 리다이렉트)
+   616→   616→   616→  │     │
+   617→   617→   617→  │     ├── <AdminSidebar>                     ← 좌측 사이드바 내비게이션
+   618→   618→   618→  │     │     ├── Logo + "스마트 도서관 관리자"
+   619→   619→   619→  │     │     ├── NavItem: 📊 대시보드        → /admin
+   620→   620→   620→  │     │     ├── NavItem: 🎨 콘텐츠 관리    → /admin/content
+   621→   621→   621→  │     │     ├── NavItem: 📚 도서 관리      → /admin/books
+   622→   622→   622→  │     │     ├── NavItem: 👥 이용자 관리    → /admin/users
+   623→   623→   623→  │     │     ├── NavItem: ⚙️ 설정           → /admin/settings
+   624→   624→   624→  │     │     ├── NavItem: 📋 감사 로그      → /admin/audit-log
+   625→   625→   625→  │     │     └── [super_admin 전용]
+   626→   626→   626→  │     │         └── NavItem: 🔑 계정 관리   → /admin/accounts
+   627→   627→   627→  │     │
+   628→   628→   628→  │     ├── <AdminHeader>                      ← 상단 헤더
+   629→   629→   629→  │     │     ├── Page title (동적)
+   630→   630→   630→  │     │     ├── Sync status indicator (● 연결됨 / ○ 연결 끊김)
+   631→   631→   631→  │     │     ├── Notification bell (선택)
+   632→   632→   632→  │     │     └── User avatar + name + role badge + "로그아웃"
+   633→   633→   633→  │     │
+   634→   634→   634→  │     └── <main> {children}                  ← 페이지 콘텐츠 영역
+   635→   635→   635→  │           │
+   636→   636→   636→  │           ├── /admin → <DashboardPage>
+   637→   637→   637→  │           │     ├── <StatsCards>
+   638→   638→   638→  │           │     │     ├── 금일 대출 건수
+   639→   639→   639→  │           │     │     ├── 금일 반납 건수
+   640→   640→   640→  │           │     │     ├── 현재 대출 중 권수
+   641→   641→   641→  │           │     │     └── 연체 건수
+   642→   642→   642→  │           │     ├── <HourlyChart> (recharts BarChart, 최근 7일)
+   643→   643→   643→  │           │     ├── <TopBooksList> (대출 횟수 TOP 10)
+   644→   644→   644→  │           │     └── <RecentActivity> (최근 20건 로그)
+   645→   645→   645→  │           │
+   646→   646→   646→  │           ├── /admin/content → <ContentPage>
+   647→   647→   647→  │           │     ├── <ContentGroup title="대기 화면">
+   648→   648→   648→  │           │     │     ├── <ImageFieldEditor key="idle.logo_image">
+   649→   649→   649→  │           │     │     ├── <TextFieldEditor  key="idle.title_text">
+   650→   650→   650→  │           │     │     ├── <ColorFieldEditor key="idle.bg_color">
+   651→   651→   651→  │           │     │     └── ...
+   652→   652→   652→  │           │     ├── <ContentGroup title="메인 메뉴">
+   653→   653→   653→  │           │     ├── <ContentGroup title="인증 화면">
+   654→   654→   654→  │           │     ├── <ContentGroup title="도서 선택 화면">
+   655→   655→   655→  │           │     ├── <ContentGroup title="대출 완료 화면">
+   656→   656→   656→  │           │     ├── <ContentGroup title="반납 완료 화면">
+   657→   657→   657→  │           │     └── <ContentGroup title="대출 규칙">
+   658→   658→   658→  │           │
+   659→   659→   659→  │           ├── /admin/books → <BooksPage>
+   660→   660→   660→  │           │     ├── <BookTable> (TanStack Table)
+   661→   661→   661→  │           │     │     ├── 검색 + 카테고리 필터
+   662→   662→   662→  │           │     │     ├── 정렬 (제목, 저자, 대출수, 등록일)
+   663→   663→   663→  │           │     │     └── 페이지네이션 (50건/페이지)
+   664→   664→   664→  │           │     ├── <BookForm> (등록/수정 다이얼로그)
+   665→   665→   665→  │           │     └── <BookImport> (CSV 업로드, P1)
+   666→   666→   666→  │           │
+   667→   667→   667→  │           ├── /admin/users → <UsersPage>
+   668→   668→   668→  │           │     ├── <UserTable>
+   669→   669→   669→  │           │     └── <UserForm>
+   670→   670→   670→  │           │
+   671→   671→   671→  │           ├── /admin/settings → <SettingsPage>
+   672→   672→   672→  │           │     ├── <BorrowRulesEditor>
+   673→   673→   673→  │           │     │     ├── 최대 대출 권수 (Slider: 1~20)
+   674→   674→   674→  │           │     │     ├── 대출 기간 (Slider: 1~90일)
+   675→   675→   675→  │           │     │     ├── 연체 배수 (Slider: 1.0~5.0)
+   676→   676→   676→  │           │     │     └── 연체 페널티 활성화 (Switch)
+   677→   677→   677→  │           │     └── <SystemSettingsPanel>
+   678→   678→   678→  │           │
+   679→   679→   679→  │           └── /admin/audit-log → <AuditLogPage>
+   680→   680→   680→  │                 ├── 필터 (기간, 작업자, 엔티티, 액션)
+   681→   681→   681→  │                 ├── <AuditLogTable>
+   682→   682→   682→  │                 └── <AuditLogDetail> (변경 전후 diff)
+   683→   683→   683→```
+   684→   684→   684→
+   685→   685→   685→### 5.2 AdminGuard 인증 가드
+   686→   686→   686→
+   687→   687→   687→```typescript
+   688→   688→   688→// src/components/admin/AdminGuard.tsx
+   689→   689→   689→
+   690→   690→   690→'use client';
+   691→   691→   691→
+   692→   692→   692→import { useEffect, useState } from 'react';
+   693→   693→   693→import { useRouter, usePathname } from 'next/navigation';
+   694→   694→   694→import { useAdminStore } from '@/stores/useAdminStore';
+   695→   695→   695→
+   696→   696→   696→export function AdminGuard({ children }: { children: React.ReactNode }) {
+   697→   697→   697→  const router = useRouter();
+   698→   698→   698→  const pathname = usePathname();
+   699→   699→   699→  const { admin, setAdmin } = useAdminStore();
+   700→   700→   700→  const [checking, setChecking] = useState(true);
+
+[showing lines 201-700 of 1705; use offset=701 with limit to continue reading]

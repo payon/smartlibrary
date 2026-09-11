@@ -1,0 +1,2002 @@
+     1→# 관리자 대시보드 프로그램 로직 문서
+     2→
+     3→> **버전**: v1.0.0  
+     4→> **작성일**: 2026-03-05  
+     5→> **상태**: Production-ready  
+     6→> **담당**: Dashboard Backend Team  
+     7→> **참조**: [PRD](./prd.md) · [API 명세](./api.md) · [DB 설계](./database.md) · [아키텍처](./architect.md) · [키오스크 프로그램 로직](../program.md)
+     8→
+     9→---
+    10→
+    11→## 목차
+    12→
+    13→1. [프로그램 흐름 개요](#1-프로그램-흐름-개요)
+    14→2. [관리자 인증 로직](#2-관리자-인증-로직)
+    15→3. [CMS 콘텐츠 관리 로직](#3-cms-콘텐츠-관리-로직)
+    16→4. [도서 관리 로직](#4-도서-관리-로직)
+    17→5. [사용자 관리 로직](#5-사용자-관리-로직)
+    18→6. [권한 관리 (RBAC) 로직](#6-권한-관리-rbac-로직)
+    19→7. [실시간 동기화 로직](#7-실시간-동기화-로직)
+    20→8. [감사 로그 로직](#8-감사-로그-로직)
+    21→9. [통계 대시보드 로직](#9-통계-대시보드-로직)
+    22→10. [초기화 로직](#10-초기화-로직)
+    23→11. [오류 처리 로직](#11-오류-처리-로직)
+    24→
+    25→---
+    26→
+    27→## 1. 프로그램 흐름 개요
+    28→
+    29→### 1.1 전체 관리자 대시보드 플로우 다이어그램
+    30→
+    31→```
+    32→┌──────────┐
+    33→│  START   │
+    34→└────┬─────┘
+    35→     │
+    36→     ▼
+    37→┌──────────┐  인증 실패   ┌──────────┐
+    38→│LOGIN PAGE│─────────────▶│에러 표시 │
+    39→└────┬─────┘              └──────────┘
+    40→     │ 인증 성공
+    41→     ▼
+    42→┌──────────────────────────────────────────────────────────────────────┐
+    43→│                      AdminLayout (인증된 세션)                       │
+    44→│  ┌──────────┐  ┌─────────────────────────────────────────────────┐  │
+    45→│  │ Sidebar  │  │  Main Content Area                              │  │
+    46→│  │          │  │                                                 │  │
+    47→│  │ 대시보드 │──▶│  오늘현황 + 시간대그래프 + 인기도서 + 최근활동   │  │
+    48→│  │ CMS관리  │──▶│  화면별 콘텐츠 편집 폼 (text/color/image/rule) │  │
+    49→│  │ 도서관리 │──▶│  Book 테이블 + CRUD + 이미지업로드 + CSV가져오기 │  │
+    50→│  │ 사용자   │──▶│  LibraryUser 테이블 + CRUD + PIN관리            │  │
+    51→│  │ 관리자   │──▶│  AdminUser 테이블 + 역할관리 (super_admin only) │  │
+    52→│  │ 감사로그 │──▶│  AuditLog 테이블 + 필터 + 날짜범위 + 내보내기   │  │
+    53→│  │ 공지관리 │──▶│  Notice CRUD + 시작/종료일시 + 우선순위          │  │
+    54→│  │ 설정     │──▶│  SystemSetting + DB백업 + 초기화                │  │
+    55→│  └──────────┘  └─────────────────────────────────────────────────┘  │
+    56→└──────────────────────────────────────────────────────────────────────┘
+    57→     │ 로그아웃
+    58→     ▼
+    59→┌──────────┐
+    60→│LOGIN PAGE│
+    61→└──────────┘
+    62→```
+    63→
+    64→### 1.2 요청 처리 공통 플로우
+    65→
+    66→모든 `/api/admin/*` 요청은 아래 공통 파이프라인을 거친다:
+    67→
+    68→```
+    69→Client Request
+    70→     │
+    71→     ▼
+    72→┌─────────────────┐
+    73→│ 1. JWT Verify   │──── 무효 ────▶ 401 Unauthorized
+    74→└────┬────────────┘
+    75→     │ 유효
+    76→     ▼
+    77→┌─────────────────┐
+    78→│ 2. Role Extract │
+    79→└────┬────────────┘
+    80→     │
+    81→     ▼
+    82→┌─────────────────┐
+    83→│ 3. Permission   │──── 거부 ────▶ 403 Forbidden
+    84→│    Check (RBAC) │
+    85→└────┬────────────┘
+    86→     │ 허용
+    87→     ▼
+    88→┌─────────────────┐
+    89→│ 4. Input Validate│──── 실패 ───▶ 400 Bad Request (Zod Error)
+    90→│    (Zod Schema) │
+    91→└────┬────────────┘
+    92→     │ 유효
+    93→     ▼
+    94→┌─────────────────┐
+    95→│ 5. Business     │
+    96→│    Logic        │
+    97→└────┬────────────┘
+    98→     │
+    99→     ▼
+   100→┌─────────────────┐
+   101→│ 6. Audit Log    │  (쓰기 작업만)
+   102→│    Write        │
+   103→└────┬────────────┘
+   104→     │
+   105→     ▼
+   106→┌─────────────────┐
+   107→│ 7. JSON Response│
+   108→└─────────────────┘
+   109→```
+   110→
+   111→### 1.3 공통 의사코드 (TypeScript)
+   112→
+   113→```typescript
+   114→// lib/admin-handler.ts
+   115→type AdminHandlerContext = {
+   116→  admin: AdminUser;          // JWT에서 추출한 관리자 정보
+   117→  permissions: string[];     // 역할에서 전개한 권한 목록
+   118→};
+   119→
+   120→type AdminHandler<TInput, TOutput> = (
+   121→  ctx: AdminHandlerContext,
+   122→  input: TInput
+   123→) => Promise<TOutput>;
+   124→
+   125→async function adminApiHandler<TInput, TOutput>(
+   126→  request: NextRequest,
+   127→  config: {
+   128→    requiredPermission: string;
+   129→    validateSchema: ZodSchema<TInput>;
+   130→    handler: AdminHandler<TInput, TOutput>;
+   131→    auditAction?: string;
+   132→    auditEntity?: string;
+   133→  }
+   134→): Promise<NextResponse> {
+   135→  // Step 1: JWT 검증
+   136→  const token = request.cookies.get('admin_access_token')?.value;
+   137→  if (!token) return NextResponse.json(
+   138→    { error: { code: 'UNAUTHORIZED', message: '토큰이 없습니다.' } },
+   139→    { status: 401 }
+   140→  );
+   141→
+   142→  const payload = verifyJwt(token);
+   143→  if (!payload) return NextResponse.json(
+   144→    { error: { code: 'UNAUTHORIZED', message: '토큰이 만료되거나 무효합니다.' } },
+   145→    { status: 401 }
+   146→  );
+   147→
+   148→  // Step 2: 관리자 조회 + 역할 추출
+   149→  const admin = await prisma.adminUser.findUnique({
+   150→    where: { id: payload.sub },
+   151→    include: { role: { include: { permissions: true } } }
+   152→  });
+   153→  if (!admin || !admin.isActive) return NextResponse.json(
+   154→    { error: { code: 'UNAUTHORIZED', message: '비활성화된 계정입니다.' } },
+   155→    { status: 401 }
+   156→  );
+   157→
+   158→  // Step 3: RBAC 권한 검사
+   159→  const permissions = admin.role.permissions.map(p => p.code);
+   160→  if (!permissions.includes(config.requiredPermission)) {
+   161→    return NextResponse.json(
+   162→      { error: { code: 'FORBIDDEN', message: '권한이 부족합니다.' } },
+   163→      { status: 403 }
+   164→    );
+   165→  }
+   166→
+   167→  // Step 4: 입력 검증 (Zod)
+   168→  const body = await request.json();
+   169→  const parsed = config.validateSchema.safeParse(body);
+   170→  if (!parsed.success) return NextResponse.json(
+   171→    { error: { code: 'VALIDATION_ERROR', message: '입력값이 유효하지 않습니다.', details: parsed.error.flatten() } },
+   172→    { status: 400 }
+   173→  );
+   174→
+   175→  // Step 5: 비즈니스 로직 실행
+   176→  const ctx: AdminHandlerContext = { admin, permissions };
+   177→  const result = await config.handler(ctx, parsed.data);
+   178→
+   179→  // Step 6: 감사 로그 (쓰기 작업만)
+   180→  if (config.auditAction) {
+   181→    await writeAuditLog({
+   182→      action: config.auditAction,
+   183→      entity: config.auditEntity ?? 'Unknown',
+   184→      entityId: result.id,
+   185→      oldValue: result.oldValue ?? null,
+   186→      newValue: result.newValue ?? null,
+   187→      performedBy: admin.id,
+   188→    });
+   189→  }
+   190→
+   191→  // Step 7: 응답
+   192→  return NextResponse.json({ data: result.data }, { status: result.status ?? 200 });
+   193→}
+   194→```
+   195→
+   196→---
+   197→
+   198→## 2. 관리자 인증 로직
+   199→
+   200→### 2.1 로그인 플로우
+   201→
+   202→```
+   203→Client                              Server
+   204→  │                                   │
+   205→  │  POST /api/admin/auth/login       │
+   206→  │  { email, password }              │
+   207→  │──────────────────────────────────▶│
+   208→  │                                   │
+   209→  │                          ┌────────┴────────┐
+   210→  │                          │ 1. 이메일로      │
+   211→  │                          │    AdminUser     │
+   212→  │                          │    조회          │
+   213→  │                          └────────┬────────┘
+   214→  │                                   │
+   215→  │                          ┌────────┴────────┐
+   216→  │                          │ 2. 계정 존재?    │
+   217→  │                          │    isActive?     │
+   218→  │                          │    잠금 상태?    │
+   219→  │                          └────────┬────────┘
+   220→  │                          No/비활성/잠금     │
+   221→  │                          ──────────────────▶ 401 (동일 메시지로 정보 노출 방지)
+   222→  │                                   │ Yes
+   223→  │                          ┌────────┴────────┐
+   224→  │                          │ 3. bcrypt compare│
+   225→  │                          │    (password,   │
+   226→  │                          │     passwordHash)│
+   227→  │                          └────────┬────────┘
+   228→  │                          불일치             │
+   229→  │                          ──────────────────▶ loginFailCount++ → 5회 초과 시 15분 잠금 → 401
+   230→  │                                   │ 일치
+   231→  │                          ┌────────┴────────┐
+   232→  │                          │ 4. JWT 생성      │
+   233→  │                          │   access: 15분   │
+   234→  │                          │   refresh: 7일   │
+   235→  │                          └────────┬────────┘
+   236→  │                                   │
+   237→  │                          ┌────────┴────────┐
+   238→  │                          │ 5. httpOnly      │
+   239→  │                          │    쿠키 설정     │
+   240→  │                          └────────┬────────┘
+   241→  │                                   │
+   242→  │  Set-Cookie: admin_access_token   │
+   243→  │  Set-Cookie: admin_refresh_token  │
+   244→  │  { user, role, permissions }      │
+   245→  │◀──────────────────────────────────│
+   246→  │                                   │
+   247→```
+   248→
+   249→#### 2.1.1 로그인 의사코드
+   250→
+   251→```typescript
+   252→// app/api/admin/auth/login/route.ts
+   253→async function handleLogin(request: NextRequest): Promise<NextResponse> {
+   254→  const { email, password } = LoginSchema.parse(await request.json());
+   255→
+   256→  // 1. 이메일로 관리자 조회
+   257→  const admin = await prisma.adminUser.findUnique({
+   258→    where: { email },
+   259→    include: { role: true }
+   260→  });
+   261→
+   262→  // 2. 계정 존재 + 활성 + 잠금 상태 확인
+   263→  const LOGIN_FAIL_MESSAGE = '이메일 또는 비밀번호가 일치하지 않습니다.';
+   264→  if (!admin || !admin.isActive) {
+   265→    return errorResponse(401, 'AUTH_FAILED', LOGIN_FAIL_MESSAGE);
+   266→  }
+   267→
+   268→  // 잠금 확인 (5회 연속 실패 → 15분 잠금)
+   269→  if (admin.lockedUntil && admin.lockedUntil > new Date()) {
+   270→    return errorResponse(401, 'ACCOUNT_LOCKED', '계정이 잠겼습니다. 잠시 후 다시 시도하세요.');
+   271→  }
+   272→
+   273→  // 3. bcrypt 비밀번호 비교
+   274→  const isMatch = await bcrypt.compare(password, admin.passwordHash);
+   275→  if (!isMatch) {
+   276→    // 실패 횟수 증가
+   277→    const newFailCount = admin.loginFailCount + 1;
+   278→    const lockUpdate = newFailCount >= 5
+   279→      ? { loginFailCount: newFailCount, lockedUntil: addMinutes(new Date(), 15) }
+   280→      : { loginFailCount: newFailCount };
+   281→
+   282→    await prisma.adminUser.update({
+   283→      where: { id: admin.id },
+   284→      data: lockUpdate
+   285→    });
+   286→
+   287→    await writeAuditLog({
+   288→      action: 'LOGIN_FAILED',
+   289→      entity: 'AdminUser',
+   290→      entityId: admin.id,
+   291→      performedBy: admin.id,
+   292→    });
+   293→
+   294→    return errorResponse(401, 'AUTH_FAILED', LOGIN_FAIL_MESSAGE);
+   295→  }
+   296→
+   297→  // 4. JWT 생성
+   298→  const accessToken = signJwt(
+   299→    { sub: admin.id, role: admin.role.code, permissions: admin.role.permissions },
+   300→    { expiresIn: '15m' }
+   301→  );
+   302→  const refreshToken = signJwt(
+   303→    { sub: admin.id, type: 'refresh' },
+   304→    { expiresIn: '7d' }
+   305→  );
+   306→
+   307→  // 5. 실패 횟수 초기화 + 마지막 로그인 시간 갱신
+   308→  await prisma.adminUser.update({
+   309→    where: { id: admin.id },
+   310→    data: {
+   311→      loginFailCount: 0,
+   312→      lockedUntil: null,
+   313→      lastLoginAt: new Date(),
+   314→      refreshTokenHash: hashToken(refreshToken), // refresh token 저장 (순환 검증용)
+   315→    }
+   316→  });
+   317→
+   318→  // 6. 감사 로그
+   319→  await writeAuditLog({
+   320→    action: 'LOGIN',
+   321→    entity: 'AdminUser',
+   322→    entityId: admin.id,
+   323→    newValue: { lastLoginAt: new Date().toISOString() },
+   324→    performedBy: admin.id,
+   325→  });
+   326→
+   327→  // 7. httpOnly 쿠키 설정 + 응답
+   328→  const response = NextResponse.json({
+   329→    data: {
+   330→      user: { id: admin.id, name: admin.name, email: admin.email },
+   331→      role: admin.role.code,
+   332→      permissions: admin.role.permissions.map(p => p.code),
+   333→    }
+   334→  });
+   335→
+   336→  response.cookies.set('admin_access_token', accessToken, {
+   337→    httpOnly: true,
+   338→    secure: process.env.NODE_ENV === 'production',
+   339→    sameSite: 'lax',
+   340→    path: '/',
+   341→    maxAge: 15 * 60, // 15분
+   342→  });
+   343→
+   344→  response.cookies.set('admin_refresh_token', refreshToken, {
+   345→    httpOnly: true,
+   346→    secure: process.env.NODE_ENV === 'production',
+   347→    sameSite: 'lax',
+   348→    path: '/api/admin/auth/refresh', // refresh 엔드포인트에서만 전송
+   349→    maxAge: 7 * 24 * 60 * 60, // 7일
+   350→  });
+   351→
+   352→  return response;
+   353→}
+   354→```
+   355→
+   356→#### 2.1.2 Zod 검증 스키마
+   357→
+   358→```typescript
+   359→const LoginSchema = z.object({
+   360→  email: z.string().email('유효한 이메일 주소를 입력하세요.'),
+   361→  password: z.string().min(8, '비밀번호는 8자 이상이어야 합니다.'),
+   362→});
+   363→```
+   364→
+   365→### 2.2 세션 검증 미들웨어
+   366→
+   367→모든 `/api/admin/*` 요청에 대해 JWT를 검증하고 관리자 정보를 주입하는 미들웨어.
+   368→
+   369→```typescript
+   370→// middleware.ts (Next.js middleware)
+   371→export async function middleware(request: NextRequest) {
+   372→  // 관리자 API 경로만 처리
+   373→  if (!request.nextUrl.pathname.startsWith('/api/admin/')) {
+   374→    return NextResponse.next();
+   375→  }
+   376→
+   377→  // 로그인·리프레시 엔드포인트는 제외
+   378→  if (
+   379→    request.nextUrl.pathname === '/api/admin/auth/login' ||
+   380→    request.nextUrl.pathname === '/api/admin/auth/refresh'
+   381→  ) {
+   382→    return NextResponse.next();
+   383→  }
+   384→
+   385→  // Step 1: access token 추출
+   386→  const accessToken = request.cookies.get('admin_access_token')?.value;
+   387→  if (!accessToken) {
+   388→    return NextResponse.json(
+   389→      { error: { code: 'UNAUTHORIZED', message: '인증이 필요합니다.' } },
+   390→      { status: 401 }
+   391→    );
+   392→  }
+   393→
+   394→  // Step 2: JWT 검증
+   395→  const payload = verifyJwt(accessToken);
+   396→  if (!payload) {
+   397→    return NextResponse.json(
+   398→      { error: { code: 'TOKEN_EXPIRED', message: '액세스 토큰이 만료되었습니다.' } },
+   399→      { status: 401 }
+   400→    );
+   401→  }
+   402→
+   403→  // Step 3: 관리자 활성 상태 확인
+   404→  const admin = await prisma.adminUser.findUnique({
+   405→    where: { id: payload.sub },
+   406→    select: { id: true, isActive: true, role: { include: { permissions: true } } }
+   407→  });
+   408→
+   409→  if (!admin || !admin.isActive) {
+   410→    return NextResponse.json(
+   411→      { error: { code: 'UNAUTHORIZED', message: '비활성화된 계정입니다.' } },
+   412→      { status: 401 }
+   413→    );
+   414→  }
+   415→
+   416→  // Step 4: 요청 헤더에 관리자 정보 주입 (다운스트림 핸들러에서 사용)
+   417→  const requestHeaders = new Headers(request.headers);
+   418→  requestHeaders.set('x-admin-id', admin.id);
+   419→  requestHeaders.set('x-admin-role', admin.role.code);
+   420→  requestHeaders.set('x-admin-permissions', JSON.stringify(admin.role.permissions.map(p => p.code)));
+   421→
+   422→  return NextResponse.next({
+   423→    request: { headers: requestHeaders }
+   424→  });
+   425→}
+   426→
+   427→export const config = {
+   428→  matcher: ['/api/admin/:path*'],
+   429→};
+   430→```
+   431→
+   432→### 2.3 토큰 갱신 (Refresh) 플로우
+   433→
+   434→```
+   435→Client                                     Server
+   436→  │                                          │
+   437→  │  API 호출 → 401 (TOKEN_EXPIRED)          │
+   438→  │◀─────────────────────────────────────────│
+   439→  │                                          │
+   440→  │  POST /api/admin/auth/refresh            │
+   441→  │  Cookie: admin_refresh_token=xxx         │
+   442→  │────────────────────────────────────────▶ │
+   443→  │                                          │
+   444→  │                                 ┌────────┴────────┐
+   445→  │                                 │ 1. refresh token │
+   446→  │                                 │    검증          │
+   447→  │                                 └────────┬────────┘
+   448→  │                                 무효     │ 유효
+   449→  │                                 ─────────▶ 401 → 강제 로그아웃
+   450→  │                                          │
+   451→  │                                 ┌────────┴────────┐
+   452→  │                                 │ 2. DB의 해시와   │
+   453→  │                                 │    일치 확인     │
+   454→  │                                 │    (순환 방지)   │
+   455→  │                                 └────────┬────────┘
+   456→  │                                          │
+   457→  │                                 ┌────────┴────────┐
+   458→  │                                 │ 3. 새 access     │
+   459→  │                                 │    token 생성    │
+   460→  │                                 │    (15분)        │
+   461→  │                                 └────────┬────────┘
+   462→  │                                          │
+   463→  │  Set-Cookie: admin_access_token (new)    │
+   464→  │  { success: true }                       │
+   465→  │◀─────────────────────────────────────────│
+   466→  │                                          │
+   467→  │  원래 API 재시도                         │
+   468→  │────────────────────────────────────────▶ │
+   469→  │                                          │
+   470→```
+   471→
+   472→#### 2.3.1 토큰 갱신 의사코드
+   473→
+   474→```typescript
+   475→// app/api/admin/auth/refresh/route.ts
+   476→async function handleRefresh(request: NextRequest): Promise<NextResponse> {
+   477→  const refreshToken = request.cookies.get('admin_refresh_token')?.value;
+   478→  if (!refreshToken) {
+   479→    return errorResponse(401, 'NO_REFRESH_TOKEN', '리프레시 토큰이 없습니다.');
+   480→  }
+   481→
+   482→  // 1. JWT 검증
+   483→  const payload = verifyJwt(refreshToken, { allowExpired: false });
+   484→  if (!payload || payload.type !== 'refresh') {
+   485→    return errorResponse(401, 'INVALID_REFRESH_TOKEN', '유효하지 않은 리프레시 토큰입니다.');
+   486→  }
+   487→
+   488→  // 2. DB에 저장된 해시와 일치 확인 (토큰 재사용 공격 방지)
+   489→  const admin = await prisma.adminUser.findUnique({
+   490→    where: { id: payload.sub },
+   491→    select: { id: true, isActive: true, refreshTokenHash: true, role: true }
+   492→  });
+   493→
+   494→  if (!admin || !admin.isActive || admin.refreshTokenHash !== hashToken(refreshToken)) {
+   495→    // 의심스러운 재사용 → 모든 토큰 무효화
+   496→    await prisma.adminUser.update({
+   497→      where: { id: payload.sub },
+   498→      data: { refreshTokenHash: null }
+   499→    });
+   500→    return errorResponse(401, 'TOKEN_REUSED', '토큰이 무효화되었습니다. 다시 로그인하세요.');
+   501→  }
+   502→
+   503→  // 3. 새 access token 생성
+   504→  const newAccessToken = signJwt(
+   505→    { sub: admin.id, role: admin.role.code },
+   506→    { expiresIn: '15m' }
+   507→  );
+   508→
+   509→  // 4. 쿠키 설정
+   510→  const response = NextResponse.json({ success: true });
+   511→  response.cookies.set('admin_access_token', newAccessToken, {
+   512→    httpOnly: true,
+   513→    secure: process.env.NODE_ENV === 'production',
+   514→    sameSite: 'lax',
+   515→    path: '/',
+   516→    maxAge: 15 * 60,
+   517→  });
+   518→
+   519→  return response;
+   520→}
+   521→```
+   522→
+   523→#### 2.3.2 클라이언트 측 자동 갱신 인터셉터
+   524→
+   525→```typescript
+   526→// lib/admin-fetch.ts
+   527→let isRefreshing = false;
+   528→let pendingRequests: Array<() => void> = [];
+   529→
+   530→async function adminFetch<T>(url: string, options?: RequestInit): Promise<T> {
+   531→  const response = await fetch(url, { ...options, credentials: 'include' });
+   532→
+   533→  // 401 + TOKEN_EXPIRED → 자동 갱신 시도
+   534→  if (response.status === 401) {
+   535→    const body = await response.json();
+   536→    if (body.error?.code === 'TOKEN_EXPIRED') {
+   537→      // 이미 갱신 중이면 대기
+   538→      if (isRefreshing) {
+   539→        await new Promise<void>(resolve => pendingRequests.push(resolve));
+   540→        return adminFetch<T>(url, options); // 원래 요청 재시도
+   541→      }
+   542→
+   543→      isRefreshing = true;
+   544→      try {
+   545→        const refreshRes = await fetch('/api/admin/auth/refresh', {
+   546→          method: 'POST',
+   547→          credentials: 'include',
+   548→        });
+   549→
+   550→        if (!refreshRes.ok) {
+   551→          // 갱신 실패 → 강제 로그아웃
+   552→          window.location.href = '/admin/login';
+   553→          throw new Error('세션이 만료되었습니다.');
+   554→        }
+   555→
+   556→        // 대기 중인 요청들 해제
+   557→        pendingRequests.forEach(resolve => resolve());
+   558→        pendingRequests = [];
+   559→
+   560→        // 원래 요청 재시도
+   561→        return adminFetch<T>(url, options);
+   562→      } finally {
+   563→        isRefreshing = false;
+   564→      }
+   565→    }
+   566→  }
+   567→
+   568→  if (!response.ok) {
+   569→    throw new AdminApiError(response.status, body.error);
+   570→  }
+   571→
+   572→  return body.data;
+   573→}
+   574→```
+   575→
+   576→### 2.4 로그아웃 플로우
+   577→
+   578→```typescript
+   579→// app/api/admin/auth/logout/route.ts
+   580→async function handleLogout(request: NextRequest): Promise<NextResponse> {
+   581→  const adminId = request.headers.get('x-admin-id');
+   582→
+   583→  // 1. DB에서 refresh token 무효화
+   584→  if (adminId) {
+   585→    await prisma.adminUser.update({
+   586→      where: { id: adminId },
+   587→      data: { refreshTokenHash: null }
+   588→    });
+   589→
+   590→    // 2. 감사 로그
+   591→    await writeAuditLog({
+   592→      action: 'LOGOUT',
+   593→      entity: 'AdminUser',
+   594→      entityId: adminId,
+   595→      performedBy: adminId,
+   596→    });
+   597→  }
+   598→
+   599→  // 3. 쿠키 삭제
+   600→  const response = NextResponse.json({ success: true });
+   601→  response.cookies.delete('admin_access_token');
+   602→  response.cookies.delete('admin_refresh_token');
+   603→
+   604→  return response;
+   605→}
+   606→```
+   607→
+   608→---
+   609→
+   610→## 3. CMS 콘텐츠 관리 로직
+   611→
+   612→### 3.1 콘텐츠 조회 (관리자용)
+   613→
+   614→```
+   615→GET /api/admin/cms
+   616→     │
+   617→     ▼
+   618→┌────────────────────┐
+   619→│ JWT + RBAC 검사    │──── 권한: cms:read
+   620→└────┬───────────────┘
+   621→     │
+   622→     ▼
+   623→┌────────────────────┐
+   624→│ CmsContent 전체 조회│
+   625→│ prisma.cmsContent  │
+   626→│   .findMany()      │
+   627→│   → key 기준 정렬   │
+   628→└────┬───────────────┘
+   629→     │
+   630→     ▼
+   631→┌────────────────────┐
+   632→│ 타입별 값 변환      │
+   633→│ image → URL + 메타  │
+   634→│ color → HEX 검증   │
+   635→│ json  → 파싱       │
+   636→└────┬───────────────┘
+   637→     │
+   638→     ▼  { items: CmsContent[] }
+   639→```
+   640→
+   641→#### 3.1.1 조회 의사코드
+   642→
+   643→```typescript
+   644→// app/api/admin/cms/route.ts
+   645→async function handleGetCms(ctx: AdminHandlerContext): Promise<NextResponse> {
+   646→  // CmsContent 전체 조회 (key 기준 정렬)
+   647→  const items = await prisma.cmsContent.findMany({
+   648→    orderBy: { key: 'asc' }
+   649→  });
+   650→
+   651→  // 화면별 그룹핑 (프론트엔드 탭 UI용)
+   652→  const grouped = items.reduce((acc, item) => {
+   653→    const section = item.key.split('.')[0]; // "idle", "menu", "auth" 등
+   654→    if (!acc[section]) acc[section] = [];
+   655→    acc[section].push(item);
+   656→    return acc;
+   657→  }, {} as Record<string, CmsContent[]>);
+   658→
+   659→  return NextResponse.json({
+   660→    data: { items, grouped, total: items.length }
+   661→  });
+   662→}
+   663→```
+   664→
+   665→### 3.2 단일 콘텐츠 수정
+   666→
+   667→```
+   668→PUT /api/admin/cms/[key]
+   669→     │
+   670→     ▼
+   671→┌────────────────────┐
+   672→│ JWT + RBAC 검사    │──── 권한: cms:write
+   673→└────┬───────────────┘
+   674→     │
+   675→     ▼
+   676→┌────────────────────┐
+   677→│ Zod 검증           │
+   678→│  key: 유효한 CMS key│
+   679→│  value: 타입별 검증 │
+   680→│   text → 길이 제한  │
+   681→│   color → HEX 정규 │
+   682→│   number → 범위    │
+   683→│   image → URL 형식 │
+   684→└────┬───────────────┘
+   685→     │
+   686→     ▼
+   687→┌────────────────────┐
+   688→│ 기존 값 조회 (old) │
+   689→│ prisma.cmsContent  │
+   690→│   .findUnique()    │
+   691→└────┬───────────────┘
+   692→     │
+   693→     ▼
+   694→┌────────────────────┐
+   695→│ DB 업데이트        │
+   696→│ prisma.cmsContent  │
+   697→│   .update()        │
+   698→│   updatedAt = now  │
+   699→│   updatedBy = admin│
+   700→└────┬───────────────┘
+   701→     │
+   702→     ▼
+   703→┌────────────────────┐
+   704→│ 감사 로그          │
+   705→│ action: UPDATE     │
+   706→│ oldValue: 이전값   │
+   707→│ newValue: 변경값   │
+   708→└────┬───────────────┘
+   709→     │
+   710→     ▼  { item: CmsContent }
+   711→```
+   712→
+   713→#### 3.2.1 수정 의사코드
+   714→
+   715→```typescript
+   716→// app/api/admin/cms/[key]/route.ts
+   717→const CmsUpdateSchema = z.object({
+   718→  value: z.string().min(1, '값은 비어있을 수 없습니다.'),
+   719→});
+   720→
+   721→async function handleUpdateCms(
+   722→  ctx: AdminHandlerContext,
+   723→  key: string,
+   724→  input: z.infer<typeof CmsUpdateSchema>
+   725→): Promise<NextResponse> {
+   726→  // 타입별 값 검증
+   727→  const existing = await prisma.cmsContent.findUnique({ where: { key } });
+   728→  if (!existing) {
+   729→    return errorResponse(404, 'NOT_FOUND', `CMS 항목 '${key}'이(가) 존재하지 않습니다.`);
+   730→  }
+   731→
+   732→  // 타입별 추가 검증
+   733→  const validatedValue = validateCmsValue(existing.type, input.value);
+   734→  //   text   → z.string().max(getMaxLength(key))
+   735→  //   color  → /^#[0-9A-Fa-f]{6}$/
+   736→  //   number → z.number().min(min).max(max)
+   737→  //   boolean→ z.boolean()
+   738→  //   image  → URL 형식 + 파일 존재 확인
+   739→  //   json   → JSON.parse() 성공 여부
+   740→
+   741→  // 기존 값 저장 (감사 로그용)
+   742→  const oldValue = existing.value;
+   743→
+   744→  // DB 업데이트
+   745→  const updated = await prisma.cmsContent.update({
+   746→    where: { key },
+   747→    data: {
+   748→      value: String(validatedValue),
+   749→      updatedBy: ctx.admin.id,
+   750→      // updatedAt은 @updatedAt으로 자동 갱신
+   751→    }
+   752→  });
+   753→
+   754→  // 감사 로그
+   755→  await writeAuditLog({
+   756→    action: 'UPDATE',
+   757→    entity: 'CmsContent',
+   758→    entityId: updated.id,
+   759→    oldValue: JSON.stringify({ key, value: oldValue }),
+   760→    newValue: JSON.stringify({ key, value: updated.value }),
+   761→    performedBy: ctx.admin.id,
+   762→  });
+   763→
+   764→  return NextResponse.json({ data: updated });
+   765→}
+   766→
+   767→// 타입별 검증 함수
+   768→function validateCmsValue(type: string, value: string): unknown {
+   769→  switch (type) {
+   770→    case 'text':
+   771→      if (value.length > 200) throw new ValidationError('텍스트가 너무 깁니다.');
+   772→      return value;
+   773→    case 'color':
+   774→      if (!/^#[0-9A-Fa-f]{6}$/.test(value)) throw new ValidationError('유효한 HEX 색상이 아닙니다.');
+   775→      return value;
+   776→    case 'number':
+   777→      const num = Number(value);
+   778→      if (isNaN(num)) throw new ValidationError('숫자가 아닙니다.');
+   779→      return value;
+   780→    case 'boolean':
+   781→      if (!['true', 'false'].includes(value)) throw new ValidationError('boolean 값이 아닙니다.');
+   782→      return value;
+   783→    case 'image':
+   784→      if (!value.startsWith('/uploads/') && !value.startsWith('/images/'))
+   785→        throw new ValidationError('유효한 이미지 경로가 아닙니다.');
+   786→      return value;
+   787→    case 'json':
+   788→      try { JSON.parse(value); return value; }
+   789→      catch { throw new ValidationError('유효한 JSON이 아닙니다.'); }
+   790→    default:
+   791→      return value;
+   792→  }
+   793→}
+   794→```
+   795→
+   796→### 3.3 일괄 수정 (Batch Update)
+   797→
+   798→```
+   799→POST /api/admin/cms/batch
+   800→     │
+   801→     ▼
+   802→┌────────────────────┐
+   803→│ JWT + RBAC 검사    │──── 권한: cms:write
+   804→└────┬───────────────┘
+   805→     │
+   806→     ▼
+   807→┌────────────────────┐
+   808→│ 전체 항목 검증      │
+   809→│ for each item:     │
+   810→│   key 존재?        │
+   811→│   value 타입 검증? │
+   812→│ 하나라도 실패 → 400│
+   813→└────┬───────────────┘
+   814→     │ 모두 유효
+   815→     ▼
+   816→┌────────────────────┐
+   817→│ DB 트랜잭션        │
+   818→│ prisma.$transaction│
+   819→│  for each item:    │
+   820→│   cmsContent.update│
+   821→│   + AuditLog.create│
+   822→└────┬───────────────┘
+   823→     │
+   824→     ▼  { updated: number, items: CmsContent[] }
+   825→```
+   826→
+   827→#### 3.3.1 일괄 수정 의사코드
+   828→
+   829→```typescript
+   830→// app/api/admin/cms/batch/route.ts
+   831→const CmsBatchSchema = z.object({
+   832→  items: z.array(z.object({
+   833→    key: z.string(),
+   834→    value: z.string(),
+   835→  })).min(1).max(100, '최대 100개 항목까지 일괄 수정 가능합니다.'),
+   836→});
+   837→
+   838→async function handleBatchUpdate(
+   839→  ctx: AdminHandlerContext,
+   840→  input: z.infer<typeof CmsBatchSchema>
+   841→): Promise<NextResponse> {
+   842→  // 1. 전체 항목 사전 검증
+   843→  const existingItems = await prisma.cmsContent.findMany({
+   844→    where: { key: { in: input.items.map(i => i.key) } }
+   845→  });
+   846→
+   847→  const existingMap = new Map(existingItems.map(i => [i.key, i]));
+   848→
+   849→  // 존재하지 않는 키 확인
+   850→  const missingKeys = input.items.filter(i => !existingMap.has(i.key));
+   851→  if (missingKeys.length > 0) {
+   852→    return errorResponse(400, 'INVALID_KEYS', `존재하지 않는 키: ${missingKeys.map(k => k.key).join(', ')}`);
+   853→  }
+   854→
+   855→  // 타입별 값 검증
+   856→  for (const item of input.items) {
+   857→    const existing = existingMap.get(item.key)!;
+   858→    try {
+   859→      validateCmsValue(existing.type, item.value);
+   860→    } catch (e) {
+   861→      return errorResponse(400, 'VALIDATION_ERROR', `키 '${item.key}'의 값이 유효하지 않습니다: ${e.message}`);
+   862→    }
+   863→  }
+   864→
+   865→  // 2. DB 트랜잭션으로 원자적 업데이트
+   866→  const results = await prisma.$transaction(async (tx) => {
+   867→    const updated: CmsContent[] = [];
+   868→
+   869→    for (const item of input.items) {
+   870→      const existing = existingMap.get(item.key)!;
+   871→
+   872→      // 업데이트
+   873→      const result = await tx.cmsContent.update({
+   874→        where: { key: item.key },
+   875→        data: {
+   876→          value: item.value,
+   877→          updatedBy: ctx.admin.id,
+   878→        }
+   879→      });
+   880→      updated.push(result);
+   881→
+   882→      // 감사 로그
+   883→      await tx.auditLog.create({
+   884→        data: {
+   885→          action: 'UPDATE',
+   886→          entity: 'CmsContent',
+   887→          entityId: result.id,
+   888→          oldValue: JSON.stringify({ key: item.key, value: existing.value }),
+   889→          newValue: JSON.stringify({ key: item.key, value: item.value }),
+   890→          performedBy: ctx.admin.id,
+   891→        }
+   892→      });
+   893→    }
+   894→
+   895→    return updated;
+   896→  });
+   897→
+   898→  return NextResponse.json({
+   899→    data: { updated: results.length, items: results }
+   900→  });
+   901→}
+   902→```
+   903→
+   904→### 3.4 키오스크 콘텐츠 조회 (공개 API)
+   905→
+   906→키오스크 프론트엔드에서 호출하는 인증 불필요 API. **ETag 기반 조건부 요청**으로 대역폭을 최적화한다.
+   907→
+   908→```
+   909→GET /api/cms/content
+   910→     │
+   911→     ▼
+   912→┌────────────────────┐
+   913→│ If-None-Match 헤더 │
+   914→│ 확인 (ETag)        │
+   915→└────┬───────────────┘
+   916→     │
+   917→     ├── ETag 일치 → 304 Not Modified (body 없음)
+   918→     │
+   919→     ▼ ETag 불일치 (또는 최초 요청)
+   920→┌────────────────────┐
+   921→│ CmsContent 전체 조회│
+   922→│ prisma.cmsContent  │
+   923→│   .findMany()      │
+   924→└────┬───────────────┘
+   925→     │
+   926→     ▼
+   927→┌────────────────────┐
+   928→│ ETag 생성          │
+   929→│ hash(max(updatedAt))│
+   930→└────┬───────────────┘
+   931→     │
+   932→     ▼  200 + ETag 헤더 + { items: CmsContent[] }
+   933→```
+   934→
+   935→#### 3.4.1 키오스크 콘텐츠 조회 의사코드
+   936→
+   937→```typescript
+   938→// app/api/cms/content/route.ts
+   939→async function handleKioskContent(request: NextRequest): Promise<NextResponse> {
+   940→  // CmsContent 전체 조회
+   941→  const items = await prisma.cmsContent.findMany({
+   942→    orderBy: { key: 'asc' }
+   943→  });
+   944→
+   945→  // ETag 생성 (모든 항목의 updatedAt 중 최대값의 해시)
+   946→  const maxUpdatedAt = Math.max(...items.map(i => i.updatedAt.getTime()));
+   947→  const etag = `"${hashString(String(maxUpdatedAt))}"`;
+   948→
+   949→  // 조건부 요청 확인
+   950→  const ifNoneMatch = request.headers.get('If-None-Match');
+   951→  if (ifNoneMatch === etag) {
+   952→    return new NextResponse(null, {
+   953→      status: 304,
+   954→      headers: { ETag: etag }
+   955→    });
+   956→  }
+   957→
+   958→  // Map 형태로 변환 (키오스크에서 빠르게 조회)
+   959→  const contentMap = items.reduce((acc, item) => {
+   960→    acc[item.key] = item.value;
+   961→    return acc;
+   962→  }, {} as Record<string, string>);
+   963→
+   964→  return NextResponse.json(
+   965→    { data: { items, map: contentMap, updatedAt: new Date(maxUpdatedAt).toISOString() } },
+   966→    { headers: { ETag: etag, 'Cache-Control': 'max-age=3' } }
+   967→  );
+   968→}
+   969→```
+   970→
+   971→### 3.5 기본값 폴백 (Default Fallback)
+   972→
+   973→CmsContent 테이블에 특정 키가 없거나, CMS API 호출이 실패한 경우 `constants.ts`의 기본값을 사용한다.
+   974→
+   975→```typescript
+   976→// lib/cms-defaults.ts
+   977→export const CMS_DEFAULTS: Record<string, { type: string; value: string }> = {
+   978→  'idle.logo_image':           { type: 'image',  value: '/images/default-logo.svg' },
+   979→  'idle.title_text':           { type: 'text',   value: '스마트 도서관' },
+   980→  'idle.subtitle_text':        { type: 'text',   value: '도서 대출·반납 키오스크' },
+   981→  'idle.bg_color':             { type: 'color',  value: '#1E3A5F' },
+   982→  'idle.touch_prompt':         { type: 'text',   value: '화면을 터치하세요' },
+   983→  'idle.touch_prompt_color':   { type: 'color',  value: '#FFFFFF' },
+   984→  'menu.borrow_button_text':   { type: 'text',   value: '대출' },
+   985→  'menu.borrow_button_color':  { type: 'color',  value: '#2563EB' },
+   986→  'menu.return_button_text':   { type: 'text',   value: '반납' },
+   987→  'menu.return_button_color':  { type: 'color',  value: '#16A34A' },
+   988→  'rules.max_borrow_count':    { type: 'number', value: '5' },
+   989→  'rules.borrow_period_days':  { type: 'number', value: '14' },
+   990→  'rules.overdue_penalty_multiplier': { type: 'number', value: '1.0' },
+   991→  'rules.overdue_enabled':     { type: 'boolean', value: 'true' },
+   992→  // ... 전체 항목은 PRD 3절 참조
+   993→};
+   994→
+   995→// 폴백 조회 함수
+   996→export function getCmsValueWithDefault(key: string, dbValue?: string | null): string {
+   997→  if (dbValue != null && dbValue !== '') return dbValue;
+   998→  return CMS_DEFAULTS[key]?.value ?? '';
+   999→}
+  1000→```
+  1001→
+  1002→---
+  1003→
+  1004→## 4. 도서 관리 로직
+  1005→
+  1006→### 4.1 CRUD 플로우 개요
+  1007→
+  1008→```
+  1009→┌──────────────────────────────────────────────────────────┐
+  1010→│                    도서 관리 CRUD                         │
+  1011→├────────────┬─────────────────────────────────────────────┤
+  1012→│ CREATE     │ POST /api/admin/books                       │
+  1013→│            │ → 권한: book:create                         │
+  1014→│            │ → ISBN 유일성 검사                          │
+  1015→│            │ → 표지 이미지 업로드 (선택)                  │
+  1016→│            │ → Book.create + AuditLog                    │
+  1017→├────────────┼─────────────────────────────────────────────┤
+  1018→│ READ (List)│ GET /api/admin/books                        │
+  1019→│            │ → 권한: book:read                           │
+  1020→│            │ → 페이지네이션 + 필터 + 정렬                 │
+  1021→├────────────┼─────────────────────────────────────────────┤
+  1022→│ READ (1)   │ GET /api/admin/books/[id]                  │
+  1023→│            │ → 권한: book:read                           │
+  1024→│            │ → 대출 이력 포함                             │
+  1025→├────────────┼─────────────────────────────────────────────┤
+  1026→│ UPDATE     │ PUT /api/admin/books/[id]                  │
+  1027→│            │ → 권한: book:update                         │
+  1028→│            │ → ISBN 변경 시 유일성 재검사                 │
+  1029→│            │ → Book.update + AuditLog                    │
+  1030→├────────────┼─────────────────────────────────────────────┤
+  1031→│ DELETE     │ DELETE /api/admin/books/[id]               │
+  1032→│            │ → 권한: book:delete                         │
+  1033→│            │ → 활성 대출 중이면 삭제 거부                  │
+  1034→│            │ → Soft delete (status = 'REMOVED')         │
+  1035→│            │ + AuditLog                                  │
+  1036→└────────────┴─────────────────────────────────────────────┘
+  1037→```
+  1038→
+  1039→### 4.2 도서 등록 (CREATE)
+  1040→
+  1041→```typescript
+  1042→// app/api/admin/books/route.ts (POST)
+  1043→const BookCreateSchema = z.object({
+  1044→  title:       z.string().min(1).max(200, '도서명은 200자 이내'),
+  1045→  author:      z.string().min(1).max(100, '저자는 100자 이내'),
+  1046→  isbn:        z.string().regex(/^\d{13}$/, 'ISBN-13 형식(13자리 숫자)'),
+  1047→  category:    z.string().min(1, '카테고리는 필수입니다'),
+  1048→  publisher:   z.string().max(100).optional(),
+  1049→  publishYear: z.number().int().min(1900).max(new Date().getFullYear()).optional(),
+  1050→  coverImage:  z.string().optional(), // 업로드 후 URL
+  1051→  description: z.string().max(500).optional(),
+  1052→  location:    z.string().max(50).optional(),
+  1053→});
+  1054→
+  1055→async function handleCreateBook(ctx: AdminHandlerContext, input: BookCreateInput) {
+  1056→  // ISBN 유일성 검사
+  1057→  const existing = await prisma.book.findUnique({ where: { isbn: input.isbn } });
+  1058→  if (existing) {
+  1059→    return errorResponse(409, 'ISBN_DUPLICATE', `ISBN ${input.isbn}이(가) 이미 등록되어 있습니다.`);
+  1060→  }
+  1061→
+  1062→  // 도서 생성
+  1063→  const book = await prisma.book.create({
+  1064→    data: {
+  1065→      ...input,
+  1066→      status: 'AVAILABLE',
+  1067→    }
+  1068→  });
+  1069→
+  1070→  // 감사 로그
+  1071→  await writeAuditLog({
+  1072→    action: 'CREATE',
+  1073→    entity: 'Book',
+  1074→    entityId: book.id,
+  1075→    newValue: JSON.stringify(book),
+  1076→    performedBy: ctx.admin.id,
+  1077→  });
+  1078→
+  1079→  return NextResponse.json({ data: book }, { status: 201 });
+  1080→}
+  1081→```
+  1082→
+  1083→### 4.3 표지 이미지 업로드 플로우
+  1084→
+  1085→```
+  1086→┌──────────────┐
+  1087→│ 파일 선택     │
+  1088→│ (drag&drop   │
+  1089→│  또는 클릭)   │
+  1090→└────┬─────────┘
+  1091→     │
+  1092→     ▼
+  1093→┌──────────────┐
+  1094→│ 클라이언트 검증│
+  1095→│  MIME: JPG/  │
+  1096→│   PNG/SVG    │──── 불일치 → 에러 토스트
+  1097→│  크기 ≤ 2MB  │──── 초과 → 에러 토스트
+  1098→└────┬─────────┘
+  1099→     │
+  1100→     ▼
+  1101→┌──────────────┐
+  1102→│ POST /api/   │
+  1103→│ admin/cms/   │
+  1104→│ images       │
+  1105→│ (FormData)   │
+  1106→└────┬─────────┘
+  1107→     │
+  1108→     ▼
+  1109→┌──────────────┐
+  1110→│ 서버 측 검증  │
+  1111→│  MIME 재확인 │
+  1112→│  magic byte  │──── 위조 → 400
+  1113→│  SVG sanitize│
+  1114→└────┬─────────┘
+  1115→     │
+  1116→     ▼
+  1117→┌──────────────┐
+  1118→│ Sharp 리사이즈│
+  1119→│  max 800×1200│
+  1120→│  WebP 변환   │
+  1121→└────┬─────────┘
+  1122→     │
+  1123→     ▼
+  1124→┌──────────────┐
+  1125→│ /public/     │
+  1126→│ uploads/     │
+  1127→│ books/       │
+  1128→│ {uuid}.webp  │
+  1129→│ 로 저장       │
+  1130→└────┬─────────┘
+  1131→     │
+  1132→     ▼
+  1133→┌──────────────┐
+  1134→│ CmsImage     │
+  1135→│ 테이블에 메타 │
+  1136→│ 저장 (크기,   │
+  1137→│ 원본명, URL) │
+  1138→└────┬─────────┘
+  1139→     │
+  1140→     ▼  { url: '/uploads/books/xxx.webp' }
+  1141→```
+  1142→
+  1143→#### 4.3.1 이미지 업로드 의사코드
+  1144→
+  1145→```typescript
+  1146→// app/api/admin/cms/images/route.ts (POST)
+  1147→async function handleImageUpload(request: NextRequest, ctx: AdminHandlerContext) {
+  1148→  const formData = await request.formData();
+  1149→  const file = formData.get('file') as File;
+  1150→
+  1151→  // 1. 서버 측 파일 검증
+  1152→  const ALLOWED_MIMES = ['image/jpeg', 'image/png', 'image/svg+xml'];
+  1153→  if (!ALLOWED_MIMES.includes(file.type)) {
+  1154→    return errorResponse(400, 'INVALID_MIME', 'JPG, PNG, SVG 파일만 업로드 가능합니다.');
+  1155→  }
+  1156→  if (file.size > 2 * 1024 * 1024) {
+  1157→    return errorResponse(400, 'FILE_TOO_LARGE', '파일 크기는 2MB 이하여야 합니다.');
+  1158→  }
+  1159→
+  1160→  // 2. Magic byte 검증 (MIME 위조 방지)
+  1161→  const buffer = Buffer.from(await file.arrayBuffer());
+  1162→  if (!verifyMagicByte(buffer, file.type)) {
+  1163→    return errorResponse(400, 'MIME_MISMATCH', '파일 내용이 MIME 타입과 일치하지 않습니다.');
+  1164→  }
+  1165→
+  1166→  // 3. 이미지 처리 (Sharp)
+  1167→  const fileId = randomUUID();
+  1168→  const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'books');
+  1169→  ensureDir(uploadDir);
+  1170→
+  1171→  let outputPath: string;
+  1172→  let width: number;
+  1173→  let height: number;
+  1174→
+  1175→  if (file.type === 'image/svg+xml') {
+  1176→    // SVG: sanitize 후 그대로 저장
+  1177→    const sanitized = sanitizeSvg(buffer.toString('utf-8'));
+  1178→    outputPath = path.join(uploadDir, `${fileId}.svg`);
+  1179→    fs.writeFileSync(outputPath, sanitized);
+  1180→    width = 0; height = 0; // SVG는 치수 생략
+  1181→  } else {
+  1182→    // JPG/PNG: 리사이즈 + WebP 변환
+  1183→    const processed = await sharp(buffer)
+  1184→      .resize(800, 1200, { fit: 'inside', withoutEnlargement: true })
+  1185→      .webp({ quality: 80 })
+  1186→      .toBuffer();
+  1187→
+  1188→    outputPath = path.join(uploadDir, `${fileId}.webp`);
+  1189→    fs.writeFileSync(outputPath, processed);
+  1190→
+  1191→    const meta = await sharp(processed).metadata();
+  1192→    width = meta.width ?? 0;
+  1193→    height = meta.height ?? 0;
+  1194→  }
+  1195→
+  1196→  const url = `/uploads/books/${path.basename(outputPath)}`;
+  1197→
+  1198→  // 4. CmsImage 메타 저장
+  1199→  const imageRecord = await prisma.cmsImage.create({
+  1200→    data: {
+  1201→      id: fileId,
+  1202→      url,
+  1203→      originalName: file.name,
+  1204→      mimeType: file.type,
+  1205→      size: file.size,
+  1206→      width,
+  1207→      height,
+  1208→      uploadedBy: ctx.admin.id,
+  1209→    }
+  1210→  });
+  1211→
+  1212→  // 5. 감사 로그
+  1213→  await writeAuditLog({
+  1214→    action: 'CREATE',
+  1215→    entity: 'CmsImage',
+  1216→    entityId: imageRecord.id,
+  1217→    newValue: JSON.stringify(imageRecord),
+  1218→    performedBy: ctx.admin.id,
+  1219→  });
+  1220→
+  1221→  return NextResponse.json({ data: imageRecord }, { status: 201 });
+  1222→}
+  1223→```
+  1224→
+  1225→### 4.4 도서 수정 (UPDATE)
+  1226→
+  1227→```typescript
+  1228→// app/api/admin/books/[id]/route.ts (PUT)
+  1229→async function handleUpdateBook(
+  1230→  ctx: AdminHandlerContext,
+  1231→  id: string,
+  1232→  input: BookUpdateInput
+  1233→) {
+  1234→  // 기존 도서 조회
+  1235→  const existing = await prisma.book.findUnique({ where: { id } });
+  1236→  if (!existing) {
+  1237→    return errorResponse(404, 'NOT_FOUND', '도서를 찾을 수 없습니다.');
+  1238→  }
+  1239→
+  1240→  // ISBN 변경 시 유일성 재검사
+  1241→  if (input.isbn && input.isbn !== existing.isbn) {
+  1242→    const duplicate = await prisma.book.findUnique({ where: { isbn: input.isbn } });
+  1243→    if (duplicate) {
+  1244→      return errorResponse(409, 'ISBN_DUPLICATE', `ISBN ${input.isbn}이(가) 이미 사용 중입니다.`);
+  1245→    }
+  1246→  }
+  1247→
+  1248→  // 업데이트
+  1249→  const updated = await prisma.book.update({
+  1250→    where: { id },
+  1251→    data: input,
+  1252→  });
+  1253→
+  1254→  // 감사 로그 (이전 값 / 새 값 JSON diff)
+  1255→  await writeAuditLog({
+  1256→    action: 'UPDATE',
+  1257→    entity: 'Book',
+  1258→    entityId: id,
+  1259→    oldValue: JSON.stringify(existing),
+  1260→    newValue: JSON.stringify(updated),
+  1261→    performedBy: ctx.admin.id,
+  1262→  });
+  1263→
+  1264→  return NextResponse.json({ data: updated });
+  1265→}
+  1266→```
+  1267→
+  1268→### 4.5 도서 삭제 (Soft Delete)
+  1269→
+  1270→```typescript
+  1271→// app/api/admin/books/[id]/route.ts (DELETE)
+  1272→async function handleDeleteBook(ctx: AdminHandlerContext, id: string) {
+  1273→  const existing = await prisma.book.findUnique({
+  1274→    where: { id },
+  1275→    include: { loans: { where: { returnedAt: null } } } } // 활성 대출 조회
+  1276→  });
+  1277→
+  1278→  if (!existing) {
+  1279→    return errorResponse(404, 'NOT_FOUND', '도서를 찾을 수 없습니다.');
+  1280→  }
+  1281→
+  1282→  // 활성 대출 중이면 삭제 거부
+  1283→  if (existing.loans.length > 0) {
+  1284→    return errorResponse(409, 'ACTIVE_LOAN', '대출 중인 도서는 삭제할 수 없습니다. 먼저 반납 처리하세요.');
+  1285→  }
+  1286→
+  1287→  // Soft delete: status를 'REMOVED'로 변경 (실제 레코드 삭제 안 함)
+  1288→  const removed = await prisma.book.update({
+  1289→    where: { id },
+  1290→    data: { status: 'REMOVED' },
+  1291→  });
+  1292→
+  1293→  // 감사 로그
+  1294→  await writeAuditLog({
+  1295→    action: 'DELETE',
+  1296→    entity: 'Book',
+  1297→    entityId: id,
+  1298→    oldValue: JSON.stringify(existing),
+  1299→    newValue: JSON.stringify({ status: 'REMOVED' }),
+  1300→    performedBy: ctx.admin.id,
+  1301→  });
+  1302→
+  1303→  return NextResponse.json({ data: { deleted: true, id } });
+  1304→}
+  1305→```
+  1306→
+  1307→### 4.6 도서 목록 조회 (필터 + 페이지네이션)
+  1308→
+  1309→```typescript
+  1310→// app/api/admin/books/route.ts (GET)
+  1311→async function handleListBooks(request: NextRequest, ctx: AdminHandlerContext) {
+  1312→  const url = new URL(request.url);
+  1313→  const page = Math.max(1, Number(url.searchParams.get('page')) || 1);
+  1314→  const pageSize = Math.min(100, Math.max(1, Number(url.searchParams.get('pageSize')) || 50));
+  1315→  const search = url.searchParams.get('search') || '';
+  1316→  const category = url.searchParams.get('category') || '';
+  1317→  const status = url.searchParams.get('status') || '';
+  1318→
+  1319→  const where: Prisma.BookWhereInput = {
+  1320→    // Soft-delete 제외
+  1321→    status: status ? status : { not: 'REMOVED' },
+  1322→    ...(category && { category }),
+  1323→    ...(search && {
+  1324→      OR: [
+  1325→        { title: { contains: search } },
+  1326→        { author: { contains: search } },
+  1327→        { isbn: { contains: search } },
+  1328→      ]
+  1329→    }),
+  1330→  };
+  1331→
+  1332→  const [items, total] = await Promise.all([
+  1333→    prisma.book.findMany({
+  1334→      where,
+  1335→      orderBy: { createdAt: 'desc' },
+  1336→      skip: (page - 1) * pageSize,
+  1337→      take: pageSize,
+  1338→    }),
+  1339→    prisma.book.count({ where }),
+  1340→  ]);
+  1341→
+  1342→  return NextResponse.json({
+  1343→    data: {
+  1344→      items,
+  1345→      pagination: {
+  1346→        page,
+  1347→        pageSize,
+  1348→        total,
+  1349→        totalPages: Math.ceil(total / pageSize),
+  1350→      }
+  1351→    }
+  1352→  });
+  1353→}
+  1354→```
+  1355→
+  1356→---
+  1357→
+  1358→## 5. 사용자 관리 로직
+  1359→
+  1360→### 5.1 CRUD 플로우 개요
+  1361→
+  1362→```
+  1363→┌──────────────────────────────────────────────────────────┐
+  1364→│                  도서관 이용자 관리 CRUD                   │
+  1365→├────────────┬─────────────────────────────────────────────┤
+  1366→│ CREATE     │ POST /api/admin/users                       │
+  1367→│            │ → 권한: user:create                         │
+  1368→│            │ → RFID 유일성 검사                          │
+  1369→│            │ → PIN bcrypt 해시 저장                       │
+  1370→│            │ → LibraryUser.create + AuditLog             │
+  1371→├────────────┼─────────────────────────────────────────────┤
+  1372→│ READ (List)│ GET /api/admin/users                        │
+  1373→│            │ → 권한: user:read                           │
+  1374→│            │ → PIN 마스킹 (pinHash 노출 금지)             │
+  1375→│            │ → 페이지네이션 + 필터 + 정렬                 │
+  1376→├────────────┼─────────────────────────────────────────────┤
+  1377→│ UPDATE     │ PUT /api/admin/users/[id]                  │
+  1378→│            │ → 권한: user:update                         │
+  1379→│            │ → RFID 변경 시 유일성 재검사                 │
+  1380→│            │ → PIN 변경 시 bcrypt 재해시                  │
+  1381→│            │ → LibraryUser.update + AuditLog             │
+  1382→├────────────┼─────────────────────────────────────────────┤
+  1383→│ DEACTIVATE │ PATCH /api/admin/users/[id]/deactivate     │
+  1384→│            │ → 권한: user:deactivate                     │
+  1385→│            │ → 활성 대출 중이면 비활성화 거부             │
+  1386→│            │ → status = 'WITHDRAWN'                     │
+  1387→│            │ + AuditLog                                  │
+  1388→└────────────┴─────────────────────────────────────────────┘
+  1389→```
+  1390→
+  1391→### 5.2 사용자 등록 (CREATE)
+  1392→
+  1393→```typescript
+  1394→// app/api/admin/users/route.ts (POST)
+  1395→const UserCreateSchema = z.object({
+  1396→  name:  z.string().min(1).max(50, '성명은 50자 이내'),
+  1397→  rfid:  z.string().min(1).max(20, 'RFID는 20자 이내'),
+  1398→  pin:   z.string().regex(/^\d{6}$/, 'PIN은 6자리 숫자'),
+  1399→  phone: z.string().max(20).optional(),
+  1400→  email: z.string().email().max(100).optional(),
+  1401→});
+  1402→
+  1403→async function handleCreateUser(ctx: AdminHandlerContext, input: UserCreateInput) {
+  1404→  // RFID 유일성 검사
+  1405→  const existing = await prisma.libraryUser.findUnique({ where: { rfid: input.rfid } });
+  1406→  if (existing) {
+  1407→    return errorResponse(409, 'RFID_DUPLICATE', `RFID ${input.rfid}이(가) 이미 등록되어 있습니다.`);
+  1408→  }
+  1409→
+  1410→  // PIN bcrypt 해시
+  1411→  const pinHash = await bcrypt.hash(input.pin, 12);
+  1412→
+  1413→  // 이용자 생성
+  1414→  const user = await prisma.libraryUser.create({
+  1415→    data: {
+  1416→      name: input.name,
+  1417→      rfid: input.rfid,
+  1418→      pinHash,
+  1419→      phone: input.phone,
+  1420→      email: input.email,
+  1421→      borrowCount: 0,
+  1422→      overdueCount: 0,
+  1423→      status: 'ACTIVE',
+  1424→    }
+  1425→  });
+  1426→
+  1427→  // 감사 로그 (PIN 값은 로그에 기록하지 않음)
+  1428→  await writeAuditLog({
+  1429→    action: 'CREATE',
+  1430→    entity: 'LibraryUser',
+  1431→    entityId: user.id,
+  1432→    newValue: JSON.stringify({ ...user, pinHash: '[REDACTED]' }),
+  1433→    performedBy: ctx.admin.id,
+  1434→  });
+  1435→
+  1436→  return NextResponse.json({
+  1437→    data: { ...user, pinHash: undefined } // 응답에서 pinHash 제거
+  1438→  }, { status: 201 });
+  1439→}
+  1440→```
+  1441→
+  1442→### 5.3 PIN 변경 로직
+  1443→
+  1444→```typescript
+  1445→// app/api/admin/users/[id]/pin/route.ts (PATCH)
+  1446→const PinUpdateSchema = z.object({
+  1447→  newPin: z.string().regex(/^\d{6}$/, 'PIN은 6자리 숫자'),
+  1448→});
+  1449→
+  1450→async function handleUpdatePin(
+  1451→  ctx: AdminHandlerContext,
+  1452→  userId: string,
+  1453→  input: { newPin: string }
+  1454→) {
+  1455→  const user = await prisma.libraryUser.findUnique({ where: { id: userId } });
+  1456→  if (!user) return errorResponse(404, 'NOT_FOUND', '사용자를 찾을 수 없습니다.');
+  1457→
+  1458→  // 새 PIN 해시
+  1459→  const newPinHash = await bcrypt.hash(input.newPin, 12);
+  1460→
+  1461→  await prisma.libraryUser.update({
+  1462→    where: { id: userId },
+  1463→    data: { pinHash: newPinHash }
+  1464→  });
+  1465→
+  1466→  await writeAuditLog({
+  1467→    action: 'UPDATE',
+  1468→    entity: 'LibraryUser',
+  1469→    entityId: userId,
+  1470→    oldValue: JSON.stringify({ pinHash: '[REDACTED]' }),
+  1471→    newValue: JSON.stringify({ pinHash: '[REDACTED]', pinChangedAt: new Date().toISOString() }),
+  1472→    performedBy: ctx.admin.id,
+  1473→  });
+  1474→
+  1475→  return NextResponse.json({ data: { success: true } });
+  1476→}
+  1477→```
+  1478→
+  1479→### 5.4 사용자 비활성화 (활성 대출 검사)
+  1480→
+  1481→```typescript
+  1482→// app/api/admin/users/[id]/deactivate/route.ts (PATCH)
+  1483→async function handleDeactivateUser(ctx: AdminHandlerContext, userId: string) {
+  1484→  const user = await prisma.libraryUser.findUnique({
+  1485→    where: { id: userId },
+  1486→    include: { loans: { where: { returnedAt: null } } } // 활성 대출
+  1487→  });
+  1488→
+  1489→  if (!user) return errorResponse(404, 'NOT_FOUND', '사용자를 찾을 수 없습니다.');
+  1490→  if (user.status === 'WITHDRAWN') return errorResponse(409, 'ALREADY_WITHDRAWN', '이미 탈퇴 처리된 사용자입니다.');
+  1491→
+  1492→  // 활성 대출 중이면 비활성화 거부
+  1493→  if (user.loans.length > 0) {
+  1494→    return errorResponse(409, 'ACTIVE_LOAN', '대출 중인 도서가 있어 비활성화할 수 없습니다. 먼저 반납 처리하세요.');
+  1495→  }
+  1496→
+  1497→  const deactivated = await prisma.libraryUser.update({
+  1498→    where: { id: userId },
+  1499→    data: { status: 'WITHDRAWN' }
+  1500→  });
+  1501→
+  1502→  await writeAuditLog({
+  1503→    action: 'UPDATE',
+  1504→    entity: 'LibraryUser',
+  1505→    entityId: userId,
+  1506→    oldValue: JSON.stringify({ status: user.status }),
+  1507→    newValue: JSON.stringify({ status: 'WITHDRAWN' }),
+  1508→    performedBy: ctx.admin.id,
+  1509→  });
+  1510→
+  1511→  return NextResponse.json({ data: deactivated });
+  1512→}
+  1513→```
+  1514→
+  1515→### 5.5 카드 발급 관리
+  1516→
+  1517→```typescript
+  1518→// app/api/admin/users/[id]/card/route.ts
+  1519→async function handleReissueCard(ctx: AdminHandlerContext, userId: string, input: { newRfid: string }) {
+  1520→  const user = await prisma.libraryUser.findUnique({ where: { id: userId } });
+  1521→  if (!user) return errorResponse(404, 'NOT_FOUND', '사용자를 찾을 수 없습니다.');
+  1522→
+  1523→  // 새 RFID 유일성 검사
+  1524→  const duplicate = await prisma.libraryUser.findUnique({ where: { rfid: input.newRfid } });
+  1525→  if (duplicate) return errorResponse(409, 'RFID_DUPLICATE', '이미 사용 중인 RFID입니다.');
+  1526→
+  1527→  const oldRfid = user.rfid;
+  1528→
+  1529→  await prisma.libraryUser.update({
+  1530→    where: { id: userId },
+  1531→    data: { rfid: input.newRfid }
+  1532→  });
+  1533→
+  1534→  await writeAuditLog({
+  1535→    action: 'UPDATE',
+  1536→    entity: 'LibraryUser',
+  1537→    entityId: userId,
+  1538→    oldValue: JSON.stringify({ rfid: oldRfid }),
+  1539→    newValue: JSON.stringify({ rfid: input.newRfid }),
+  1540→    performedBy: ctx.admin.id,
+  1541→  });
+  1542→
+  1543→  return NextResponse.json({ data: { success: true, newRfid: input.newRfid } });
+  1544→}
+  1545→```
+  1546→
+  1547→---
+  1548→
+  1549→## 6. 권한 관리 (RBAC) 로직
+  1550→
+  1551→### 6.1 권한 검사 알고리즘
+  1552→
+  1553→```
+  1554→요청 도달
+  1555→     │
+  1556→     ▼
+  1557→┌───────────────────────┐
+  1558→│ 1. JWT에서 사용자 ID   │
+  1559→│    추출 (payload.sub)  │
+  1560→└────┬──────────────────┘
+  1561→     │
+  1562→     ▼
+  1563→┌───────────────────────┐
+  1564→│ 2. AdminUser.role      │
+  1565→│    → AdminRole         │
+  1566→│    → AdminRole.        │
+  1567→│      permissions[]     │
+  1568→└────┬──────────────────┘
+  1569→     │
+  1570→     ▼
+  1571→┌───────────────────────┐
+  1572→│ 3. requiredPermission │
+  1573→│    ∈ permissions[]?   │
+  1574→└────┬──────┬───────────┘
+  1575→     │ Yes  │ No
+  1576→     ▼      ▼
+  1577→  허용    403 Forbidden
+  1578→```
+  1579→
+  1580→#### 6.1.1 권한 검사 의사코드
+  1581→
+  1582→```typescript
+  1583→// lib/rbac.ts
+  1584→
+  1585→// 권한 코드 정의
+  1586→const PERMISSIONS = {
+  1587→  // CMS 콘텐츠
+  1588→  'cms:read':          'CMS 콘텐츠 조회',
+  1589→  'cms:write':         'CMS 콘텐츠 수정',
+  1590→  'cms:image':         'CMS 이미지 업로드/교체',
+  1591→  // 도서 관리
+  1592→  'book:read':         '도서 목록 조회',
+  1593→  'book:create':       '도서 등록',
+  1594→  'book:update':       '도서 수정',
+  1595→  'book:delete':       '도서 삭제',
+  1596→  'book:import':       '도서 CSV 가져오기',
+  1597→  // 사용자 관리
+  1598→  'user:read':         '사용자 목록 조회',
+  1599→  'user:create':       '사용자 등록',
+  1600→  'user:update':       '사용자 수정',
+  1601→  'user:deactivate':   '사용자 비활성화',
+  1602→  // 통계
+  1603→  'stats:read':        '통계 대시보드 조회',
+  1604→  'stats:export':      '통계 CSV 내보내기',
+  1605→  // 관리자 계정
+  1606→  'admin:read':        '관리자 계정 조회',
+  1607→  'admin:create':      '관리자 계정 생성',
+  1608→  'admin:update':      '관리자 계정 수정',
+  1609→  'admin:deactivate':  '관리자 비활성화',
+  1610→  // 감사 로그
+  1611→  'audit:read':        '감사 로그 조회',
+  1612→  'audit:export':      '감사 로그 내보내기',
+  1613→  // 공지
+  1614→  'notice:read':       '공지 조회',
+  1615→  'notice:write':      '공지 등록·수정·삭제',
+  1616→  // 시스템
+  1617→  'system:backup':     'DB 백업',
+  1618→  'system:reset':      '시스템 초기화',
+  1619→} as const;
+  1620→
+  1621→type PermissionCode = keyof typeof PERMISSIONS;
+  1622→
+  1623→// 역할별 권한 매핑
+  1624→const ROLE_PERMISSIONS: Record<string, PermissionCode[]> = {
+  1625→  super_admin: Object.keys(PERMISSIONS) as PermissionCode[], // 모든 권한
+  1626→  admin: [
+  1627→    'cms:read', 'cms:write', 'cms:image',
+  1628→    'book:read', 'book:create', 'book:update', 'book:delete', 'book:import',
+  1629→    'user:read', 'user:create', 'user:update', 'user:deactivate',
+  1630→    'stats:read', 'stats:export',
+  1631→    'audit:read',
+  1632→    'notice:read', 'notice:write',
+  1633→  ],
+  1634→  operator: [
+  1635→    'cms:read',
+  1636→    'book:read',
+  1637→    'user:read',
+  1638→    'stats:read',
+  1639→    'notice:read',
+  1640→  ],
+  1641→};
+  1642→
+  1643→// 권한 검사 함수
+  1644→function hasPermission(role: string, required: PermissionCode): boolean {
+  1645→  const permissions = ROLE_PERMISSIONS[role];
+  1646→  if (!permissions) return false;
+  1647→  return permissions.includes(required);
+  1648→}
+  1649→
+  1650→// 다중 권한 검사 (하나라도 만족하면 통과)
+  1651→function hasAnyPermission(role: string, required: PermissionCode[]): boolean {
+  1652→  return required.some(p => hasPermission(role, p));
+  1653→}
+  1654→
+  1655→// 다중 권한 검사 (모두 만족해야 통과)
+  1656→function hasAllPermissions(role: string, required: PermissionCode[]): boolean {
+  1657→  return required.every(p => hasPermission(role, p));
+  1658→}
+  1659→```
+  1660→
+  1661→### 6.2 역할 계층 (Role Hierarchy)
+  1662→
+  1663→```
+  1664→super_admin  >  admin  >  operator
+  1665→
+  1666→┌──────────────────────────────────────────────────────────┐
+  1667→│ super_admin                                              │
+  1668→│  • 모든 권한 (전체 22개)                                 │
+  1669→│  • 관리자 계정 관리 (admin:*)                            │
+  1670→│  • 시스템 설정 (system:*)                                │
+  1671→│  • 감사 로그 내보내기 (audit:export)                      │
+  1672→├──────────────────────────────────────────────────────────┤
+  1673→│ admin                                                    │
+  1674→│  • CMS 콘텐츠 관리 (cms:*)                              │
+  1675→│  • 도서·사용자 CRUD (book:*, user:*)                     │
+  1676→│  • 통계 조회 + 내보내기 (stats:*)                        │
+  1677→│  • 감사 로그 조회 (audit:read)                           │
+  1678→│  • 공지 관리 (notice:*)                                  │
+  1679→├──────────────────────────────────────────────────────────┤
+  1680→│ operator                                                 │
+  1681→│  • 읽기 전용 (cms:read, book:read, user:read, stats:read)│
+  1682→│  • 공지 조회 (notice:read)                               │
+  1683→└──────────────────────────────────────────────────────────┘
+  1684→```
+  1685→
+  1686→```typescript
+  1687→// lib/role-hierarchy.ts
+  1688→const ROLE_HIERARCHY = ['super_admin', 'admin', 'operator'] as const;
+  1689→
+  1690→function getRoleLevel(role: string): number {
+  1691→  const idx = ROLE_HIERARCHY.indexOf(role as any);
+  1692→  return idx === -1 ? Infinity : idx; // 낮을수록 높은 권한
+  1693→}
+  1694→
+  1695→function canManageRole(actorRole: string, targetRole: string): boolean {
+  1696→  // 자신보다 높거나 같은 역할은 관리 불가
+  1697→  return getRoleLevel(actorRole) < getRoleLevel(targetRole);
+  1698→}
+  1699→```
+  1700→
+  1701→### 6.3 자기 수정 가드 (Self-Modification Guard)
+  1702→
+  1703→관리자는 자신의 역할을 변경할 수 없다.
+  1704→
+  1705→```typescript
+  1706→// app/api/admin/admins/[id]/role/route.ts (PATCH)
+  1707→async function handleUpdateRole(
+  1708→  ctx: AdminHandlerContext,
+  1709→  targetId: string,
+  1710→  input: { newRole: string }
+  1711→) {
+  1712→  // 자기 수정 가드: 자신의 역할 변경 금지
+  1713→  if (targetId === ctx.admin.id) {
+  1714→    return errorResponse(403, 'SELF_MODIFICATION', '자신의 역할은 변경할 수 없습니다.');
+  1715→  }
+  1716→
+  1717→  // 역할 계층 검사: 자신보다 높거나 같은 역할의 계정은 수정 불가
+  1718→  const target = await prisma.adminUser.findUnique({ where: { id: targetId } });
+  1719→  if (!target) return errorResponse(404, 'NOT_FOUND', '관리자를 찾을 수 없습니다.');
+  1720→
+  1721→  if (!canManageRole(ctx.admin.role.code, target.role.code)) {
+  1722→    return errorResponse(403, 'ROLE_HIERARCHY', '자신보다 높거나 같은 권한의 계정은 수정할 수 없습니다.');
+  1723→  }
+  1724→
+  1725→  // 새 역할 검증
+  1726→  if (!ROLE_PERMISSIONS[input.newRole]) {
+  1727→    return errorResponse(400, 'INVALID_ROLE', `유효하지 않은 역할: ${input.newRole}`);
+  1728→  }
+  1729→
+  1730→  const oldRole = target.role.code;
+  1731→
+  1732→  await prisma.adminUser.update({
+  1733→    where: { id: targetId },
+  1734→    data: { role: { connect: { code: input.newRole } } }
+  1735→  });
+  1736→
+  1737→  await writeAuditLog({
+  1738→    action: 'UPDATE',
+  1739→    entity: 'AdminUser',
+  1740→    entityId: targetId,
+  1741→    oldValue: JSON.stringify({ role: oldRole }),
+  1742→    newValue: JSON.stringify({ role: input.newRole }),
+  1743→    performedBy: ctx.admin.id,
+  1744→  });
+  1745→
+  1746→  return NextResponse.json({ data: { success: true } });
+  1747→}
+  1748→```
+  1749→
+  1750→### 6.4 마지막 super_admin 가드
+  1751→
+  1752→시스템에 super_admin 역할의 활성 계정이 최소 1개 이상 존재해야 한다. 마지막 super_admin은 비활성화할 수 없다.
+  1753→
+  1754→```typescript
+  1755→// app/api/admin/admins/[id]/deactivate/route.ts (PATCH)
+  1756→async function handleDeactivateAdmin(ctx: AdminHandlerContext, targetId: string) {
+  1757→  // 자기 자신 비활성화 금지
+  1758→  if (targetId === ctx.admin.id) {
+  1759→    return errorResponse(403, 'SELF_DEACTIVATE', '자신의 계정은 비활성화할 수 없습니다.');
+  1760→  }
+  1761→
+  1762→  const target = await prisma.adminUser.findUnique({ where: { id: targetId } });
+  1763→  if (!target) return errorResponse(404, 'NOT_FOUND', '관리자를 찾을 수 없습니다.');
+  1764→
+  1765→  // 마지막 super_admin 가드
+  1766→  if (target.role.code === 'super_admin') {
+  1767→    const activeSuperAdminCount = await prisma.adminUser.count({
+  1768→      where: { role: { code: 'super_admin' }, isActive: true }
+  1769→    });
+  1770→
+  1771→    if (activeSuperAdminCount <= 1) {
+  1772→      return errorResponse(403, 'LAST_SUPER_ADMIN', '마지막 슈퍼 관리자는 비활성화할 수 없습니다.');
+  1773→    }
+  1774→  }
+  1775→
+  1776→  await prisma.adminUser.update({
+  1777→    where: { id: targetId },
+  1778→    data: { isActive: false }
+  1779→  });
+  1780→
+  1781→  await writeAuditLog({
+  1782→    action: 'UPDATE',
+  1783→    entity: 'AdminUser',
+  1784→    entityId: targetId,
+  1785→    oldValue: JSON.stringify({ isActive: true }),
+  1786→    newValue: JSON.stringify({ isActive: false }),
+  1787→    performedBy: ctx.admin.id,
+  1788→  });
+  1789→
+  1790→  return NextResponse.json({ data: { success: true } });
+  1791→}
+  1792→```
+  1793→
+  1794→---
+  1795→
+  1796→## 7. 실시간 동기화 로직
+  1797→
+  1798→### 7.1 키오스크 폴링 아키텍처
+  1799→
+  1800→```
+  1801→┌────────────────────────────────────────────────────────────────┐
+  1802→│                    Kiosk Frontend                              │
+  1803→│                                                                │
+  1804→│  useCmsContent('idle.title_text', '스마트 도서관')             │
+  1805→│     │                                                          │
+  1806→│     ▼                                                          │
+  1807→│  ┌──────────────────────┐                                     │
+  1808→│  │ Zustand Store        │                                     │
+  1809→│  │  cmsContent: Map     │                                     │
+  1810→│  │  lastUpdatedAt: Date │                                     │
+  1811→│  │  etag: string        │                                     │
+  1812→│  └──────┬───────────────┘                                     │
+  1813→│         │ 구독                                                │
+  1814→│         │                                                      │
+  1815→│  ┌──────────────────────┐                                     │
+  1816→│  │ useEffect + setInterval│                                    │
+  1817→│  │  3초마다 fetch         │                                    │
+  1818→│  │  GET /api/cms/content  │                                    │
+  1819→│  │  If-None-Match: {etag} │                                    │
+  1820→│  └──────┬───────────────┘                                     │
+  1821→│         │                                                      │
+  1822→└─────────┼──────────────────────────────────────────────────────┘
+  1823→          │
+  1824→          ▼
+  1825→┌──────────────────────────────────────────────────────────────┐
+  1826→│                    Server                                     │
+  1827→│                                                               │
+  1828→│  GET /api/cms/content                                        │
+  1829→│     │                                                         │
+  1830→│     ├── ETag 일치 → 304 Not Modified                         │
+  1831→│     │                                                         │
+  1832→│     └── ETag 불일치 → 200 + 전체 콘텐츠 + 새 ETag           │
+  1833→│                                                               │
+  1834→└───────────────────────────────────────────────────────────────┘
+  1835→```
+  1836→
+  1837→### 7.2 Zustand Store + 폴링 의사코드
+  1838→
+  1839→```typescript
+  1840→// store/cms-store.ts
+  1841→import { create } from 'zustand';
+  1842→
+  1843→interface CmsState {
+  1844→  content: Record<string, string>;   // key → value Map
+  1845→  lastUpdatedAt: string | null;
+  1846→  etag: string | null;
+  1847→  isLoading: boolean;
+  1848→  error: Error | null;
+  1849→
+  1850→  // Actions
+  1851→  setContent: (data: Record<string, string>, etag: string, updatedAt: string) => void;
+  1852→  fetchContent: () => Promise<void>;
+  1853→}
+  1854→
+  1855→export const useCmsStore = create<CmsState>((set, get) => ({
+  1856→  content: {},
+  1857→  lastUpdatedAt: null,
+  1858→  etag: null,
+  1859→  isLoading: false,
+  1860→  error: null,
+  1861→
+  1862→  setContent: (data, etag, updatedAt) => set({
+  1863→    content: data,
+  1864→    etag,
+  1865→    lastUpdatedAt: updatedAt,
+  1866→    isLoading: false,
+  1867→    error: null,
+  1868→  }),
+  1869→
+  1870→  fetchContent: async () => {
+  1871→    const { etag } = get();
+  1872→    set({ isLoading: true });
+  1873→
+  1874→    try {
+  1875→      const headers: Record<string, string> = {};
+  1876→      if (etag) headers['If-None-Match'] = etag;
+  1877→
+  1878→      const response = await fetch('/api/cms/content', { headers });
+  1879→
+  1880→      if (response.status === 304) {
+  1881→        // 콘텐츠 변경 없음
+  1882→        set({ isLoading: false });
+  1883→        return;
+  1884→      }
+  1885→
+  1886→      if (!response.ok) throw new Error(`CMS API 실패: ${response.status}`);
+  1887→
+  1888→      const { data } = await response.json();
+  1889→      const newEtag = response.headers.get('ETag');
+  1890→
+  1891→      set({
+  1892→        content: data.map,
+  1893→        etag: newEtag,
+  1894→        lastUpdatedAt: data.updatedAt,
+  1895→        isLoading: false,
+  1896→        error: null,
+  1897→      });
+  1898→    } catch (error) {
+  1899→      set({ isLoading: false, error: error as Error });
+  1900→      // CMS API 실패 → 기본값 사용 (그레이스풀 폴백)
+  1901→      // content가 비어있으면 defaults로 초기화
+  1902→      const { content } = get();
+  1903→      if (Object.keys(content).length === 0) {
+  1904→        const defaults: Record<string, string> = {};
+  1905→        for (const [key, def] of Object.entries(CMS_DEFAULTS)) {
+  1906→          defaults[key] = def.value;
+  1907→        }
+  1908→        set({ content: defaults });
+  1909→      }
+  1910→    }
+  1911→  },
+  1912→}));
+  1913→```
+  1914→
+  1915→### 7.3 폴링 훅 (useCmsPolling)
+  1916→
+  1917→```typescript
+  1918→// hooks/use-cms-polling.ts
+  1919→export function useCmsPolling(intervalMs: number = 3000) {
+  1920→  const fetchContent = useCmsStore(s => s.fetchContent);
+  1921→
+  1922→  useEffect(() => {
+  1923→    // 최초 1회 즉시 fetch
+  1924→    fetchContent();
+  1925→
+  1926→    // 이후 interval 간격으로 폴링
+  1927→    const timer = setInterval(fetchContent, intervalMs);
+  1928→
+  1929→    return () => clearInterval(timer);
+  1930→  }, [fetchContent, intervalMs]);
+  1931→}
+  1932→```
+  1933→
+  1934→### 7.4 CMS 콘텐츠 조회 훅 (useCmsContent)
+  1935→
+  1936→```typescript
+  1937→// hooks/use-cms-content.ts
+  1938→export function useCmsContent(key: string, defaultValue: string): string {
+  1939→  const content = useCmsStore(s => s.content);
+  1940→  const error = useCmsStore(s => s.error);
+  1941→
+  1942→  // DB 값 > 기본값 > 하드코딩 기본값
+  1943→  if (error && !content[key]) {
+  1944→    // API 실패 + DB 값 없음 → 하드코딩 기본값
+  1945→    return CMS_DEFAULTS[key]?.value ?? defaultValue;
+  1946→  }
+  1947→
+  1948→  return content[key] ?? CMS_DEFAULTS[key]?.value ?? defaultValue;
+  1949→}
+  1950→
+  1951→// 타입드 버전
+  1952→export function useCmsText(key: string, defaultValue: string): string {
+  1953→  return useCmsContent(key, defaultValue);
+  1954→}
+  1955→
+  1956→export function useCmsColor(key: string, defaultValue: string): string {
+  1957→  const value = useCmsContent(key, defaultValue);
+  1958→  // HEX 검증 (폴백)
+  1959→  return /^#[0-9A-Fa-f]{6}$/.test(value) ? value : defaultValue;
+  1960→}
+  1961→
+  1962→export function useCmsNumber(key: string, defaultValue: number): number {
+  1963→  const value = useCmsContent(key, String(defaultValue));
+  1964→  const num = Number(value);
+  1965→  return isNaN(num) ? defaultValue : num;
+  1966→}
+  1967→
+  1968→export function useCmsBoolean(key: string, defaultValue: boolean): boolean {
+  1969→  const value = useCmsContent(key, String(defaultValue));
+  1970→  return value === 'true';
+  1971→}
+  1972→```
+  1973→
+  1974→### 7.5 콘텐츠 변경 감지 (updatedAt 비교)
+  1975→
+  1976→```typescript
+  1977→// lib/cms-change-detection.ts
+  1978→export function detectContentChanges(
+  1979→  oldContent: Record<string, string>,
+  1980→  newContent: Record<string, string>
+  1981→): Array<{ key: string; oldValue: string; newValue: string }> {
+  1982→  const changes: Array<{ key: string; oldValue: string; newValue: string }> = [];
+  1983→
+  1984→  for (const key of Object.keys(newContent)) {
+  1985→    if (oldContent[key] !== newContent[key]) {
+  1986→      changes.push({
+  1987→        key,
+  1988→        oldValue: oldContent[key] ?? '(없음)',
+  1989→        newValue: newContent[key],
+  1990→      });
+  1991→    }
+  1992→  }
+  1993→
+  1994→  return changes;
+  1995→}
+  1996→
+  1997→// Zustand 미들웨어: 변경 감지 시 콘솔 로그 (개발 모드)
+  1998→export const cmsChangeLogger = (config: StateCreator<CmsState>) => (set: any, get: any, api: any) => {
+  1999→  return config(
+  2000→    (args: any) => {
+
+[showing lines 1-2000 of 2822; use offset=2001 with limit to continue reading]

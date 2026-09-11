@@ -47,3 +47,30 @@ Stage Summary:
 - Real-time sync: 3-second polling with ETag/304 caching
 - Responsive: 4 breakpoints (375px/768px/1024px/1920px)
 - Default admin: admin@library.kr / admin123!
+
+---
+Task ID: 4
+Agent: Main Agent
+Task: Create 8 backend documentation files in doc/backend/ (continuation from previous session)
+
+Work Log:
+- Read and analyzed all 9 existing doc/*.md files (prd, tdd, architect, uiux, program, interface, api, harness, agent)
+- Designed backend admin dashboard architecture with CMS, RBAC, real-time sync, responsive design
+- Created doc/backend/ directory
+- Wrote prd.md (1,076 lines) — Product Requirements with 120+ CMS content items, RBAC 3-tier permissions (32 permission rows), SSE-first + polling fallback, 4 responsive breakpoints, 6 admin + 10 admin + 5 operator user stories, 3-phase milestones
+- Wrote architect.md (1,557 lines) — System architecture with 8 ADRs, admin API 18 endpoints, polling+ETag sync, JWT+httpOnly RBAC, append-only audit log, 9-step middleware pipeline
+- Wrote database.md (1,751 lines) — 9 new tables (AdminUser, AdminSession, ContentItem, ContentVersion, AuditLog, KioskConfig, MediaAsset, Notification, SystemHealth), 47 CMS content keys covering all 11 screens, full Prisma schema, 17 indexes, seed data, migration strategy
+- Wrote api.md (2,653 lines) — 42 API endpoints with full request/response/error specs, RBAC enforcement per endpoint, rate limits, pagination
+- Wrote tdd.md (1,907 lines) — Technical design with bcrypt+JWT auth, 22 permissions, CMS polling+ETag, Sharp image processing, 4 responsive breakpoints, 13 error codes
+- Wrote program.md (2,334 lines) — Program logic for 8 admin pages, content versioning algorithm, RBAC check algorithm, analytics SQL queries, real-time sync flow
+- Wrote harness.md (1,030 lines) — 25 test cases (TC-B001~B025), Agent Browser E2E procedures, 5 automation scripts, 25 release criteria
+- Wrote agent.md (1,165 lines) — 7-phase workflow, 38 pre-defined todos, 6 skill mappings, subagent instructions, debugging guide
+
+Stage Summary:
+- Total documentation: 13,473 lines across 8 files (~570KB)
+- Key architecture decisions: Integrated Next.js app, Polling+ETag (30s) for real-time sync, JWT+httpOnly cookies, 47 CMS content keys, 3-tier RBAC
+- RBAC: 3 roles (super_admin/admin/operator) with 22+ permissions
+- Real-time sync: 30s polling with ETag/304 caching, ≤30s propagation guarantee
+- Responsive: 4 breakpoints (375px/768px/1024px/1920px) for kiosk/tablet/mobile
+- Additional features included: Audit Log, Analytics Dashboard, System Health, Bulk Import/Export, Kiosk Remote Control, Backup/Restore, Notifications, Theme Management, Scheduled Maintenance, Multi-Kiosk
+- Default admin: super_admin / admin123!

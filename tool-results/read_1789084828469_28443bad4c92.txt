@@ -1,0 +1,2002 @@
+     1→     1→# 스마트 도서관 키오스크 관리자 대시보드 — 기술 설계 문서 (TDD)
+     2→     2→
+     3→     3→> **버전**: v1.0.0  
+     4→     4→> **작성일**: 2026-03-05  
+     5→     5→> **상태**: Production-ready  
+     6→     6→> **담당**: Dashboard Architecture Team  
+     7→     7→> **참조**: [PRD](./prd.md) · [API 명세](./api.md) · [DB 설계](./database.md) · [아키텍처](./architect.md) · [키오스크 TDD](../tdd.md)
+     8→     8→
+     9→     9→---
+    10→    10→
+    11→    11→## 목차
+    12→    12→
+    13→    13→1. [기술 스택](#1-기술-스택)
+    14→    14→2. [인증 설계](#2-인증-설계)
+    15→    15→3. [CMS 설계](#3-cms-설계)
+    16→    16→4. [실시간 동기화 설계](#4-실시간-동기화-설계)
+    17→    17→5. [이미지 관리 설계](#5-이미지-관리-설계)
+    18→    18→6. [반응형 설계](#6-반응형-설계)
+    19→    19→7. [보안 설계](#7-보안-설계)
+    20→    20→8. [성능 설계](#8-성능-설계)
+    21→    21→9. [오류 처리 설계](#9-오류-처리-설계)
+    22→    22→10. [배포 설계](#10-배포-설계)
+    23→    23→
+    24→    24→---
+    25→    25→
+    26→    26→## 1. 기술 스택
+    27→    27→
+    28→    28→### 1.1 코어 프레임워크 (기존 프로젝트와 동일)
+    29→    29→
+    30→    30→| 계층 | 기술 | 버전 | 용도 |
+    31→    31→|------|------|------|------|
+    32→    32→| **Framework** | Next.js | 16 | App Router, SSR/CSR 하이브리드, API Routes |
+    33→    33→| **UI Library** | React | 19 | 컴포넌트 렌더링, Server/Client Components |
+    34→    34→| **Language** | TypeScript | 5 | 정적 타입 검증, 인터페이스 정의 |
+    35→    35→| **Styling** | Tailwind CSS | 4 | Utility-first CSS, 반응형 브레이크포인트 |
+    36→    36→| **Component** | shadcn/ui | latest | Radix UI 기반 접근성 준수 컴포넌트 |
+    37→    37→| **State** | Zustand | 5 | 클라이언트 전역 상태 관리 (CMS 캐시, 인증 상태) |
+    38→    38→| **ORM** | Prisma | 6 | SQLite 스키마 관리, 타입 안전 쿼리 |
+    39→    39→| **Database** | SQLite | 3.x | WAL 모드, 로컬 단일 파일 DB |
+    40→    40→
+    41→    41→### 1.2 관리자 대시보드 추가 의존성
+    42→    42→
+    43→    43→| 패키지 | 버전 | 용도 | 설치 위치 |
+    44→    44→|--------|------|------|------------|
+    45→    45→| **bcrypt** | ^5.x | 비밀번호 해시 (salt rounds 12) | server-only |
+    46→    46→| **jose** | ^5.x | JWT 발급/검증 (HS256, Edge Runtime 호환) | server-only |
+    47→    47→| **formidable** | ^3.x | 멀티파트 파일 업로드 파싱 | server-only |
+    48→    48→| **recharts** | ^2.x | 대시보드 통계 차트 (BarChart, LineChart, PieChart) | client-only |
+    49→    49→| **@tanstack/react-query** | ^5.x | 서버 데이터 캐싱, stale/refetch 관리 | client-only |
+    50→    50→| **zod** | ^4.x | API 입력 검증 스키마 | universal |
+    51→    51→| **sharp** | ^0.34.x | 이미지 리사이징, 썸네일 생성, WebP 변환 | server-only |
+    52→    52→| **dompurify** | ^3.x | SVG 업로드 시 XSS sanitize | server-only |
+    53→    53→
+    54→    54→### 1.3 패키지 의존성 제약
+    55→    55→
+    56→    56→```
+    57→    57→bcrypt       → Node.js native addon (bun 호환 확인 필요)
+    58→    58→jose         → Pure JS, Edge/Node/Bun 범용
+    59→    59→formidable   → Node.js Stream 기반 (Next.js API Route 호환)
+    60→    60→recharts     → Client bundle만, dynamic import로 code-split
+    61→    61→sharp        → Node.js native addon (이미지 처리 전용)
+    62→    62→```
+    63→    63→
+    64→    64→### 1.4 TypeScript 구성
+    65→    65→
+    66→    66→```jsonc
+    67→    67→// tsconfig.json 추가 경로
+    68→    68→{
+    69→    69→  "compilerOptions": {
+    70→    70→    "paths": {
+    71→    71→      "@/admin/*": ["./src/app/admin/*"],
+    72→    72→      "@/lib/admin/*": ["./src/lib/admin/*"],
+    73→    73→      "@/stores/admin/*": ["./src/stores/admin/*"],
+    74→    74→      "@/hooks/admin/*": ["./src/hooks/admin/*"]
+    75→    75→    }
+    76→    76→  }
+    77→    77→}
+    78→    78→```
+    79→    79→
+    80→    80→### 1.5 디렉터리 구조
+    81→    81→
+    82→    82→```
+    83→    83→src/
+    84→    84→├── app/
+    85→    85→│   ├── admin/                          # 관리자 대시보드 라우트
+    86→    86→│   │   ├── layout.tsx                  # AdminLayout (사이드바 + 인증 가드)
+    87→    87→│   │   ├── page.tsx                    # 대시보드 홈 (통계)
+    88→    88→│   │   ├── login/
+    89→    89→│   │   │   └── page.tsx                # 로그인 페이지
+    90→    90→│   │   ├── content/
+    91→    91→│   │   │   └── page.tsx                # CMS 콘텐츠 편집
+    92→    92→│   │   ├── books/
+    93→    93→│   │   │   ├── page.tsx                # 도서 목록
+    94→    94→│   │   │   └── [id]/
+    95→    95→│   │   │       └── page.tsx            # 도서 상세/편집
+    96→    96→│   │   ├── users/
+    97→    97→│   │   │   ├── page.tsx                # 이용자 목록
+    98→    98→│   │   │   └── [id]/
+    99→    99→│   │   │       └── page.tsx            # 이용자 상세
+   100→   100→│   │   ├── accounts/
+   101→   101→│   │   │   └── page.tsx                # 관리자 계정 관리
+   102→   102→│   │   ├── audit/
+   103→   103→│   │   │   └── page.tsx                # 감사 로그
+   104→   104→│   │   ├── notices/
+   105→   105→│   │   │   └── page.tsx                # 공지 관리
+   106→   106→│   │   └── settings/
+   107→   107→│   │       └── page.tsx                # 시스템 설정
+   108→   108→│   └── api/
+   109→   109→│       ├── auth/
+   110→   110→│       │   ├── login/route.ts          # POST 로그인
+   111→   111→│       │   ├── logout/route.ts         # POST 로그아웃
+   112→   112→│       │   └── refresh/route.ts        # POST 토큰 갱신
+   113→   113→│       ├── admin/
+   114→   114→│       │   ├── cms/
+   115→   115→│       │   │   ├── content/route.ts    # GET/PUT CMS 콘텐츠
+   116→   116→│       │   │   └── upload/route.ts     # POST 이미지 업로드
+   117→   117→│       │   ├── books/route.ts          # CRUD 도서
+   118→   118→│       │   ├── users/route.ts          # CRUD 이용자
+   119→   119→│       │   ├── accounts/route.ts       # CRUD 관리자 계정
+   120→   120→│       │   ├── stats/route.ts          # GET 통계
+   121→   121→│       │   ├── audit/route.ts          # GET 감사 로그
+   122→   122→│       │   └── notices/route.ts        # CRUD 공지
+   123→   123→│       └── cms/
+   124→   124→│           └── content/route.ts        # GET 공개 CMS (키오스크용)
+   125→   125→├── lib/
+   126→   126→│   ├── admin/
+   127→   127→│   │   ├── auth.ts                     # JWT 발급/검증, bcrypt 해시
+   128→   128→│   │   ├── rbac.ts                     # RBAC 권한 매핑, 미들웨어
+   129→   129→│   │   ├── cms-defaults.ts             # CMS 기본값 정의
+   130→   130→│   │   ├── audit.ts                    # 감사 로그 기록 헬퍼
+   131→   131→│   │   └── upload.ts                   # 파일 업로드, 검증, 저장
+   132→   132→│   └── db.ts                           # Prisma 클라이언트 싱글톤
+   133→   133→├── stores/
+   134→   134→│   └── admin/
+   135→   135→│       ├── useAuthStore.ts             # 인증 상태 (Zustand)
+   136→   136→│       └── useCmsStore.ts              # CMS 콘텐츠 캐시 (Zustand)
+   137→   137→├── hooks/
+   138→   138→│   └── admin/
+   139→   139→│       ├── useCmsContent.ts            # 단일 CMS 값 조회 훅
+   140→   140→│       ├── useCmsPolling.ts            # 키오스크용 CMS 폴링 훅
+   141→   141→│       ├── useAdminAuth.ts             # 관리자 인증 가드 훅
+   142→   142→│       └── useDebounce.ts             # 디바운스 훅 (검색 입력)
+   143→   143→├── components/
+   144→   144→│   └── admin/
+   145→   145→│       ├── AdminSidebar.tsx             # 사이드바 네비게이션
+   146→   146→│       ├── AdminHeader.tsx              # 상단 헤더 (사용자 정보, 로그아웃)
+   147→   147→│       ├── CmsFieldRenderer.tsx         # CMS 필드 타입별 렌더러
+   148→   148→│       ├── ImageUploader.tsx            # 이미지 업로드 컴포넌트
+   149→   149→│       ├── ColorPicker.tsx              # 컬러 피커
+   150→   150→│       ├── StatsCard.tsx                # 통계 카드
+   151→   151→│       ├── AuditLogTable.tsx            # 감사 로그 테이블
+   152→   152→│       └── PermissionGuard.tsx          # 권한 가드 컴포넌트
+   153→   153→└── types/
+   154→   154→    └── admin.ts                        # 관리자 도메인 타입 정의
+   155→   155→```
+   156→   156→
+   157→   157→---
+   158→   158→
+   159→   159→## 2. 인증 설계
+   160→   160→
+   161→   161→### 2.1 인증 아키텍처 개요
+   162→   162→
+   163→   163→관리자 대시보드는 **JWT 기반 stateless 인증**을 사용한다. Access Token은 단기 수명(15분)으로 API 요청 시 `Authorization` 헤더에 전달하고, Refresh Token은 장기 수명(7일)으로 `httpOnly` 쿠키에 저장하여 자동 갱신한다.
+   164→   164→
+   165→   165→```
+   166→   166→┌──────────┐  POST /api/auth/login  ┌───────────────────┐
+   167→   167→│  Login   │ ──────────────────────►│  bcrypt.compare()  │
+   168→   168→│  Page    │                        │  ↓                  │
+   169→   169→│          │ ◄────────────────────  │  signAccessToken()  │
+   170→   170→│          │  Set-Cookie: refresh   │  signRefreshToken() │
+   171→   171→└──────────┘                        └───────────────────┘
+   172→   172→     │
+   173→   173→     ▼  모든 /api/admin/* 요청
+   174→   174→┌──────────────────────────────────────────────────────────┐
+   175→   175→│  Authorization: Bearer <accessToken>                     │
+   176→   176→│  → verifyJwt() → decode role → checkPermission() → 401/403/next │
+   177→   177→└──────────────────────────────────────────────────────────┘
+   178→   178→     │ accessToken 만료 (15분)
+   179→   179→     ▼
+   180→   180→┌──────────┐  POST /api/auth/refresh  ┌───────────────────┐
+   181→   181→│  Client  │ ────────────────────────►│  verifyRefresh()   │
+   182→   182→│  (자동)  │  Cookie: refreshToken    │  ↓                  │
+   183→   183→│          │ ◄──────────────────────  │  signAccessToken()  │
+   184→   184→│          │  { accessToken }         │  rotateRefresh()    │
+   185→   185→└──────────┘                          └───────────────────┘
+   186→   186→```
+   187→   187→
+   188→   188→### 2.2 TypeScript 인터페이스
+   189→   189→
+   190→   190→```typescript
+   191→   191→// src/types/admin.ts
+   192→   192→
+   193→   193→/** 관리자 역할 */
+   194→   194→export type AdminRole = 'super_admin' | 'admin' | 'operator';
+   195→   195→
+   196→   196→/** JWT Access Token 페이로드 */
+   197→   197→export interface AccessTokenPayload {
+   198→   198→  sub: string;          // AdminUser.id
+   199→   199→  email: string;
+   200→   200→  role: AdminRole;
+   201→   201→  permissions: string[];  // 미리 계산된 권한 목록
+   202→   202→  iat: number;
+   203→   203→  exp: number;
+   204→   204→}
+   205→   205→
+   206→   206→/** JWT Refresh Token 페이로드 */
+   207→   207→export interface RefreshTokenPayload {
+   208→   208→  sub: string;          // AdminUser.id
+   209→   209→  tokenVersion: number; // 토큰 버전 (강제 무효화용)
+   210→   210→  iat: number;
+   211→   211→  exp: number;
+   212→   212→}
+   213→   213→
+   214→   214→/** 로그인 요청 */
+   215→   215→export interface LoginRequest {
+   216→   216→  email: string;
+   217→   217→  password: string;
+   218→   218→}
+   219→   219→
+   220→   220→/** 로그인 응답 */
+   221→   221→export interface LoginResponse {
+   222→   222→  accessToken: string;
+   223→   223→  user: {
+   224→   224→    id: string;
+   225→   225→    email: string;
+   226→   226→    name: string;
+   227→   227→    role: AdminRole;
+   228→   228→    permissions: string[];
+   229→   229→  };
+   230→   230→}
+   231→   231→
+   232→   232→/** 토큰 갱신 응답 */
+   233→   233→export interface RefreshResponse {
+   234→   234→  accessToken: string;
+   235→   235→}
+   236→   236→
+   237→   237→/** 인증 에러 코드 */
+   238→   238→export type AuthErrorCode =
+   239→   239→  | 'INVALID_CREDENTIALS'
+   240→   240→  | 'ACCOUNT_LOCKED'
+   241→   241→  | 'ACCOUNT_INACTIVE'
+   242→   242→  | 'TOKEN_EXPIRED'
+   243→   243→  | 'TOKEN_INVALID'
+   244→   244→  | 'REFRESH_TOKEN_INVALID'
+   245→   245→  | 'PERMISSION_DENIED';
+   246→   246→```
+   247→   247→
+   248→   248→### 2.3 비밀번호 해시 설계
+   249→   249→
+   250→   250→```typescript
+   251→   251→// src/lib/admin/auth.ts
+   252→   252→
+   253→   253→import bcrypt from 'bcrypt';
+   254→   254→
+   255→   255→const SALT_ROUNDS = 12;
+   256→   256→
+   257→   257→/** 비밀번호 해시 생성 (관리자 계정 생성/수정 시) */
+   258→   258→export async function hashPassword(plainPassword: string): Promise<string> {
+   259→   259→  return bcrypt.hash(plainPassword, SALT_ROUNDS);
+   260→   260→}
+   261→   261→
+   262→   262→/** 비밀번호 검증 (로그인 시) */
+   263→   263→export async function verifyPassword(
+   264→   264→  plainPassword: string,
+   265→   265→  hashedPassword: string
+   266→   266→): Promise<boolean> {
+   267→   267→  return bcrypt.compare(plainPassword, hashedPassword);
+   268→   268→}
+   269→   269→
+   270→   270→/** 비밀번호 정책 검증 */
+   271→   271→export function validatePasswordPolicy(password: string): {
+   272→   272→  valid: boolean;
+   273→   273→  errors: string[];
+   274→   274→} {
+   275→   275→  const errors: string[] = [];
+   276→   276→
+   277→   277→  if (password.length < 8) {
+   278→   278→    errors.push('비밀번호는 8자 이상이어야 합니다.');
+   279→   279→  }
+   280→   280→  if (!/[a-z]/.test(password)) {
+   281→   281→    errors.push('소문자를 포함해야 합니다.');
+   282→   282→  }
+   283→   283→  if (!/[A-Z]/.test(password)) {
+   284→   284→    errors.push('대문자를 포함해야 합니다.');
+   285→   285→  }
+   286→   286→  if (!/[0-9]/.test(password)) {
+   287→   287→    errors.push('숫자를 포함해야 합니다.');
+   288→   288→  }
+   289→   289→  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+   290→   290→    errors.push('특수문자를 포함해야 합니다.');
+   291→   291→  }
+   292→   292→
+   293→   293→  return { valid: errors.length === 0, errors };
+   294→   294→}
+   295→   295→```
+   296→   296→
+   297→   297→### 2.4 JWT 발급 및 검증
+   298→   298→
+   299→   299→```typescript
+   300→   300→// src/lib/admin/auth.ts (계속)
+   301→   301→
+   302→   302→import { SignJWT, jwtVerify } from 'jose';
+   303→   303→
+   304→   304→const ACCESS_TOKEN_SECRET = new TextEncoder().encode(
+   305→   305→  process.env.JWT_ACCESS_SECRET!  // 최소 32바이트 랜덤 문자열
+   306→   306→);
+   307→   307→const REFRESH_TOKEN_SECRET = new TextEncoder().encode(
+   308→   308→  process.env.JWT_REFRESH_SECRET! // 최소 32바이트 랜덤 문자열
+   309→   309→);
+   310→   310→
+   311→   311→const ACCESS_TOKEN_TTL = '15m';   // 15분
+   312→   312→const REFRESH_TOKEN_TTL = '7d';   // 7일
+   313→   313→
+   314→   314→/** Access Token 발급 */
+   315→   315→export async function signAccessToken(
+   316→   316→  payload: Omit<AccessTokenPayload, 'iat' | 'exp'>
+   317→   317→): Promise<string> {
+   318→   318→  return new SignJWT({
+   319→   319→    sub: payload.sub,
+   320→   320→    email: payload.email,
+   321→   321→    role: payload.role,
+   322→   322→    permissions: payload.permissions,
+   323→   323→  })
+   324→   324→    .setProtectedHeader({ alg: 'HS256' })
+   325→   325→    .setIssuedAt()
+   326→   326→    .setExpirationTime(ACCESS_TOKEN_TTL)
+   327→   327→    .setIssuer('smart-library-admin')
+   328→   328→    .setAudience('admin-api')
+   329→   329→    .sign(ACCESS_TOKEN_SECRET);
+   330→   330→}
+   331→   331→
+   332→   332→/** Refresh Token 발급 */
+   333→   333→export async function signRefreshToken(
+   334→   334→  payload: Omit<RefreshTokenPayload, 'iat' | 'exp'>
+   335→   335→): Promise<string> {
+   336→   336→  return new SignJWT({
+   337→   337→    sub: payload.sub,
+   338→   338→    tokenVersion: payload.tokenVersion,
+   339→   339→  })
+   340→   340→    .setProtectedHeader({ alg: 'HS256' })
+   341→   341→    .setIssuedAt()
+   342→   342→    .setExpirationTime(REFRESH_TOKEN_TTL)
+   343→   343→    .setIssuer('smart-library-admin')
+   344→   344→    .setAudience('admin-refresh')
+   345→   345→    .sign(REFRESH_TOKEN_SECRET);
+   346→   346→}
+   347→   347→
+   348→   348→/** Access Token 검증 */
+   349→   349→export async function verifyAccessToken(
+   350→   350→  token: string
+   351→   351→): Promise<AccessTokenPayload> {
+   352→   352→  const { payload } = await jwtVerify(token, ACCESS_TOKEN_SECRET, {
+   353→   353→    issuer: 'smart-library-admin',
+   354→   354→    audience: 'admin-api',
+   355→   355→  });
+   356→   356→  return payload as unknown as AccessTokenPayload;
+   357→   357→}
+   358→   358→
+   359→   359→/** Refresh Token 검증 */
+   360→   360→export async function verifyRefreshToken(
+   361→   361→  token: string
+   362→   362→): Promise<RefreshTokenPayload> {
+   363→   363→  const { payload } = await jwtVerify(token, REFRESH_TOKEN_SECRET, {
+   364→   364→    issuer: 'smart-library-admin',
+   365→   365→    audience: 'admin-refresh',
+   366→   366→  });
+   367→   367→  return payload as unknown as RefreshTokenPayload;
+   368→   368→}
+   369→   369→```
+   370→   370→
+   371→   371→### 2.5 Refresh Token 쿠키 설정
+   372→   372→
+   373→   373→```typescript
+   374→   374→// src/lib/admin/auth.ts (계속)
+   375→   375→
+   376→   376→import { cookies } from 'next/headers';
+   377→   377→
+   378→   378→/** Refresh Token을 httpOnly 쿠키로 설정 */
+   379→   379→export function setRefreshTokenCookie(token: string): void {
+   380→   380→  cookies().set('refresh_token', token, {
+   381→   381→    httpOnly: true,        // JS 접근 불가 (XSS 방어)
+   382→   382→    secure: process.env.NODE_ENV === 'production',  // HTTPS 전용 (개발은 제외)
+   383→   383→    sameSite: 'strict',   // CSRF 방어
+   384→   384→    path: '/api/auth',    // /api/auth 경로에서만 전송
+   385→   385→    maxAge: 7 * 24 * 60 * 60,  // 7일 (초)
+   386→   386→  });
+   387→   387→}
+   388→   388→
+   389→   389→/** Refresh Token 쿠키 삭제 (로그아웃) */
+   390→   390→export function clearRefreshTokenCookie(): void {
+   391→   391→  cookies().delete('refresh_token');
+   392→   392→}
+   393→   393→```
+   394→   394→
+   395→   395→### 2.6 Token 갱신 흐름
+   396→   396→
+   397→   397→```typescript
+   398→   398→// src/app/api/auth/refresh/route.ts
+   399→   399→
+   400→   400→import { NextRequest, NextResponse } from 'next/server';
+   401→   401→import {
+   402→   402→  verifyRefreshToken,
+   403→   403→  signAccessToken,
+   404→   404→  signRefreshToken,
+   405→   405→  setRefreshTokenCookie,
+   406→   406→  clearRefreshTokenCookie,
+   407→   407→} from '@/lib/admin/auth';
+   408→   408→import { prisma } from '@/lib/db';
+   409→   409→
+   410→   410→export async function POST(request: NextRequest) {
+   411→   411→  try {
+   412→   412→    // 1. 쿠키에서 Refresh Token 추출
+   413→   413→    const refreshToken = request.cookies.get('refresh_token')?.value;
+   414→   414→    if (!refreshToken) {
+   415→   415→      return NextResponse.json(
+   416→   416→        { error: { code: 'REFRESH_TOKEN_INVALID', message: 'Refresh token이 없습니다.' } },
+   417→   417→        { status: 401 }
+   418→   418→      );
+   419→   419→    }
+   420→   420→
+   421→   421→    // 2. Refresh Token 검증
+   422→   422→    const payload = await verifyRefreshToken(refreshToken);
+   423→   423→
+   424→   424→    // 3. DB에서 관리자 정보 조회 (토큰 버전 확인)
+   425→   425→    const admin = await prisma.adminUser.findUnique({
+   426→   426→      where: { id: payload.sub },
+   427→   427→    });
+   428→   428→
+   429→   429→    if (!admin || !admin.isActive) {
+   430→   430→      clearRefreshTokenCookie();
+   431→   431→      return NextResponse.json(
+   432→   432→        { error: { code: 'ACCOUNT_INACTIVE', message: '비활성화된 계정입니다.' } },
+   433→   433→        { status: 401 }
+   434→   434→      );
+   435→   435→    }
+   436→   436→
+   437→   437→    // 4. 토큰 버전 불일치 → 강제 로그아웃
+   438→   438→    if (admin.tokenVersion !== payload.tokenVersion) {
+   439→   439→      clearRefreshTokenCookie();
+   440→   440→      return NextResponse.json(
+   441→   441→        { error: { code: 'REFRESH_TOKEN_INVALID', message: '토큰이 무효화되었습니다.' } },
+   442→   442→        { status: 401 }
+   443→   443→      );
+   444→   444→    }
+   445→   445→
+   446→   446→    // 5. 새 Access Token 발급
+   447→   447→    const permissions = getPermissionsForRole(admin.role);
+   448→   448→    const accessToken = await signAccessToken({
+   449→   449→      sub: admin.id,
+   450→   450→      email: admin.email,
+   451→   451→      role: admin.role as AdminRole,
+   452→   452→      permissions,
+   453→   453→    });
+   454→   454→
+   455→   455→    // 6. Refresh Token Rotation (새 Refresh Token 발급)
+   456→   456→    const newRefreshToken = await signRefreshToken({
+   457→   457→      sub: admin.id,
+   458→   458→      tokenVersion: admin.tokenVersion,
+   459→   459→    });
+   460→   460→    setRefreshTokenCookie(newRefreshToken);
+   461→   461→
+   462→   462→    // 7. 응답
+   463→   463→    return NextResponse.json({
+   464→   464→      accessToken,
+   465→   465→      user: {
+   466→   466→        id: admin.id,
+   467→   467→        email: admin.email,
+   468→   468→        name: admin.name,
+   469→   469→        role: admin.role,
+   470→   470→        permissions,
+   471→   471→      },
+   472→   472→    });
+   473→   473→  } catch {
+   474→   474→    clearRefreshTokenCookie();
+   475→   475→    return NextResponse.json(
+   476→   476→      { error: { code: 'TOKEN_INVALID', message: '토큰 검증에 실패했습니다.' } },
+   477→   477→      { status: 401 }
+   478→   478→    );
+   479→   479→  }
+   480→   480→}
+   481→   481→```
+   482→   482→
+   483→   483→### 2.7 RBAC 미들웨어
+   484→   484→
+   485→   485→```typescript
+   486→   486→// src/lib/admin/rbac.ts
+   487→   487→
+   488→   488→import { NextRequest, NextResponse } from 'next/server';
+   489→   489→import { verifyAccessToken, AccessTokenPayload, AdminRole } from './auth';
+   490→   490→
+   491→   491→// ─── 권한 정의 ───────────────────────────────────────────
+   492→   492→
+   493→   493→/** 시스템 내 모든 권한 식별자 */
+   494→   494→export type Permission =
+   495→   495→  | 'cms:read'           | 'cms:write'
+   496→   496→  | 'books:read'         | 'books:write'
+   497→   497→  | 'users:read'         | 'users:write'
+   498→   498→  | 'accounts:read'      | 'accounts:write'
+   499→   499→  | 'stats:read'         | 'stats:export'
+   500→   500→  | 'audit:read'         | 'audit:export'
+   501→   501→  | 'notices:read'       | 'notices:write'
+   502→   502→  | 'settings:read'      | 'settings:write';
+   503→   503→
+   504→   504→/** 역할별 권한 매핑 (PRD 4.2 기준) */
+   505→   505→const ROLE_PERMISSIONS: Record<AdminRole, Permission[]> = {
+   506→   506→  super_admin: [
+   507→   507→    'cms:read', 'cms:write',
+   508→   508→    'books:read', 'books:write',
+   509→   509→    'users:read', 'users:write',
+   510→   510→    'accounts:read', 'accounts:write',
+   511→   511→    'stats:read', 'stats:export',
+   512→   512→    'audit:read', 'audit:export',
+   513→   513→    'notices:read', 'notices:write',
+   514→   514→    'settings:read', 'settings:write',
+   515→   515→  ],
+   516→   516→  admin: [
+   517→   517→    'cms:read', 'cms:write',
+   518→   518→    'books:read', 'books:write',
+   519→   519→    'users:read', 'users:write',
+   520→   520→    'stats:read', 'stats:export',
+   521→   521→    'audit:read',
+   522→   522→    'notices:read', 'notices:write',
+   523→   523→    'settings:read',
+   524→   524→  ],
+   525→   525→  operator: [
+   526→   526→    'cms:read',
+   527→   527→    'books:read',
+   528→   528→    'users:read',
+   529→   529→    'stats:read',
+   530→   530→    'notices:read',
+   531→   531→  ],
+   532→   532→};
+   533→   533→
+   534→   534→/** 역할에 해당하는 권한 목록 반환 */
+   535→   535→export function getPermissionsForRole(role: AdminRole): Permission[] {
+   536→   536→  return ROLE_PERMISSIONS[role] ?? [];
+   537→   537→}
+   538→   538→
+   539→   539→/** 특정 권한 보유 여부 확인 */
+   540→   540→export function hasPermission(role: AdminRole, permission: Permission): boolean {
+   541→   541→  return ROLE_PERMISSIONS[role]?.includes(permission) ?? false;
+   542→   542→}
+   543→   543→
+   544→   544→// ─── API Route 보호 미들웨어 ─────────────────────────────
+   545→   545→
+   546→   546→type HandlerFn = (request: NextRequest, context: any) => Promise<NextResponse>;
+   547→   547→
+   548→   548→/** 관리자 인증 + 권한 검사 래퍼 */
+   549→   549→export function withAdminAuth(
+   550→   550→  handler: HandlerFn,
+   551→   551→  requiredPermission: Permission
+   552→   552→): HandlerFn {
+   553→   553→  return async (request: NextRequest, context: any) => {
+   554→   554→    try {
+   555→   555→      // 1. Authorization 헤더에서 Bearer 토큰 추출
+   556→   556→      const authHeader = request.headers.get('Authorization');
+   557→   557→      if (!authHeader?.startsWith('Bearer ')) {
+   558→   558→        return NextResponse.json(
+   559→   559→          { error: { code: 'TOKEN_INVALID', message: '인증 토큰이 필요합니다.' } },
+   560→   560→          { status: 401 }
+   561→   561→        );
+   562→   562→      }
+   563→   563→
+   564→   564→      const token = authHeader.slice(7);
+   565→   565→
+   566→   566→      // 2. Access Token 검증
+   567→   567→      const payload: AccessTokenPayload = await verifyAccessToken(token);
+   568→   568→
+   569→   569→      // 3. 권한 확인
+   570→   570→      if (!payload.permissions.includes(requiredPermission)) {
+   571→   571→        return NextResponse.json(
+   572→   572→          { error: { code: 'PERMISSION_DENIED', message: '접근 권한이 없습니다.' } },
+   573→   573→          { status: 403 }
+   574→   574→        );
+   575→   575→      }
+   576→   576→
+   577→   577→      // 4. 핸들러 실행 (페이로드를 context에 주입)
+   578→   578→      return handler(request, { ...context, auth: payload });
+   579→   579→    } catch (error) {
+   580→   580→      // 토큰 만료 또는 무효
+   581→   581→      if (error instanceof Error && error.name === 'JWTExpired') {
+   582→   582→        return NextResponse.json(
+   583→   583→          { error: { code: 'TOKEN_EXPIRED', message: '액세스 토큰이 만료되었습니다.' } },
+   584→   584→          { status: 401 }
+   585→   585→        );
+   586→   586→      }
+   587→   587→      return NextResponse.json(
+   588→   588→        { error: { code: 'TOKEN_INVALID', message: '토큰 검증에 실패했습니다.' } },
+   589→   589→        { status: 401 }
+   590→   590→      );
+   591→   591→    }
+   592→   592→  };
+   593→   593→}
+   594→   594→```
+   595→   595→
+   596→   596→### 2.8 클라이언트 인증 상태 관리 (Zustand)
+   597→   597→
+   598→   598→```typescript
+   599→   599→// src/stores/admin/useAuthStore.ts
+   600→   600→
+   601→   601→import { create } from 'zustand';
+   602→   602→import { persist } from 'zustand/middleware';
+   603→   603→import type { AdminRole } from '@/types/admin';
+   604→   604→
+   605→   605→interface AuthState {
+   606→   606→  // 상태
+   607→   607→  isAuthenticated: boolean;
+   608→   608→  accessToken: string | null;
+   609→   609→  user: {
+   610→   610→    id: string;
+   611→   611→    email: string;
+   612→   612→    name: string;
+   613→   613→    role: AdminRole;
+   614→   614→    permissions: string[];
+   615→   615→  } | null;
+   616→   616→
+   617→   617→  // 액션
+   618→   618→  setAuth: (accessToken: string, user: AuthState['user']) => void;
+   619→   619→  setAccessToken: (token: string) => void;
+   620→   620→  logout: () => void;
+   621→   621→  hasPermission: (permission: string) => boolean;
+   622→   622→}
+   623→   623→
+   624→   624→export const useAuthStore = create<AuthState>()(
+   625→   625→  persist(
+   626→   626→    (set, get) => ({
+   627→   627→      isAuthenticated: false,
+   628→   628→      accessToken: null,
+   629→   629→      user: null,
+   630→   630→
+   631→   631→      setAuth: (accessToken, user) =>
+   632→   632→        set({ isAuthenticated: true, accessToken, user }),
+   633→   633→
+   634→   634→      setAccessToken: (token) =>
+   635→   635→        set({ accessToken: token }),
+   636→   636→
+   637→   637→      logout: () =>
+   638→   638→        set({ isAuthenticated: false, accessToken: null, user: null }),
+   639→   639→
+   640→   640→      hasPermission: (permission) =>
+   641→   641→        get().user?.permissions.includes(permission) ?? false,
+   642→   642→    }),
+   643→   643→    {
+   644→   644→      name: 'admin-auth',
+   645→   645→      partialize: (state) => ({
+   646→   646→        // accessToken은 메모리에만 저장 (persist 제외)
+   647→   647→        isAuthenticated: state.isAuthenticated,
+   648→   648→        user: state.user,
+   649→   649→      }),
+   650→   650→    }
+   651→   651→  )
+   652→   652→);
+   653→   653→```
+   654→   654→
+   655→   655→### 2.9 클라이언트 자동 Token 갱신 인터셉터
+   656→   656→
+   657→   657→```typescript
+   658→   658→// src/lib/admin/api-client.ts
+   659→   659→
+   660→   660→let refreshPromise: Promise<string> | null = null;
+   661→   661→
+   662→   662→/** 만료된 Access Token을 자동 갱신하는 fetch 래퍼 */
+   663→   663→export async function adminFetch<T>(
+   664→   664→  url: string,
+   665→   665→  options: RequestInit = {}
+   666→   666→): Promise<T> {
+   667→   667→  const { accessToken, setAccessToken } = useAuthStore.getState();
+   668→   668→
+   669→   669→  const headers = new Headers(options.headers);
+   670→   670→  headers.set('Authorization', `Bearer ${accessToken}`);
+   671→   671→
+   672→   672→  let response = await fetch(url, { ...options, headers });
+   673→   673→
+   674→   674→  // 401 → 자동 갱신 시도
+   675→   675→  if (response.status === 401) {
+   676→   676→    const body = await response.json();
+   677→   677→    if (body.error?.code === 'TOKEN_EXPIRED') {
+   678→   678→      // 동시 요청 시 갱신 중복 방지
+   679→   679→      const newToken = await (refreshPromise ??= refreshToken());
+   680→   680→      refreshPromise = null;
+   681→   681→
+   682→   682→      headers.set('Authorization', `Bearer ${newToken}`);
+   683→   683→      response = await fetch(url, { ...options, headers });
+   684→   684→    }
+   685→   685→  }
+   686→   686→
+   687→   687→  if (!response.ok) {
+   688→   688→    const error = await response.json();
+   689→   689→    throw new AdminApiError(response.status, error.error?.code, error.error?.message);
+   690→   690→  }
+   691→   691→
+   692→   692→  return response.json();
+   693→   693→}
+   694→   694→
+   695→   695→/** Refresh Token으로 새 Access Token 발급 */
+   696→   696→async function refreshToken(): Promise<string> {
+   697→   697→  const res = await fetch('/api/auth/refresh', { method: 'POST' });
+   698→   698→  if (!res.ok) {
+   699→   699→    useAuthStore.getState().logout();
+   700→   700→    window.location.href = '/admin/login';
+   701→   701→    throw new Error('인증이 만료되었습니다. 다시 로그인해주세요.');
+   702→   702→  }
+   703→   703→  const data = await res.json();
+   704→   704→  useAuthStore.getState().setAccessToken(data.accessToken);
+   705→   705→  return data.accessToken;
+   706→   706→}
+   707→   707→
+   708→   708→/** 관리자 API 에러 클래스 */
+   709→   709→export class AdminApiError extends Error {
+   710→   710→  constructor(
+   711→   711→    public status: number,
+   712→   712→    public code: string,
+   713→   713→    message: string
+   714→   714→  ) {
+   715→   715→    super(message);
+   716→   716→    this.name = 'AdminApiError';
+   717→   717→  }
+   718→   718→}
+   719→   719→```
+   720→   720→
+   721→   721→---
+   722→   722→
+   723→   723→## 3. CMS 설계
+   724→   724→
+   725→   725→### 3.1 Key-Value 콘텐츠 관리 아키텍처
+   726→   726→
+   727→   727→CMS 콘텐츠는 **Key-Value 패턴**으로 관리한다. 각 화면의 텍스트·이미지·색상·규칙이 `CmsContent` 테이블의 개별 레코드로 저장되며, `key` 값(예: `"idle.title_text"`)으로 프론트엔드가 조회한다. DB에 값이 없으면 코드에 정의된 기본값(`constants.ts`)을 사용한다.
+   728→   728→
+   729→   729→```
+   730→   730→┌────────────────────┐         ┌──────────────────────────────┐
+   731→   731→│  constants.ts      │         │  CmsContent (SQLite)          │
+   732→   732→│  (코드 기본값)      │         │  key → value (JSON string)    │
+   733→   733→│                    │         │                                │
+   734→   734→│  idle.title:       │         │  "idle.title_text" → "도서관"  │
+   735→   735→│    "스마트 도서관"  │         │  "menu.borrow_button_color"   │
+   736→   736→│                    │         │    → "#2563EB"                 │
+   737→   737→└────────────────────┘         └──────────────────────────────┘
+   738→   738→         │                                  │
+   739→   739→         │  DB 값 없으면 기본값 사용          │  DB 값 있으면 DB 값 우선
+   740→   740→         ▼                                  ▼
+   741→   741→┌──────────────────────────────────────────────────────────────┐
+   742→   742→│  useCmsContent("idle.title_text", "스마트 도서관")             │
+   743→   743→│  → "도서관"  (DB 오버라이드)                                   │
+   744→   744→│                                                                │
+   745→   745→│  useCmsContent("idle.subtitle_text", "도서 대출·반납 키오스크")  │
+   746→   746→│  → "도서 대출·반납 키오스크"  (코드 기본값, DB 오버라이드 없음)  │
+   747→   747→└──────────────────────────────────────────────────────────────┘
+   748→   748→```
+   749→   749→
+   750→   750→### 3.2 TypeScript 인터페이스
+   751→   751→
+   752→   752→```typescript
+   753→   753→// src/types/admin.ts (계속)
+   754→   754→
+   755→   755→/** CMS 콘텐츠 타입 */
+   756→   756→export type CmsContentType = 'text' | 'image' | 'color' | 'number' | 'boolean' | 'json';
+   757→   757→
+   758→   758→/** CMS 콘텐츠 레코드 (DB 모델 대응) */
+   759→   759→export interface CmsContentRecord {
+   760→   760→  id: string;
+   761→   761→  key: string;              // 예: "idle.title_text"
+   762→   762→  type: CmsContentType;
+   763→   763→  value: string;            // JSON 문자열 (모든 타입을 String으로 저장)
+   764→   764→  updatedAt: Date;
+   765→   765→  updatedBy: string;        // AdminUser.id
+   766→   766→}
+   767→   767→
+   768→   768→/** CMS 필드 정의 (관리자 UI 렌더링용 메타데이터) */
+   769→   769→export interface CmsFieldDefinition {
+   770→   770→  key: string;              // "idle.title_text"
+   771→   771→  label: string;            // "대기 화면 타이틀"
+   772→   772→  type: CmsContentType;
+   773→   773→  defaultValue: string;     // "스마트 도서관"
+   774→   774→  group: string;            // "idle" (화면별 그룹)
+   775→   775→  validation?: {
+   776→   776→    maxLength?: number;     // text: 최대 길이
+   777→   777→    min?: number;           // number: 최솟값
+   778→   778→    max?: number;           // number: 최댓값
+   779→   779→    pattern?: string;       // color: HEX 패턴
+   780→   780→    maxFileSize?: number;   // image: 최대 파일 크기 (bytes)
+   781→   781→    allowedMimes?: string[];// image: 허용 MIME
+   782→   782→  };
+   783→   783→  description?: string;    // 필드 설명 (UI 툴팁)
+   784→   784→}
+   785→   785→
+   786→   786→/** CMS 콘텐츠 그룹 */
+   787→   787→export interface CmsContentGroup {
+   788→   788→  id: string;               // "idle"
+   789→   789→  label: string;            // "대기 화면"
+   790→   790→  icon: string;             // "Monitor" (Lucide 아이콘명)
+   791→   791→  fields: CmsFieldDefinition[];
+   792→   792→}
+   793→   793→```
+   794→   794→
+   795→   795→### 3.3 CMS 기본값 정의 (constants)
+   796→   796→
+   797→   797→```typescript
+   798→   798→// src/lib/admin/cms-defaults.ts
+   799→   799→
+   800→   800→import type { CmsFieldDefinition, CmsContentGroup } from '@/types/admin';
+   801→   801→
+   802→   802→/** 대기 화면 필드 정의 */
+   803→   803→const idleFields: CmsFieldDefinition[] = [
+   804→   804→  {
+   805→   805→    key: 'idle.logo_image',
+   806→   806→    label: '로고 이미지',
+   807→   807→    type: 'image',
+   808→   808→    defaultValue: '/images/default-logo.svg',
+   809→   809→    group: 'idle',
+   810→   810→    validation: { maxFileSize: 512000, allowedMimes: ['image/png', 'image/svg+xml'] },
+   811→   811→  },
+   812→   812→  {
+   813→   813→    key: 'idle.title_text',
+   814→   814→    label: '타이틀 텍스트',
+   815→   815→    type: 'text',
+   816→   816→    defaultValue: '스마트 도서관',
+   817→   817→    group: 'idle',
+   818→   818→    validation: { maxLength: 50 },
+   819→   819→  },
+   820→   820→  {
+   821→   821→    key: 'idle.subtitle_text',
+   822→   822→    label: '부제목 텍스트',
+   823→   823→    type: 'text',
+   824→   824→    defaultValue: '도서 대출·반납 키오스크',
+   825→   825→    group: 'idle',
+   826→   826→    validation: { maxLength: 100 },
+   827→   827→  },
+   828→   828→  {
+   829→   829→    key: 'idle.bg_color',
+   830→   830→    label: '배경색',
+   831→   831→    type: 'color',
+   832→   832→    defaultValue: '#1E3A5F',
+   833→   833→    group: 'idle',
+   834→   834→    validation: { pattern: '^#[0-9A-Fa-f]{6}$' },
+   835→   835→  },
+   836→   836→  {
+   837→   837→    key: 'idle.bg_image',
+   838→   838→    label: '배경 이미지',
+   839→   839→    type: 'image',
+   840→   840→    defaultValue: '',
+   841→   841→    group: 'idle',
+   842→   842→    validation: { maxFileSize: 2097152, allowedMimes: ['image/jpeg', 'image/png'] },
+   843→   843→  },
+   844→   844→  {
+   845→   845→    key: 'idle.touch_prompt',
+   846→   846→    label: '터치 안내 텍스트',
+   847→   847→    type: 'text',
+   848→   848→    defaultValue: '화면을 터치하세요',
+   849→   849→    group: 'idle',
+   850→   850→    validation: { maxLength: 80 },
+   851→   851→  },
+   852→   852→  {
+   853→   853→    key: 'idle.touch_prompt_color',
+   854→   854→    label: '터치 안내 색상',
+   855→   855→    type: 'color',
+   856→   856→    defaultValue: '#FFFFFF',
+   857→   857→    group: 'idle',
+   858→   858→    validation: { pattern: '^#[0-9A-Fa-f]{6}$' },
+   859→   859→  },
+   860→   860→];
+   861→   861→
+   862→   862→/** 대출 규칙 필드 정의 */
+   863→   863→const rulesFields: CmsFieldDefinition[] = [
+   864→   864→  {
+   865→   865→    key: 'rules.max_borrow_count',
+   866→   866→    label: '최대 대출 권수',
+   867→   867→    type: 'number',
+   868→   868→    defaultValue: '5',
+   869→   869→    group: 'rules',
+   870→   870→    validation: { min: 1, max: 20 },
+   871→   871→  },
+   872→   872→  {
+   873→   873→    key: 'rules.borrow_period_days',
+   874→   874→    label: '대출 기간 (일)',
+   875→   875→    type: 'number',
+   876→   876→    defaultValue: '14',
+   877→   877→    group: 'rules',
+   878→   878→    validation: { min: 1, max: 90 },
+   879→   879→  },
+   880→   880→  {
+   881→   881→    key: 'rules.overdue_penalty_multiplier',
+   882→   882→    label: '연체 배수',
+   883→   883→    type: 'number',
+   884→   884→    defaultValue: '1.0',
+   885→   885→    group: 'rules',
+   886→   886→    validation: { min: 1, max: 5 },
+   887→   887→  },
+   888→   888→  {
+   889→   889→    key: 'rules.overdue_enabled',
+   890→   890→    label: '연체 페널티 활성화',
+   891→   891→    type: 'boolean',
+   892→   892→    defaultValue: 'true',
+   893→   893→    group: 'rules',
+   894→   894→  },
+   895→   895→];
+   896→   896→
+   897→   897→/** CMS 콘텐츠 그룹 전체 정의 */
+   898→   898→export const CMS_CONTENT_GROUPS: CmsContentGroup[] = [
+   899→   899→  { id: 'idle',    label: '대기 화면',       icon: 'Monitor',        fields: idleFields },
+   900→   900→  { id: 'menu',    label: '메인 메뉴',       icon: 'LayoutGrid',    fields: menuFields },
+   901→   901→  { id: 'auth',    label: '인증 화면',       icon: 'Shield',        fields: authFields },
+   902→   902→  { id: 'select',  label: '도서 선택 화면',  icon: 'BookOpen',      fields: selectFields },
+   903→   903→  { id: 'borrow',  label: '대출 완료 화면',  icon: 'CheckCircle',   fields: borrowFields },
+   904→   904→  { id: 'return',  label: '반납 완료 화면',  icon: 'RotateCcw',     fields: returnFields },
+   905→   905→  { id: 'rules',   label: '대출 규칙',       icon: 'Settings',      fields: rulesFields },
+   906→   906→];
+   907→   907→
+   908→   908→/** key → 기본값 빠른 조회 맵 */
+   909→   909→export const CMS_DEFAULTS_MAP = new Map<string, string>(
+   910→   910→  CMS_CONTENT_GROUPS.flatMap((g) => g.fields.map((f) => [f.key, f.defaultValue]))
+   911→   911→);
+   912→   912→
+   913→   913→/** key → 필드 정의 빠른 조회 맵 */
+   914→   914→export const CMS_FIELD_MAP = new Map<string, CmsFieldDefinition>(
+   915→   915→  CMS_CONTENT_GROUPS.flatMap((g) => g.fields.map((f) => [f.key, f]))
+   916→   916→);
+   917→   917→```
+   918→   918→
+   919→   919→### 3.4 마이그레이션 전략: 코드 기본값 → DB 오버라이드
+   920→   920→
+   921→   921→```
+   922→   922→초기 배포:
+   923→   923→  CmsContent 테이블 = 비어 있음
+   924→   924→  → 모든 key가 constants.ts의 기본값으로 동작
+   925→   925→
+   926→   926→관리자가 "idle.title_text"를 "도서관"으로 변경:
+   927→   927→  → CmsContent에 { key: "idle.title_text", value: '"도서관"' } INSERT
+   928→   928→  → 프론트엔드는 DB 값을 우선 사용
+   929→   929→
+   930→   930→새 버전에서 key가 추가됨 (예: "idle.welcome_animation"):
+   931→   931→  → CmsContent에 해당 key 레코드 없음
+   932→   932→  → constants.ts의 기본값으로 자동 폴백
+   933→   933→  → 별도 마이그레이션 불필요 (코드 기본값이 단일 소스 오브 트루스)
+   934→   934→```
+   935→   935→
+   936→   936→```typescript
+   937→   937→// src/app/api/admin/cms/content/route.ts
+   938→   938→
+   939→   939→import { withAdminAuth } from '@/lib/admin/rbac';
+   940→   940→import { CMS_DEFAULTS_MAP } from '@/lib/admin/cms-defaults';
+   941→   941→import { prisma } from '@/lib/db';
+   942→   942→
+   943→   943→/** GET /api/admin/cms/content — 전체 CMS 콘텐츠 조회 */
+   944→   944→export const GET = withAdminAuth(async (request, { auth }) => {
+   945→   945→  // DB에 저장된 모든 CMS 레코드 조회
+   946→   946→  const dbContents = await prisma.cmsContent.findMany();
+   947→   947→
+   948→   948→  // key → value 맵 구성
+   949→   949→  const dbMap = new Map(dbContents.map((c) => [c.key, c.value]));
+   950→   950→
+   951→   951→  // 기본값과 병합: DB 값 우선, 없으면 기본값
+   952→   952→  const merged: Record<string, { value: string; type: string; source: 'db' | 'default' }> = {};
+   953→   953→
+   954→   954→  for (const [key, defaultValue] of CMS_DEFAULTS_MAP) {
+   955→   955→    const dbValue = dbMap.get(key);
+   956→   956→    merged[key] = {
+   957→   957→      value: dbValue ?? defaultValue,
+   958→   958→      type: CMS_FIELD_MAP.get(key)!.type,
+   959→   959→      source: dbValue ? 'db' : 'default',
+   960→   960→    };
+   961→   961→  }
+   962→   962→
+   963→   963→  return NextResponse.json({ content: merged });
+   964→   964→}, 'cms:read');
+   965→   965→```
+   966→   966→
+   967→   967→### 3.5 프론트엔드 통합: useCmsContent 훅
+   968→   968→
+   969→   969→```typescript
+   970→   970→// src/hooks/admin/useCmsContent.ts
+   971→   971→
+   972→   972→import { useCmsStore } from '@/stores/admin/useCmsStore';
+   973→   973→import { CMS_DEFAULTS_MAP } from '@/lib/admin/cms-defaults';
+   974→   974→
+   975→   975→/**
+   976→   976→ * 단일 CMS 콘텐츠 값 조회 훅
+   977→   977→ *
+   978→   978→ * @param key      CMS 콘텐츠 키 (예: "idle.title_text")
+   979→   979→ * @param defaultV 기본값 (constants.ts에서 import)
+   980→   980→ * @returns        해석된 값 (타입별 파싱 적용)
+   981→   981→ *
+   982→   982→ * @example
+   983→   983→ * const title = useCmsContent('idle.title_text', '스마트 도서관');
+   984→   984→ * // → "도서관" (DB 오버라이드) 또는 "스마트 도서관" (기본값)
+   985→   985→ */
+   986→   986→export function useCmsContent(key: string, defaultValue: string): string {
+   987→   987→  const storeValue = useCmsStore((state) => state.content.get(key));
+   988→   988→  return storeValue ?? defaultValue;
+   989→   989→}
+   990→   990→
+   991→   991→/** 타입별 파싱 버전 */
+   992→   992→export function useCmsNumber(key: string, defaultValue: number): number {
+   993→   993→  const raw = useCmsContent(key, String(defaultValue));
+   994→   994→  const parsed = Number(raw);
+   995→   995→  return Number.isFinite(parsed) ? parsed : defaultValue;
+   996→   996→}
+   997→   997→
+   998→   998→export function useCmsBoolean(key: string, defaultValue: boolean): boolean {
+   999→   999→  const raw = useCmsContent(key, String(defaultValue));
+  1000→  1000→  return raw === 'true';
+  1001→  1001→}
+  1002→  1002→
+  1003→  1003→export function useCmsJson<T>(key: string, defaultValue: T): T {
+  1004→  1004→  const raw = useCmsContent(key, JSON.stringify(defaultValue));
+  1005→  1005→  try {
+  1006→  1006→    return JSON.parse(raw) as T;
+  1007→  1007→  } catch {
+  1008→  1008→    return defaultValue;
+  1009→  1009→  }
+  1010→  1010→}
+  1011→  1011→```
+  1012→  1012→
+  1013→  1013→### 3.6 키오스크 컴포넌트에서의 조건부 렌더링
+  1014→  1014→
+  1015→  1015→```tsx
+  1016→  1016→// src/components/kiosk/KioskIdleScreen.tsx (수정 예시)
+  1017→  1017→
+  1018→  1018→import { useCmsContent, useCmsBoolean, useCmsNumber } from '@/hooks/admin/useCmsContent';
+  1019→  1019→
+  1020→  1020→export function KioskIdleScreen() {
+  1021→  1021→  // CMS 값 조회 (DB 오버라이드 ?? 코드 기본값)
+  1022→  1022→  const title       = useCmsContent('idle.title_text', '스마트 도서관');
+  1023→  1023→  const subtitle    = useCmsContent('idle.subtitle_text', '도서 대출·반납 키오스크');
+  1024→  1024→  const bgColor     = useCmsContent('idle.bg_color', '#1E3A5F');
+  1025→  1025→  const bgImage     = useCmsContent('idle.bg_image', '');
+  1026→  1026→  const touchPrompt = useCmsContent('idle.touch_prompt', '화면을 터치하세요');
+  1027→  1027→  const promptColor = useCmsContent('idle.touch_prompt_color', '#FFFFFF');
+  1028→  1028→  const logoImage   = useCmsContent('idle.logo_image', '/images/default-logo.svg');
+  1029→  1029→
+  1030→  1030→  return (
+  1031→  1031→    <div
+  1032→  1032→      className="flex flex-col items-center justify-center h-full"
+  1033→  1033→      style={{
+  1034→  1034→        backgroundColor: bgColor,
+  1035→  1035→        backgroundImage: bgImage ? `url(${bgImage})` : undefined,
+  1036→  1036→      }}
+  1037→  1037→    >
+  1038→  1038→      <img src={logoImage} alt="도서관 로고" className="w-32 h-32 mb-8" />
+  1039→  1039→      <h1 className="text-4xl font-bold text-white mb-4">{title}</h1>
+  1040→  1040→      <p className="text-xl text-white/80 mb-12">{subtitle}</p>
+  1041→  1041→      <p
+  1042→  1042→        className="text-2xl animate-pulse"
+  1043→  1043→        style={{ color: promptColor }}
+  1044→  1044→      >
+  1045→  1045→        {touchPrompt}
+  1046→  1046→      </p>
+  1047→  1047→    </div>
+  1048→  1048→  );
+  1049→  1049→}
+  1050→  1050→```
+  1051→  1051→
+  1052→  1052→---
+  1053→  1053→
+  1054→  1054→## 4. 실시간 동기화 설계
+  1055→  1055→
+  1056→  1056→### 4.1 키오스크 폴링 메커니즘 개요
+  1057→  1057→
+  1058→  1058→키오스크 프론트엔드는 **3초 간격 폴링**으로 CMS 콘텐츠 변경을 감지한다. 서버는 `ETag` 헤더로 콘텐츠 버전을 관리하고, 클라이언트는 `If-None-Match` 헤더로 조건부 요청을 보내어 변경이 없을 경우 `304 Not Modified`를 수신하여 트래픽을 최소화한다.
+  1059→  1059→
+  1060→  1060→```
+  1061→  1061→┌──────────────┐  GET /api/cms/content        ┌──────────────┐
+  1062→  1062→│  Kiosk       │  If-None-Match: "etag_v42"   │  Server      │
+  1063→  1063→│  Frontend    │ ────────────────────────────► │  (Next.js)   │
+  1064→  1064→│              │                               │              │
+  1065→  1065→│              │ ◄── 200 + ETag: "etag_v43"   │  (변경 있음)  │
+  1066→  1066→│              │     { content: {...} }        │              │
+  1067→  1067→│              │                               │              │
+  1068→  1068→│  (3초 후)    │  GET /api/cms/content        │              │
+  1069→  1069→│              │  If-None-Match: "etag_v43"   │              │
+  1070→  1070→│              │ ────────────────────────────► │              │
+  1071→  1071→│              │                               │              │
+  1072→  1072→│              │ ◄── 304 Not Modified          │  (변경 없음)  │
+  1073→  1073→└──────────────┘                               └──────────────┘
+  1074→  1074→```
+  1075→  1075→
+  1076→  1076→### 4.2 서버: ETag 기반 공개 CMS API
+  1077→  1077→
+  1078→  1078→```typescript
+  1079→  1079→// src/app/api/cms/content/route.ts (키오스크용 공개 API — 인증 불필요)
+  1080→  1080→
+  1081→  1081→import { NextRequest, NextResponse } from 'next/server';
+  1082→  1082→import { prisma } from '@/lib/db';
+  1083→  1083→import { CMS_DEFAULTS_MAP, CMS_FIELD_MAP } from '@/lib/admin/cms-defaults';
+  1084→  1084→import { createHash } from 'crypto';
+  1085→  1085→
+  1086→  1086→export async function GET(request: NextRequest) {
+  1087→  1087→  // 1. DB에서 모든 CMS 레코드 조회
+  1088→  1088→  const dbContents = await prisma.cmsContent.findMany({
+  1089→  1089→    orderBy: { key: 'asc' },
+  1090→  1090→  });
+  1091→  1091→
+  1092→  1092→  // 2. 기본값과 병합
+  1093→  1093→  const merged: Record<string, string> = {};
+  1094→  1094→  for (const [key, defaultValue] of CMS_DEFAULTS_MAP) {
+  1095→  1095→    const dbRecord = dbContents.find((c) => c.key === key);
+  1096→  1096→    merged[key] = dbRecord?.value ?? defaultValue;
+  1097→  1097→  }
+  1098→  1098→
+  1099→  1099→  // 3. ETag 생성 (내용 해시)
+  1100→  1100→  const contentHash = createHash('md5')
+  1101→  1101→    .update(JSON.stringify(merged))
+  1102→  1102→    .digest('hex');
+  1103→  1103→  const etag = `"${contentHash}"`;
+  1104→  1104→
+  1105→  1105→  // 4. 조건부 요청 검사 (If-None-Match)
+  1106→  1106→  const ifNoneMatch = request.headers.get('If-None-Match');
+  1107→  1107→  if (ifNoneMatch === etag) {
+  1108→  1108→    return new NextResponse(null, {
+  1109→  1109→      status: 304,
+  1110→  1110→      headers: { ETag: etag },
+  1111→  1111→    });
+  1112→  1112→  }
+  1113→  1113→
+  1114→  1114→  // 5. 변경 있음 → 200 + ETag + 콘텐츠
+  1115→  1115→  return NextResponse.json(
+  1116→  1116→    { content: merged, updatedAt: new Date().toISOString() },
+  1117→  1117→    {
+  1118→  1118→      headers: {
+  1119→  1119→        ETag: etag,
+  1120→  1120→        'Cache-Control': 'no-cache',  // 항상 재검증
+  1121→  1121→      },
+  1122→  1122→    }
+  1123→  1123→  );
+  1124→  1124→}
+  1125→  1125→```
+  1126→  1126→
+  1127→  1127→### 4.3 클라이언트: useCmsPolling 훅
+  1128→  1128→
+  1129→  1129→```typescript
+  1130→  1130→// src/hooks/admin/useCmsPolling.ts
+  1131→  1131→
+  1132→  1132→import { useEffect, useRef, useCallback } from 'react';
+  1133→  1133→import { useCmsStore } from '@/stores/admin/useCmsStore';
+  1134→  1134→
+  1135→  1135→const POLLING_INTERVAL_MS = 3000;  // 3초
+  1136→  1136→const MAX_RETRIES = 5;
+  1137→  1137→const RETRY_BASE_DELAY_MS = 1000;
+  1138→  1138→
+  1139→  1139→/**
+  1140→  1140→ * 키오스크용 CMS 콘텐츠 폴링 훅
+  1141→  1141→ *
+  1142→  1142→ * 3초 간격으로 GET /api/cms/content를 호출하고,
+  1143→  1143→ * ETag 기반 조건부 요청으로 불필요한 데이터 전송을 방지한다.
+  1144→  1144→ * 연결 실패 시 지수 백오프로 재시도한다.
+  1145→  1145→ */
+  1146→  1146→export function useCmsPolling(enabled: boolean = true) {
+  1147→  1147→  const etagRef = useRef<string | null>(null);
+  1148→  1148→  const retryCountRef = useRef(0);
+  1149→  1149→  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  1150→  1150→  const setContent = useCmsStore((state) => state.setContent);
+  1151→  1151→  const setLastUpdated = useCmsStore((state) => state.setLastUpdated);
+  1152→  1152→  const setConnectionStatus = useCmsStore((state) => state.setConnectionStatus);
+  1153→  1153→
+  1154→  1154→  const poll = useCallback(async () => {
+  1155→  1155→    try {
+  1156→  1156→      const headers: Record<string, string> = {};
+  1157→  1157→      if (etagRef.current) {
+  1158→  1158→        headers['If-None-Match'] = etagRef.current;
+  1159→  1159→      }
+  1160→  1160→
+  1161→  1161→      const response = await fetch('/api/cms/content', { headers });
+  1162→  1162→
+  1163→  1163→      if (response.status === 304) {
+  1164→  1164→        // 변경 없음 — 재시도 카운터 리셋
+  1165→  1165→        retryCountRef.current = 0;
+  1166→  1166→        setConnectionStatus('connected');
+  1167→  1167→        return;
+  1168→  1168→      }
+  1169→  1169→
+  1170→  1170→      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  1171→  1171→
+  1172→  1172→      // ETag 저장
+  1173→  1173→      const newEtag = response.headers.get('ETag');
+  1174→  1174→      if (newEtag) etagRef.current = newEtag;
+  1175→  1175→
+  1176→  1176→      // 콘텐츠 업데이트
+  1177→  1177→      const data = await response.json();
+  1178→  1178→      setContent(new Map(Object.entries(data.content)));
+  1179→  1179→      setLastUpdated(new Date(data.updatedAt));
+  1180→  1180→      setConnectionStatus('connected');
+  1181→  1181→
+  1182→  1182→      // 재시도 카운터 리셋
+  1183→  1183→      retryCountRef.current = 0;
+  1184→  1184→    } catch (error) {
+  1185→  1185→      retryCountRef.current++;
+  1186→  1186→      setConnectionStatus('disconnected');
+  1187→  1187→
+  1188→  1188→      if (retryCountRef.current >= MAX_RETRIES) {
+  1189→  1189→        setConnectionStatus('failed');
+  1190→  1190→        console.error('[CMS Polling] 최대 재시도 횟수 초과:', error);
+  1191→  1191→        return;
+  1192→  1192→      }
+  1193→  1193→
+  1194→  1194→      // 지수 백오프 대기 후 재시도
+  1195→  1195→      const delay = RETRY_BASE_DELAY_MS * Math.pow(2, retryCountRef.current - 1);
+  1196→  1196→      console.warn(`[CMS Polling] 재시도 ${retryCountRef.current}/${MAX_RETRIES} (${delay}ms 후)`);
+  1197→  1197→      await new Promise((r) => setTimeout(r, delay));
+  1198→  1198→    }
+  1199→  1199→  }, [setContent, setLastUpdated, setConnectionStatus]);
+  1200→  1200→
+  1201→  1201→  useEffect(() => {
+  1202→  1202→    if (!enabled) return;
+  1203→  1203→
+  1204→  1204→    // 최초 1회 즉시 실행
+  1205→  1205→    poll();
+  1206→  1206→
+  1207→  1207→    // 이후 3초 간격 폴링
+  1208→  1208→    intervalRef.current = setInterval(poll, POLLING_INTERVAL_MS);
+  1209→  1209→
+  1210→  1210→    return () => {
+  1211→  1211→      if (intervalRef.current) {
+  1212→  1212→        clearInterval(intervalRef.current);
+  1213→  1213→      }
+  1214→  1214→    };
+  1215→  1215→  }, [enabled, poll]);
+  1216→  1216→}
+  1217→  1217→```
+  1218→  1218→
+  1219→  1219→### 4.4 Zustand CMS 스토어
+  1220→  1220→
+  1221→  1221→```typescript
+  1222→  1222→// src/stores/admin/useCmsStore.ts
+  1223→  1223→
+  1224→  1224→import { create } from 'zustand';
+  1225→  1225→
+  1226→  1226→type ConnectionStatus = 'connected' | 'disconnected' | 'failed';
+  1227→  1227→
+  1228→  1228→interface CmsState {
+  1229→  1229→  /** CMS 콘텐츠 맵 (key → value) */
+  1230→  1230→  content: Map<string, string>;
+  1231→  1231→
+  1232→  1232→  /** 마지막 업데이트 시간 */
+  1233→  1233→  lastUpdated: Date | null;
+  1234→  1234→
+  1235→  1235→  /** 서버 연결 상태 */
+  1236→  1236→  connectionStatus: ConnectionStatus;
+  1237→  1237→
+  1238→  1238→  /** 액션 */
+  1239→  1239→  setContent: (content: Map<string, string>) => void;
+  1240→  1240→  setLastUpdated: (date: Date) => void;
+  1241→  1241→  setConnectionStatus: (status: ConnectionStatus) => void;
+  1242→  1242→  getValue: (key: string) => string | undefined;
+  1243→  1243→}
+  1244→  1244→
+  1245→  1245→export const useCmsStore = create<CmsState>()((set, get) => ({
+  1246→  1246→  content: new Map(),
+  1247→  1247→  lastUpdated: null,
+  1248→  1248→  connectionStatus: 'disconnected',
+  1249→  1249→
+  1250→  1250→  setContent: (content) => set({ content }),
+  1251→  1251→  setLastUpdated: (lastUpdated) => set({ lastUpdated }),
+  1252→  1252→  setConnectionStatus: (connectionStatus) => set({ connectionStatus }),
+  1253→  1253→
+  1254→  1254→  getValue: (key) => get().content.get(key),
+  1255→  1255→}));
+  1256→  1256→```
+  1257→  1257→
+  1258→  1258→### 4.5 버전 추적 및 변경 감지
+  1259→  1259→
+  1260→  1260→```typescript
+  1261→  1261→// CMS 콘텐츠 업데이트 시 updatedAt 타임스탬프 갱신
+  1262→  1262→
+  1263→  1263→// src/app/api/admin/cms/content/route.ts (PUT)
+  1264→  1264→
+  1265→  1265→export const PUT = withAdminAuth(async (request, { auth }) => {
+  1266→  1266→  const body = await request.json();
+  1267→  1267→  const { key, value } = body as { key: string; value: string };
+  1268→  1268→
+  1269→  1269→  // Zod 검증
+  1270→  1270→  const fieldDef = CMS_FIELD_MAP.get(key);
+  1271→  1271→  if (!fieldDef) {
+  1272→  1272→    return NextResponse.json(
+  1273→  1273→      { error: { code: 'INVALID_KEY', message: `알 수 없는 CMS key: ${key}` } },
+  1274→  1274→      { status: 400 }
+  1275→  1275→    );
+  1276→  1276→  }
+  1277→  1277→
+  1278→  1278→  // upsert: 존재하면 UPDATE, 없으면 INSERT
+  1279→  1279→  const result = await prisma.cmsContent.upsert({
+  1280→  1280→    where: { key },
+  1281→  1281→    update: {
+  1282→  1282→      value,
+  1283→  1283→      updatedBy: auth.sub,
+  1284→  1284→      updatedAt: new Date(),  // 버전 추적용 타임스탬프
+  1285→  1285→    },
+  1286→  1286→    create: {
+  1287→  1287→      key,
+  1288→  1288→      type: fieldDef.type,
+  1289→  1289→      value,
+  1290→  1290→      updatedBy: auth.sub,
+  1291→  1291→    },
+  1292→  1292→  });
+  1293→  1293→
+  1294→  1294→  // 감사 로그 기록
+  1295→  1295→  await recordAuditLog({
+  1296→  1296→    action: 'UPDATE',
+  1297→  1297→    entity: 'CmsContent',
+  1298→  1298→    entityId: result.id,
+  1299→  1299→    oldValue: fieldDef.defaultValue,
+  1300→  1300→    newValue: value,
+  1301→  1301→    performedBy: auth.sub,
+  1302→  1302→  });
+  1303→  1303→
+  1304→  1304→  return NextResponse.json({ success: true, content: result });
+  1305→  1305→}, 'cms:write');
+  1306→  1306→```
+  1307→  1307→
+  1308→  1308→### 4.6 조건부 렌더링 패턴 요약
+  1309→  1309→
+  1310→  1310→```typescript
+  1311→  1311→// 키오스크 컴포넌트에서의 조건부 렌더링 원칙
+  1312→  1312→// CMS 값 ?? 하드코딩 기본값
+  1313→  1313→
+  1314→  1314→// ✅ 올바른 패턴
+  1315→  1315→const title = useCmsContent('idle.title_text', '스마트 도서관');
+  1316→  1316→// → DB에 값 있으면 DB 값, 없으면 '스마트 도서관'
+  1317→  1317→
+  1318→  1318→// ❌ 잘못된 패턴 (기본값 누락)
+  1319→  1319→const title = useCmsStore((s) => s.content.get('idle.title_text'));
+  1320→  1320→// → DB에 값 없으면 undefined → 렌더링 깨짐
+  1321→  1321→
+  1322→  1322→// ❌ 잘못된 패턴 (직접 DB 조회 — 키오스크는 서버 컴포넌트가 아님)
+  1323→  1323→const title = await fetch(`/api/cms/content?key=idle.title_text`);
+  1324→  1324→```
+  1325→  1325→
+  1326→  1326→---
+  1327→  1327→
+  1328→  1328→## 5. 이미지 관리 설계
+  1329→  1329→
+  1330→  1330→### 5.1 이미지 저장 아키텍처
+  1331→  1331→
+  1332→  1332→```
+  1333→  1333→┌──────────┐  POST /api/admin/cms/upload   ┌───────────────────────────────┐
+  1334→  1334→│  Admin   │  FormData: file, key, altText  │  Server                       │
+  1335→  1335→│  UI      │ ─────────────────────────────► │                               │
+  1336→  1336→│          │                                 │  1. 파일 검증 (MIME, 크기)      │
+  1337→  1337→│          │                                 │  2. 매직 넘버 검증             │
+  1338→  1338→│          │                                 │  3. 파일명 새니타이징           │
+  1339→  1339→│          │                                 │  4. /public/uploads/cms/ 저장  │
+  1340→  1340→│          │                                 │  5. 썸네일 생성 (sharp)        │
+  1341→  1341→│          │                                 │  6. CmsContent UPDATE         │
+  1342→  1342→│          │ ◄── { url, thumbnailUrl }       │  7. 감사 로그 기록             │
+  1343→  1343→└──────────┘                                 └───────────────────────────────┘
+  1344→  1344→```
+  1345→  1345→
+  1346→  1346→### 5.2 TypeScript 인터페이스
+  1347→  1347→
+  1348→  1348→```typescript
+  1349→  1349→// src/types/admin.ts (계속)
+  1350→  1350→
+  1351→  1351→/** 이미지 업로드 요청 */
+  1352→  1352→export interface ImageUploadRequest {
+  1353→  1353→  file: File;
+  1354→  1354→  key: string;           // CMS key (예: "idle.logo_image")
+  1355→  1355→  altText?: string;      // 대체 텍스트 (접근성)
+  1356→  1356→}
+  1357→  1357→
+  1358→  1358→/** 이미지 업로드 응답 */
+  1359→  1359→export interface ImageUploadResponse {
+  1360→  1360→  url: string;           // 원본 이미지 URL
+  1361→  1361→  thumbnailUrl: string;  // 썸네일 URL
+  1362→  1362→  altText?: string;
+  1363→  1363→  size: number;          // 파일 크기 (bytes)
+  1364→  1364→  width: number;
+  1365→  1365→  height: number;
+  1366→  1366→}
+  1367→  1367→
+  1368→  1368→/** 허용 MIME 타입 */
+  1369→  1369→export const ALLOWED_IMAGE_MIMES = [
+  1370→  1370→  'image/jpeg',
+  1371→  1371→  'image/png',
+  1372→  1372→  'image/webp',
+  1373→  1373→  'image/svg+xml',
+  1374→  1374→] as const;
+  1375→  1375→
+  1376→  1376→/** 파일 크기 제한 */
+  1377→  1377→export const MAX_IMAGE_SIZE = 5 * 1024 * 1024;  // 5MB
+  1378→  1378→
+  1379→  1379→/** 매직 넘버 시그니처 */
+  1380→  1380→export const IMAGE_MAGIC_NUMBERS: Record<string, number[]> = {
+  1381→  1381→  'image/jpeg':  [0xFF, 0xD8, 0xFF],    // JPEG
+  1382→  1382→  'image/png':   [0x89, 0x50, 0x4E, 0x47], // PNG
+  1383→  1383→  'image/webp':  [0x52, 0x49, 0x46, 0x46], // RIFF (WebP container)
+  1384→  1384→  'image/svg+xml': [],                    // SVG는 텍스트 — 별도 검증
+  1385→  1385→};
+  1386→  1386→```
+  1387→  1387→
+  1388→  1388→### 5.3 파일명 새니타이징 및 저장 경로
+  1389→  1389→
+  1390→  1390→```typescript
+  1391→  1391→// src/lib/admin/upload.ts
+  1392→  1392→
+  1393→  1393→import path from 'path';
+  1394→  1394→import fs from 'fs/promises';
+  1395→  1395→import crypto from 'crypto';
+  1396→  1396→
+  1397→  1397→const UPLOAD_DIR = path.join(process.cwd(), 'public', 'uploads', 'cms');
+  1398→  1398→
+  1399→  1399→/**
+  1400→  1400→ * 파일명 새니타이징
+  1401→  1401→ * - 한글/특수문자 제거
+  1402→  1402→ * - 공백 → 하이픈
+  1403→  1403→ * - 타임스탬프 프리픽스로 유일성 보장
+  1404→  1404→ */
+  1405→  1405→export function sanitizeFilename(originalName: string): string {
+  1406→  1406→  const sanitized = originalName
+  1407→  1407→    .normalize('NFD')
+  1408→  1408→    .replace(/[\u0300-\u036f]/g, '')  // 분해된 악센트 제거
+  1409→  1409→    .replace(/[^a-zA-Z0-9._-]/g, '_') // 안전한 문자만 유지
+  1410→  1410→    .replace(/_+/g, '_')              // 연속 밑줄 → 단일
+  1411→  1411→    .toLowerCase();
+  1412→  1412→
+  1413→  1413→  const timestamp = Date.now();
+  1414→  1414→  return `${timestamp}_${sanitized}`;
+  1415→  1415→}
+  1416→  1416→
+  1417→  1417→/**
+  1418→  1418→ * 이미지 파일 저장
+  1419→  1419→ * @returns 저장된 파일의 공개 URL 경로
+  1420→  1420→ */
+  1421→  1421→export async function saveImageFile(
+  1422→  1422→  buffer: Buffer,
+  1423→  1423→  originalName: string
+  1424→  1424→): Promise<string> {
+  1425→  1425→  // 업로드 디렉터리 보장
+  1426→  1426→  await fs.mkdir(UPLOAD_DIR, { recursive: true });
+  1427→  1427→
+  1428→  1428→  const filename = sanitizeFilename(originalName);
+  1429→  1429→  const filePath = path.join(UPLOAD_DIR, filename);
+  1430→  1430→
+  1431→  1431→  // 파일 저장
+  1432→  1432→  await fs.writeFile(filePath, buffer);
+  1433→  1433→
+  1434→  1434→  // 공개 URL 반환 (Next.js가 /public 아래를 정적 서빙)
+  1435→  1435→  return `/uploads/cms/${filename}`;
+  1436→  1436→}
+  1437→  1437→```
+  1438→  1438→
+  1439→  1439→### 5.4 매직 넘버 검증 (MIME 스푸핑 방어)
+  1440→  1440→
+  1441→  1441→```typescript
+  1442→  1442→// src/lib/admin/upload.ts (계속)
+  1443→  1443→
+  1444→  1444→import { IMAGE_MAGIC_NUMBERS, ALLOWED_IMAGE_MIMES, MAX_IMAGE_SIZE } from '@/types/admin';
+  1445→  1445→
+  1446→  1446→/**
+  1447→  1447→ * 파일 매직 넘버 검증
+  1448→  1448→ * MIME 헤더만 신뢰하지 않고, 파일의 실제 바이트 시그니처를 확인한다.
+  1449→  1449→ */
+  1450→  1450→export function validateMagicNumber(buffer: Buffer, claimedMime: string): boolean {
+  1451→  1451→  // SVG는 텍스트 포맷 — <svg 태그로 시작하는지 확인
+  1452→  1452→  if (claimedMime === 'image/svg+xml') {
+  1453→  1453→    const head = buffer.toString('utf8', 0, 256).trim();
+  1454→  1454→    return head.startsWith('<?xml') || head.startsWith('<svg');
+  1455→  1455→  }
+  1456→  1456→
+  1457→  1457→  const expected = IMAGE_MAGIC_NUMBERS[claimedMime];
+  1458→  1458→  if (!expected || expected.length === 0) return false;
+  1459→  1459→
+  1460→  1460→  // 파일 시작 바이트와 매직 넘버 비교
+  1461→  1461→  for (let i = 0; i < expected.length; i++) {
+  1462→  1462→    if (buffer[i] !== expected[i]) return false;
+  1463→  1463→  }
+  1464→  1464→
+  1465→  1465→  // WebP는 RIFF + WEBP 시그니처 확인
+  1466→  1466→  if (claimedMime === 'image/webp') {
+  1467→  1467→    const webpSig = buffer.toString('ascii', 8, 12);
+  1468→  1468→    if (webpSig !== 'WEBP') return false;
+  1469→  1469→  }
+  1470→  1470→
+  1471→  1471→  return true;
+  1472→  1472→}
+  1473→  1473→
+  1474→  1474→/** 이미지 업로드 전체 검증 */
+  1475→  1475→export function validateImageUpload(
+  1476→  1476→  buffer: Buffer,
+  1477→  1477→  claimedMime: string,
+  1478→  1478→  fileSize: number
+  1479→  1479→): { valid: boolean; error?: string } {
+  1480→  1480→  // 1. MIME 타입 허용 여부
+  1481→  1481→  if (!ALLOWED_IMAGE_MIMES.includes(claimedMime as any)) {
+  1482→  1482→    return { valid: false, error: `허용되지 않는 파일 형식: ${claimedMime}` };
+  1483→  1483→  }
+  1484→  1484→
+  1485→  1485→  // 2. 파일 크기 제한
+  1486→  1486→  if (fileSize > MAX_IMAGE_SIZE) {
+  1487→  1487→    return { valid: false, error: `파일 크기 초과: ${fileSize} > ${MAX_IMAGE_SIZE} bytes` };
+  1488→  1488→  }
+  1489→  1489→
+  1490→  1490→  // 3. 매직 넘버 검증
+  1491→  1491→  if (!validateMagicNumber(buffer, claimedMime)) {
+  1492→  1492→    return { valid: false, error: '파일 시그니처가 MIME 타입과 일치하지 않습니다.' };
+  1493→  1493→  }
+  1494→  1494→
+  1495→  1495→  return { valid: true };
+  1496→  1496→}
+  1497→  1497→```
+  1498→  1498→
+  1499→  1499→### 5.5 썸네일 생성 (sharp)
+  1500→  1500→
+  1501→  1501→```typescript
+  1502→  1502→// src/lib/admin/upload.ts (계속)
+  1503→  1503→
+  1504→  1504→import sharp from 'sharp';
+  1505→  1505→
+  1506→  1506→const THUMBNAIL_WIDTH = 200;
+  1507→  1507→const THUMBNAIL_HEIGHT = 200;
+  1508→  1508→
+  1509→  1509→/**
+  1510→  1510→ * 썸네일 이미지 생성
+  1511→  1511→ * 원본 비율 유지, 최대 200×200으로 축소, WebP 포맷 변환
+  1512→  1512→ */
+  1513→  1513→export async function generateThumbnail(
+  1514→  1514→  buffer: Buffer,
+  1515→  1515→  originalName: string
+  1516→  1516→): Promise<string> {
+  1517→  1517→  // SVG는 sharp 처리 불가 — 원본 URL을 썸네일로 사용
+  1518→  1518→  if (originalName.endsWith('.svg')) {
+  1519→  1519→    return ''; // 호출부에서 원본 URL 사용
+  1520→  1520→  }
+  1521→  1521→
+  1522→  1522→  const thumbnailBuffer = await sharp(buffer)
+  1523→  1523→    .resize(THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT, {
+  1524→  1524→      fit: 'inside',    // 비율 유지
+  1525→  1525→      withoutEnlargement: true,  // 작은 이미지 확대 금지
+  1526→  1526→    })
+  1527→  1527→    .webp({ quality: 80 })
+  1528→  1528→    .toBuffer();
+  1529→  1529→
+  1530→  1530→  const thumbFilename = `thumb_${sanitizeFilename(originalName).replace(/\.[^.]+$/, '.webp')}`;
+  1531→  1531→  const thumbPath = path.join(UPLOAD_DIR, thumbFilename);
+  1532→  1532→  await fs.writeFile(thumbPath, thumbnailBuffer);
+  1533→  1533→
+  1534→  1534→  return `/uploads/cms/${thumbFilename}`;
+  1535→  1535→}
+  1536→  1536→```
+  1537→  1537→
+  1538→  1538→### 5.6 이미지 업로드 API Route
+  1539→  1539→
+  1540→  1540→```typescript
+  1541→  1541→// src/app/api/admin/cms/upload/route.ts
+  1542→  1542→
+  1543→  1543→import { NextRequest, NextResponse } from 'next/server';
+  1544→  1544→import { withAdminAuth } from '@/lib/admin/rbac';
+  1545→  1545→import { validateImageUpload, saveImageFile, generateThumbnail } from '@/lib/admin/upload';
+  1546→  1546→import formidable from 'formidable';
+  1547→  1547→
+  1548→  1548→export const POST = withAdminAuth(async (request, { auth }) => {
+  1549→  1549→  // 1. 멀티파트 폼 데이터 파싱
+  1550→  1550→  const formData = await request.formData();
+  1551→  1551→  const file = formData.get('file') as File | null;
+  1552→  1552→  const key = formData.get('key') as string;
+  1553→  1553→  const altText = formData.get('altText') as string | null;
+  1554→  1554→
+  1555→  1555→  if (!file || !key) {
+  1556→  1556→    return NextResponse.json(
+  1557→  1557→      { error: { code: 'BAD_REQUEST', message: 'file과 key는 필수입니다.' } },
+  1558→  1558→      { status: 400 }
+  1559→  1559→    );
+  1560→  1560→  }
+  1561→  1561→
+  1562→  1562→  // 2. 파일 버퍼 읽기
+  1563→  1563→  const buffer = Buffer.from(await file.arrayBuffer());
+  1564→  1564→
+  1565→  1565→  // 3. 검증
+  1566→  1566→  const validation = validateImageUpload(buffer, file.type, file.size);
+  1567→  1567→  if (!validation.valid) {
+  1568→  1568→    return NextResponse.json(
+  1569→  1569→      { error: { code: 'INVALID_FILE', message: validation.error } },
+  1570→  1570→      { status: 400 }
+  1571→  1571→    );
+  1572→  1572→  }
+  1573→  1573→
+  1574→  1574→  // 4. 파일 저장
+  1575→  1575→  const url = await saveImageFile(buffer, file.name);
+  1576→  1576→
+  1577→  1577→  // 5. 썸네일 생성
+  1578→  1578→  const thumbnailUrl = await generateThumbnail(buffer, file.name);
+  1579→  1579→
+  1580→  1580→  // 6. CMS 콘텐츠 업데이트
+  1581→  1581→  await prisma.cmsContent.upsert({
+  1582→  1582→    where: { key },
+  1583→  1583→    update: { value: JSON.stringify({ url, thumbnailUrl, altText }), updatedBy: auth.sub },
+  1584→  1584→    create: { key, type: 'image', value: JSON.stringify({ url, thumbnailUrl, altText }), updatedBy: auth.sub },
+  1585→  1585→  });
+  1586→  1586→
+  1587→  1587→  // 7. 감사 로그
+  1588→  1588→  await recordAuditLog({
+  1589→  1589→    action: 'UPDATE',
+  1590→  1590→    entity: 'CmsContent',
+  1591→  1591→    entityId: key,
+  1592→  1592→    newValue: url,
+  1593→  1593→    performedBy: auth.sub,
+  1594→  1594→  });
+  1595→  1595→
+  1596→  1596→  return NextResponse.json({
+  1597→  1597→    url,
+  1598→  1598→    thumbnailUrl: thumbnailUrl || url,  // SVG는 원본 URL
+  1599→  1599→    altText,
+  1600→  1600→    size: file.size,
+  1601→  1601→  });
+  1602→  1602→}, 'cms:write');
+  1603→  1603→```
+  1604→  1604→
+  1605→  1605→### 5.7 Alt 텍스트 관리
+  1606→  1606→
+  1607→  1607→```typescript
+  1608→  1608→/** 이미지 CMS 값의 JSON 구조 */
+  1609→  1609→interface CmsImageValue {
+  1610→  1610→  url: string;
+  1611→  1611→  thumbnailUrl?: string;
+  1612→  1612→  altText?: string;      // 접근성 대체 텍스트
+  1613→  1613→  width?: number;
+  1614→  1614→  height?: number;
+  1615→  1615→}
+  1616→  1616→
+  1617→  1617→/** Alt 텍스트 업데이트 API (이미지 재업로드 없이 텍스트만 변경) */
+  1618→  1618→export async function updateImageAltText(
+  1619→  1619→  key: string,
+  1620→  1620→  altText: string,
+  1621→  1621→  adminId: string
+  1622→  1622→): Promise<void> {
+  1623→  1623→  const record = await prisma.cmsContent.findUnique({ where: { key } });
+  1624→  1624→  if (!record) throw new Error(`CMS key not found: ${key}`);
+  1625→  1625→
+  1626→  1626→  const current: CmsImageValue = JSON.parse(record.value);
+  1627→  1627→  current.altText = altText;
+  1628→  1628→
+  1629→  1629→  await prisma.cmsContent.update({
+  1630→  1630→    where: { key },
+  1631→  1631→    data: { value: JSON.stringify(current), updatedBy: adminId },
+  1632→  1632→  });
+  1633→  1633→}
+  1634→  1634→```
+  1635→  1635→
+  1636→  1636→---
+  1637→  1637→
+  1638→  1638→## 6. 반응형 설계
+  1639→  1639→
+  1640→  1640→### 6.1 브레이크포인트 정의
+  1641→  1641→
+  1642→  1642→```typescript
+  1643→  1643→// tailwind.config.ts
+  1644→  1644→
+  1645→  1645→import type { Config } from 'tailwindcss';
+  1646→  1646→
+  1647→  1647→export default {
+  1648→  1648→  theme: {
+  1649→  1649→    screens: {
+  1650→  1650→      'mobile':   '375px',    // 스마트폰
+  1651→  1651→      'tablet':   '768px',    // 태블릿
+  1652→  1652→      'kiosk-lg': '1024px',   // 21″ 키오스크 (최소 해상도)
+  1653→  1653→      'kiosk-xl': '1440px',   // 24″ 키오스크
+  1654→  1654→    },
+  1655→  1655→    extend: {
+  1656→  1656→      spacing: {
+  1657→  1657→        'sidebar-collapsed': '64px',   // 태블릿: 아이콘 전용 사이드바
+  1658→  1658→        'sidebar-expanded':  '240px',  // 키오스크: 전체 사이드바
+  1659→  1659→        'preview-panel':     '320px',  // 키오스크: 미리보기 패널
+  1660→  1660→      },
+  1661→  1661→    },
+  1662→  1662→  },
+  1663→  1663→} satisfies Config;
+  1664→  1664→```
+  1665→  1665→
+  1666→  1666→### 6.2 CSS Custom Properties (키오스크 특화)
+  1667→  1667→
+  1668→  1668→```css
+  1669→  1669→/* src/app/globals.css */
+  1670→  1670→
+  1671→  1671→:root {
+  1672→  1672→  /* 기본 (모바일) */
+  1673→  1673→  --admin-sidebar-width: 0px;
+  1674→  1674→  --admin-content-columns: 1;
+  1675→  1675→  --admin-chart-height: 200px;
+  1676→  1676→  --admin-table-mode: card;    /* card | table */
+  1677→  1677→  --admin-font-scale: 1;
+  1678→  1678→}
+  1679→  1679→
+  1680→  1680→@media (min-width: 768px) {
+  1681→  1681→  /* 태블릿 */
+  1682→  1682→  :root {
+  1683→  1683→    --admin-sidebar-width: 64px;
+  1684→  1684→    --admin-content-columns: 2;
+  1685→  1685→    --admin-chart-height: 300px;
+  1686→  1686→    --admin-table-mode: table;
+  1687→  1687→    --admin-font-scale: 1;
+  1688→  1688→  }
+  1689→  1689→}
+  1690→  1690→
+  1691→  1691→@media (min-width: 1024px) {
+  1692→  1692→  /* 21″ 키오스크 */
+  1693→  1693→  :root {
+  1694→  1694→    --admin-sidebar-width: 240px;
+  1695→  1695→    --admin-content-columns: 3;
+  1696→  1696→    --admin-chart-height: 400px;
+  1697→  1697→    --admin-table-mode: table;
+  1698→  1698→    --admin-font-scale: 1;
+  1699→  1699→  }
+  1700→  1700→}
+  1701→  1701→
+  1702→  1702→@media (min-width: 1440px) {
+  1703→  1703→  /* 24″ 키오스크 */
+  1704→  1704→  :root {
+  1705→  1705→    --admin-sidebar-width: 240px;
+  1706→  1706→    --admin-content-columns: 4;
+  1707→  1707→    --admin-chart-height: 400px;
+  1708→  1708→    --admin-table-mode: table;
+  1709→  1709→    --admin-font-scale: 1.125;  /* 12.5% 더 큰 텍스트 */
+  1710→  1710→  }
+  1711→  1711→}
+  1712→  1712→```
+  1713→  1713→
+  1714→  1714→### 6.3 반응형 레이아웃 구현
+  1715→  1715→
+  1716→  1716→```tsx
+  1717→  1717→// src/app/admin/layout.tsx
+  1718→  1718→
+  1719→  1719→import { AdminSidebar } from '@/components/admin/AdminSidebar';
+  1720→  1720→import { AdminHeader } from '@/components/admin/AdminHeader';
+  1721→  1721→import { PermissionGuard } from '@/components/admin/PermissionGuard';
+  1722→  1722→
+  1723→  1723→export default function AdminLayout({ children }: { children: React.ReactNode }) {
+  1724→  1724→  return (
+  1725→  1725→    <PermissionGuard>
+  1726→  1726→      <div className="flex h-screen overflow-hidden bg-gray-50">
+  1727→  1727→        {/* 사이드바 */}
+  1728→  1728→        <aside
+  1729→  1729→          className={`
+  1730→  1730→            /* 모바일: 숨김 (햄버거로 토글) */
+  1731→  1731→            hidden mobile:block
+  1732→  1732→            /* 태블릿: 아이콘 전용 64px */
+  1733→  1733→            tablet:w-sidebar-collapsed tablet:block
+  1734→  1734→            /* 키오스크: 전체 240px */
+  1735→  1735→            kiosk-lg:w-sidebar-expanded
+  1736→  1736→            /* 트랜지션 */
+  1737→  1737→            transition-all duration-200 ease-in-out
+  1738→  1738→            border-r border-gray-200 bg-white
+  1739→  1739→          `}
+  1740→  1740→        >
+  1741→  1741→          <AdminSidebar />
+  1742→  1742→        </aside>
+  1743→  1743→
+  1744→  1744→        {/* 메인 영역 */}
+  1745→  1745→        <div className="flex-1 flex flex-col overflow-hidden">
+  1746→  1746→          <AdminHeader />
+  1747→  1747→
+  1748→  1748→          <main
+  1749→  1749→            className="flex-1 overflow-y-auto p-4 tablet:p-6 kiosk-lg:p-8"
+  1750→  1750→            style={{
+  1751→  1751→              /* CSS Grid 컬럼 수 동적 적용 */
+  1752→  1752→              gridTemplateColumns: `repeat(var(--admin-content-columns), 1fr)`,
+  1753→  1753→            }}
+  1754→  1754→          >
+  1755→  1755→            {children}
+  1756→  1756→          </main>
+  1757→  1757→        </div>
+  1758→  1758→      </div>
+  1759→  1759→    </PermissionGuard>
+  1760→  1760→  );
+  1761→  1761→}
+  1762→  1762→```
+  1763→  1763→
+  1764→  1764→### 6.4 반응형 UI 동작 매트릭스
+  1765→  1765→
+  1766→  1766→| UI 요소 | 모바일 (<768px) | 태블릿 (768~1023px) | 21″ 키오스크 (1024~1439px) | 24″ 키오스크 (≥1440px) |
+  1767→  1767→|---------|:--------------:|:-------------------:|:------------------------:|:---------------------:|
+  1768→  1768→| **사이드바** | 햄버거 메뉴 (슬라이드 오버레이) | 64px 아이콘 전용 (hover 확장) | 240px 고정 노출 | 240px 고정 노출 |
+  1769→  1769→| **콘텐츠 영역** | 1-column flex stack | 2-column CSS Grid | 3-column CSS Grid | 4-column CSS Grid |
+  1770→  1770→| **미리보기 패널** | 모달 오버레이 | 하단 280px 접히식 | 우측 320px 고정 | 우측 320px 고정 |
+  1771→  1771→| **데이터 테이블** | 카드 리스트 뷰 | 주요 컬럼 5개 + 더보기 | 전체 컬럼 노출 | 전체 컬럼 노출 |
+  1772→  1772→| **컬러 피커** | 전체화면 모달 | 인라인 팝오버 | 인라인 팝오버 | 인라인 팝오버 |
+  1773→  1773→| **이미지 업로드** | 카메라+파일 선택 버튼 | 드래그앤드롭 영역 | 드래그앤드롭 영역 | 드래그앤드롭 영역 |
+  1774→  1774→| **통계 그래프** | 100%×200px | 100%×300px | 800×400 | 800×400 |
+  1775→  1775→| **폰트 스케일** | 1.0 | 1.0 | 1.0 | 1.125 (12.5% 더 큼) |
+  1776→  1776→| **페이지네이션** | 무한 스크롤 | 페이지 번호 | 페이지 번호 | 페이지 번호 |
+  1777→  1777→
+  1778→  1778→### 6.5 모바일 햄버거 메뉴 (Sheet 컴포넌트)
+  1779→  1779→
+  1780→  1780→```tsx
+  1781→  1781→// src/components/admin/AdminSidebar.tsx
+  1782→  1782→
+  1783→  1783→import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+  1784→  1784→import { Menu } from 'lucide-react';
+  1785→  1785→import { usePathname } from 'next/navigation';
+  1786→  1786→
+  1787→  1787→export function AdminSidebar() {
+  1788→  1788→  const pathname = usePathname();
+  1789→  1789→  const navItems = [
+  1790→  1790→    { href: '/admin',          label: '대시보드',  icon: LayoutDashboard, permission: 'stats:read' },
+  1791→  1791→    { href: '/admin/content',  label: '콘텐츠 관리', icon: Palette,       permission: 'cms:read' },
+  1792→  1792→    { href: '/admin/books',    label: '도서 관리',  icon: BookOpen,      permission: 'books:read' },
+  1793→  1793→    { href: '/admin/users',    label: '이용자 관리', icon: Users,        permission: 'users:read' },
+  1794→  1794→    { href: '/admin/accounts', label: '계정 관리',  icon: Shield,       permission: 'accounts:read' },
+  1795→  1795→    { href: '/admin/audit',    label: '감사 로그',  icon: FileText,     permission: 'audit:read' },
+  1796→  1796→    { href: '/admin/notices',  label: '공지 관리',  icon: Bell,         permission: 'notices:read' },
+  1797→  1797→    { href: '/admin/settings', label: '시스템 설정', icon: Settings,    permission: 'settings:read' },
+  1798→  1798→  ];
+  1799→  1799→
+  1800→  1800→  return (
+  1801→  1801→    <>
+  1802→  1802→      {/* 모바일: 햄버거 → Sheet (슬라이드 오버레이) */}
+  1803→  1803→      <div className="tablet:hidden">
+  1804→  1804→        <Sheet>
+  1805→  1805→          <SheetTrigger asChild>
+  1806→  1806→            <Button variant="ghost" size="icon">
+  1807→  1807→              <Menu className="h-6 w-6" />
+  1808→  1808→            </Button>
+  1809→  1809→          </SheetTrigger>
+  1810→  1810→          <SheetContent side="left" className="w-64 p-0">
+  1811→  1811→            <NavList items={navItems} pathname={pathname} />
+  1812→  1812→          </SheetContent>
+  1813→  1813→        </Sheet>
+  1814→  1814→      </div>
+  1815→  1815→
+  1816→  1816→      {/* 태블릿+: 인라인 사이드바 */}
+  1817→  1817→      <nav className="hidden tablet:flex flex-col h-full">
+  1818→  1818→        <NavList items={navItems} pathname={pathname} />
+  1819→  1819→      </nav>
+  1820→  1820→    </>
+  1821→  1821→  );
+  1822→  1822→}
+  1823→  1823→```
+  1824→  1824→
+  1825→  1825→---
+  1826→  1826→
+  1827→  1827→## 7. 보안 설계
+  1828→  1828→
+  1829→  1829→### 7.1 보안 계층 아키텍처
+  1830→  1830→
+  1831→  1831→```
+  1832→  1832→┌─────────────────────────────────────────────────────────────┐
+  1833→  1833→│                     클라이언트 요청                           │
+  1834→  1834→└─────────────┬───────────────────────────────────────────────┘
+  1835→  1835→              │
+  1836→  1836→              ▼
+  1837→  1837→┌─────────────────────────────────────────────────────────────┐
+  1838→  1838→│  1. HTTPS (TLS)                                             │
+  1839→  1839→│     - 로컬 개발 제외 모든 환경에서 TLS 필수                    │
+  1840→  1840→│     - Self-signed 인증서 허용 (키오스크 내부망)                │
+  1841→  1841→└─────────────┬───────────────────────────────────────────────┘
+  1842→  1842→              │
+  1843→  1843→              ▼
+  1844→  1844→┌─────────────────────────────────────────────────────────────┐
+  1845→  1845→│  2. CSRF 보호 (SameSite Cookie)                             │
+  1846→  1846→│     - Refresh Token: SameSite=Strict                        │
+  1847→  1847→│     - 모든 관리자 쿠키: Secure, HttpOnly, SameSite=Strict    │
+  1848→  1848→└─────────────┬───────────────────────────────────────────────┘
+  1849→  1849→              │
+  1850→  1850→              ▼
+  1851→  1851→┌─────────────────────────────────────────────────────────────┐
+  1852→  1852→│  3. JWT 인증 (jose HS256)                                   │
+  1853→  1853→│     - Access Token: Bearer 헤더, 15분 TTL                    │
+  1854→  1854→│     - Refresh Token: httpOnly 쿠키, 7일 TTL                 │
+  1855→  1855→│     - 토큰 버전 관리 (강제 무효화)                             │
+  1856→  1856→└─────────────┬───────────────────────────────────────────────┘
+  1857→  1857→              │
+  1858→  1858→              ▼
+  1859→  1859→┌─────────────────────────────────────────────────────────────┐
+  1860→  1860→│  4. RBAC 권한 검사                                           │
+  1861→  1861→│     - withAdminAuth(handler, requiredPermission)             │
+  1862→  1862→│     - 역할별 권한 매트릭스 확인                                │
+  1863→  1863→│     - 403 Forbidden on 권한 부족                              │
+  1864→  1864→└─────────────┬───────────────────────────────────────────────┘
+  1865→  1865→              │
+  1866→  1866→              ▼
+  1867→  1867→┌─────────────────────────────────────────────────────────────┐
+  1868→  1868→│  5. 입력 검증 (Zod)                                         │
+  1869→  1869→│     - 모든 API 입력 Zod 스키마로 검증                         │
+  1870→  1870→│     - text 길이, color HEX, image MIME, number 범위          │
+  1871→  1871→└─────────────┬───────────────────────────────────────────────┘
+  1872→  1872→              │
+  1873→  1873→              ▼
+  1874→  1874→┌─────────────────────────────────────────────────────────────┐
+  1875→  1875→│  6. 파일 업로드 검증                                         │
+  1876→  1876→│     - MIME 화이트리스트                                      │
+  1877→  1877→│     - 매직 넘버 시그니처 검증                                 │
+  1878→  1878→│     - 파일 크기 제한 (5MB)                                   │
+  1879→  1879→│     - SVG sanitize (DOMPurify)                              │
+  1880→  1880→└─────────────┬───────────────────────────────────────────────┘
+  1881→  1881→              │
+  1882→  1882→              ▼
+  1883→  1883→┌─────────────────────────────────────────────────────────────┐
+  1884→  1884→│  7. 감사 로그 기록                                           │
+  1885→  1885→│     - 모든 mutation 작업 AuditLog에 기록                      │
+  1886→  1886→│     - 변경 전후값 (oldValue/newValue) 저장                     │
+  1887→  1887→└─────────────────────────────────────────────────────────────┘
+  1888→  1888→```
+  1889→  1889→
+  1890→  1890→### 7.2 비밀번호 해시 (bcrypt)
+  1891→  1891→
+  1892→  1892→```typescript
+  1893→  1893→// 설계 상세는 2.3절 참조
+  1894→  1894→// 핵심 파라미터:
+  1895→  1895→// - SALT_ROUNDS = 12  (약 250ms 해시 시간, 보안/성능 균형)
+  1896→  1896→// - 저장: passwordHash 필드에 bcrypt 해시만 저장
+  1897→  1897→// - 검증: bcrypt.compare(입력, 저장된_해시)
+  1898→  1898→// - 평문 비밀번호 절대 로깅/저장 금지
+  1899→  1899→```
+  1900→  1900→
+  1901→  1901→### 7.3 JWT 검증 (모든 관리자 API)
+  1902→  1902→
+  1903→  1903→```typescript
+  1904→  1904→// 모든 /api/admin/* 경로에 withAdminAuth 래퍼 적용
+  1905→  1905→
+  1906→  1906→// ✅ 올바른 사용
+  1907→  1907→export const GET = withAdminAuth(async (req, { auth }) => {
+  1908→  1908→  // auth: AccessTokenPayload (sub, email, role, permissions)
+  1909→  1909→  // 인증 + 권한 검사가 완료된 상태
+  1910→  1910→}, 'books:read');
+  1911→  1911→
+  1912→  1912→// ❌ 잘못된 사용 (인증 없이 직접 핸들러)
+  1913→  1913→export async function GET(request: NextRequest) {
+  1914→  1914→  // 인증 우회 — 절대 금지
+  1915→  1915→}
+  1916→  1916→```
+  1917→  1917→
+  1918→  1918→### 7.4 RBAC 권한 매트릭스
+  1919→  1919→
+  1920→  1920→```typescript
+  1921→  1921→// src/lib/admin/rbac.ts (2.7절 참조)
+  1922→  1922→
+  1923→  1923→// 권한 매트릭스 체크 함수
+  1924→  1924→export function checkPermissionMatrix(
+  1925→  1925→  role: AdminRole,
+  1926→  1926→  resource: string,
+  1927→  1927→  action: 'read' | 'write' | 'export'
+  1928→  1928→): boolean {
+  1929→  1929→  const permission = `${resource}:${action}` as Permission;
+  1930→  1930→  return hasPermission(role, permission);
+  1931→  1931→}
+  1932→  1932→
+  1933→  1933→// 권한 매트릭스 전체 (PRD 4.2 기준)
+  1934→  1934→//
+  1935→  1935→// | 기능 영역      | 세부 기능         | super_admin | admin | operator |
+  1936→  1936→// |---------------|-------------------|:-----------:|:-----:|:--------:|
+  1937→  1937→// | CMS 콘텐츠    | 읽기              | ✅          | ✅    | ✅       |
+  1938→  1938→// |               | 쓰기              | ✅          | ✅    | ❌       |
+  1939→  1939→// | 도서 관리      | 읽기              | ✅          | ✅    | ✅       |
+  1940→  1940→// |               | 쓰기              | ✅          | ✅    | ❌       |
+  1941→  1941→// | 사용자 관리    | 읽기              | ✅          | ✅    | ✅       |
+  1942→  1942→// |               | 쓰기              | ✅          | ✅    | ❌       |
+  1943→  1943→// | 통계          | 읽기              | ✅          | ✅    | ✅       |
+  1944→  1944→// |               | 내보내기          | ✅          | ✅    | ❌       |
+  1945→  1945→// | 계정 관리      | 읽기/쓰기         | ✅          | ❌    | ❌       |
+  1946→  1946→// | 감사 로그      | 읽기              | ✅          | ✅    | ❌       |
+  1947→  1947→// |               | 내보내기          | ✅          | ❌    | ❌       |
+  1948→  1948→// | 공지 관리      | 읽기              | ✅          | ✅    | ✅       |
+  1949→  1949→// |               | 쓰기              | ✅          | ✅    | ❌       |
+  1950→  1950→// | 시스템 설정    | 읽기/쓰기         | ✅          | ❌    | ❌       |
+  1951→  1951→```
+  1952→  1952→
+  1953→  1953→### 7.5 감사 로그 (모든 Mutation)
+  1954→  1954→
+  1955→  1955→```typescript
+  1956→  1956→// src/lib/admin/audit.ts
+  1957→  1957→
+  1958→  1958→import { prisma } from '@/lib/db';
+  1959→  1959→
+  1960→  1960→type AuditAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'LOGIN' | 'LOGOUT';
+  1961→  1961→type AuditEntity = 'CmsContent' | 'Book' | 'LibraryUser' | 'AdminUser' | 'Notice';
+  1962→  1962→
+  1963→  1963→interface AuditLogInput {
+  1964→  1964→  action: AuditAction;
+  1965→  1965→  entity: AuditEntity;
+  1966→  1966→  entityId?: string;
+  1967→  1967→  oldValue?: string;    // JSON 직렬화된 변경 전 값
+  1968→  1968→  newValue?: string;    // JSON 직렬화된 변경 후 값
+  1969→  1969→  performedBy: string;  // AdminUser.id
+  1970→  1970→}
+  1971→  1971→
+  1972→  1972→/** 감사 로그 기록 */
+  1973→  1973→export async function recordAuditLog(input: AuditLogInput): Promise<void> {
+  1974→  1974→  await prisma.auditLog.create({
+  1975→  1975→    data: {
+  1976→  1976→      action: input.action,
+  1977→  1977→      entity: input.entity,
+  1978→  1978→      entityId: input.entityId,
+  1979→  1979→      oldValue: input.oldValue,
+  1980→  1980→      newValue: input.newValue,
+  1981→  1981→      performedBy: input.performedBy,
+  1982→  1982→    },
+  1983→  1983→  });
+  1984→  1984→}
+  1985→  1985→
+  1986→  1986→/** 감사 로그 조회 (관리자 대시보드) */
+  1987→  1987→export async function getAuditLogs(options: {
+  1988→  1988→  entity?: AuditEntity;
+  1989→  1989→  performedBy?: string;
+  1990→  1990→  from?: Date;
+  1991→  1991→  to?: Date;
+  1992→  1992→  page?: number;
+  1993→  1993→  pageSize?: number;
+  1994→  1994→}) {
+  1995→  1995→  const { entity, performedBy, from, to, page = 1, pageSize = 20 } = options;
+  1996→  1996→
+  1997→  1997→  const where: any = {};
+  1998→  1998→  if (entity) where.entity = entity;
+  1999→  1999→  if (performedBy) where.performedBy = performedBy;
+  2000→  2000→  if (from || to) {
+
+[showing lines 1-2000 of 2002; use offset=2001 with limit to continue reading]

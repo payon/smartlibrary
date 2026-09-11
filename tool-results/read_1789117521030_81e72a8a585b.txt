@@ -1,0 +1,502 @@
+   100→```
+   101→
+   102→### 1.3 레이어 간 관계 요약
+   103→
+   104→```
+   105→┌─────────────────────────────────────────────────────────────────┐
+   106→│                       Presentation Layer                        │
+   107→│  ┌───────────────────────┐    ┌───────────────────────────────┐ │
+   108→│  │  Kiosk Frontend        │    │  Admin Dashboard Frontend     │ │
+   109→│  │  (11 screens, Zustand) │    │  (6 pages, Zustand, RBAC)    │ │
+   110→│  └───────────┬───────────┘    └──────────────┬────────────────┘ │
+   111→└──────────────┼───────────────────────────────┼──────────────────┘
+   112→               │ fetch /api                    │ fetch /api/admin
+   113→               ▼                               ▼
+   114→┌─────────────────────────────────────────────────────────────────┐
+   115→│                          API Layer                              │
+   116→│  ┌───────────────┐  ┌──────────────┐  ┌───────────────────────┐ │
+   117→│  │ Kiosk API     │  │ Public CMS   │  │ Admin API (JWT+RBAC)  │ │
+   118→│  │ (기존)        │  │ (키오스크용)  │  │ (신규)                │ │
+   119→│  └───────┬───────┘  └──────┬───────┘  └───────────┬───────────┘ │
+   120→└──────────┼─────────────────┼──────────────────────┼─────────────┘
+   121→           │                 │                      │
+   122→           └────────┬────────┘                      │
+   123→                    │ Prisma Client                 │ 인증 미들웨어
+   124→                    ▼                               ▼
+   125→┌─────────────────────────────────────────────────────────────────┐
+   126→│                     Database Layer (SQLite)                     │
+   127→│  ┌───────────┐  ┌───────────┐  ┌───────────┐  ┌─────────────┐ │
+   128→│  │ Kiosk     │  │ CMS       │  │ Auth      │  │ Audit       │ │
+   129→│  │ Domain    │  │ Domain    │  │ Domain    │  │ Domain      │ │
+   130→│  └───────────┘  └───────────┘  └───────────┘  └─────────────┘ │
+   131→└─────────────────────────────────────────────────────────────────┘
+   132→```
+   133→
+   134→---
+   135→
+   136→## 2. 디렉토리 구조
+   137→
+   138→### 2.1 전체 디렉토리 트리
+   139→
+   140→```
+   141→src/
+   142→├── app/
+   143→│   ├── layout.tsx                          # 루트 레이아웃 (기존, 변경 없음)
+   144→│   ├── page.tsx                            # 키오스크 진입점 (기존)
+   145→│   ├── globals.css                         # 글로벌 스타일 (기존)
+   146→│   │
+   147→│   ├── admin/                              # ★ 관리자 대시보드 라우트 그룹
+   148→│   │   ├── layout.tsx                      #   AdminLayout (인증 가드 + 사이드바)
+   149→│   │   ├── page.tsx                        #   /admin → DashboardOverview (통계 홈)
+   150→│   │   ├── login/
+   151→│   │   │   └── page.tsx                    #   /admin/login (인증 전 화면)
+   152→│   │   ├── content/
+   153→│   │   │   └── page.tsx                    #   /admin/content (CMS 콘텐츠 관리)
+   154→│   │   ├── books/
+   155→│   │   │   └── page.tsx                    #   /admin/books (도서 관리)
+   156→│   │   ├── users/
+   157→│   │   │   └── page.tsx                    #   /admin/users (이용자 관리)
+   158→│   │   ├── settings/
+   159→│   │   │   └── page.tsx                    #   /admin/settings (시스템 설정)
+   160→│   │   └── audit-log/
+   161→│   │       └── page.tsx                    #   /admin/audit-log (감사 로그)
+   162→│   │
+   163→│   └── api/
+   164→│       ├── route.ts                        # GET /api (헬스체크, 기존)
+   165→│       ├── seed/route.ts                   # POST /api/seed (기존)
+   166→│       ├── books/route.ts                  # GET /api/books (기존)
+   167→│       ├── loans/...                       # 기존 키오스크 API
+   168→│       ├── users/...                       # 기존 키오스크 API
+   169→│       ├── progress/...                    # 기존 키오스크 API
+   170→│       │
+   171→│       ├── content/                        # ★ 공개 CMS API (키오스크 폴링 대상)
+   172→│       │   ├── route.ts                    #   GET /api/content (전체 콘텐츠 + ETag)
+   173→│       │   └── [key]/
+   174→│       │       └── route.ts                #   GET /api/content/:key (단일 항목)
+   175→│       │
+   176→│       └── admin/                          # ★ 관리자 전용 API (JWT 인증 필요)
+   177→│           ├── auth/
+   178→│           │   ├── login/route.ts          #   POST /api/admin/auth/login
+   179→│           │   ├── logout/route.ts         #   POST /api/admin/auth/logout
+   180→│           │   └── me/route.ts             #   GET  /api/admin/auth/me
+   181→│           ├── content/
+   182→│           │   ├── route.ts                #   GET /api/admin/content
+   183→│           │   └── [key]/
+   184→│           │       └── route.ts            #   PATCH /api/admin/content/:key
+   185→│           ├── content-upload/
+   186→│           │   └── route.ts                #   POST /api/admin/content/upload
+   187→│           ├── users/
+   188→│           │   ├── route.ts                #   GET/POST /api/admin/users
+   189→│           │   └── [id]/
+   190→│           │       └── route.ts            #   GET/PATCH/DELETE /api/admin/users/:id
+   191→│           ├── books/
+   192→│           │   ├── route.ts                #   GET/POST /api/admin/books
+   193→│           │   └── [id]/
+   194→│           │       └── route.ts            #   GET/PATCH/DELETE /api/admin/books/:id
+   195→│           ├── analytics/
+   196→│           │   └── route.ts                #   GET /api/admin/analytics
+   197→│           ├── settings/
+   198→│           │   └── route.ts                #   GET/PATCH /api/admin/settings
+   199→│           ├── audit/
+   200→│           │   └── route.ts                #   GET /api/admin/audit
+   201→│           ├── accounts/
+   202→│           │   ├── route.ts                #   GET/POST /api/admin/accounts
+   203→│           │   └── [id]/
+   204→│           │       └── route.ts            #   PATCH /api/admin/accounts/:id
+   205→│           └── kiosk/
+   206→│               └── route.ts                #   POST /api/admin/kiosk/restart
+   207→│
+   208→├── components/
+   209→│   ├── kiosk/                              # 기존 키오스크 컴포넌트 (변경 없음)
+   210→│   ├── ui/                                 # 기존 shadcn/ui 프리미티브 (변경 없음)
+   211→│   │
+   212→│   └── admin/                              # ★ 관리자 대시보드 전용 컴포넌트
+   213→│       ├── AdminLayout.tsx                 #   레이아웃 셸 (사이드바 + 헤더 + 메인)
+   214→│       ├── AdminSidebar.tsx                #   사이드바 내비게이션
+   215→│       ├── AdminHeader.tsx                 #   상단 헤더 (사용자 정보, 로그아웃)
+   216→│       ├── AdminGuard.tsx                  #   인증 가드 (미인증 시 리다이렉트)
+   217→│       ├── PermissionGate.tsx              #   RBAC 권한 게이트 (UI 요소 표시/숨김)
+   218→│       │
+   219→│       ├── cms/                            #   CMS 콘텐츠 편집기
+   220→│       │   ├── ContentEditor.tsx           #     콘텐츠 편집 메인 컴포넌트
+   221→│       │   ├── ContentGroup.tsx            #     화면별 콘텐츠 그룹 (Idle, Menu, Auth…)
+   222→│       │   ├── TextFieldEditor.tsx         #     텍스트 타입 편집기
+   223→│       │   ├── ColorFieldEditor.tsx        #     컬러 피커 편집기
+   224→│       │   ├── ImageFieldEditor.tsx        #     이미지 업로드/교체 편집기
+   225→│       │   ├── NumberFieldEditor.tsx       #     숫자 입력 편집기
+   226→│       │   ├── BooleanFieldEditor.tsx      #     토글 스위치 편집기
+   227→│       │   ├── JsonFieldEditor.tsx         #     JSON 에디터 (카테고리 목록 등)
+   228→│       │   └── ContentDiffViewer.tsx       #     변경 전후 diff 뷰어
+   229→│       │
+   230→│       ├── analytics/                      #   통계 분석 컴포넌트
+   231→│       │   ├── StatsCards.tsx             #     오늘의 현황 4개 지표 카드
+   232→│       │   ├── HourlyChart.tsx            #     시간대별 대출·반납 그래프
+   233→│       │   ├── TopBooksList.tsx           #     인기 도서 TOP 10
+   234→│       │   ├── RecentActivity.tsx          #     최근 활동 로그
+   235→│       │   └── DateRangePicker.tsx        #     기간 선택 피커
+   236→│       │
+   237→│       ├── users/                          #   사용자 관리 컴포넌트
+   238→│       │   ├── UserTable.tsx              #     이용자 목록 테이블
+   239→│       │   ├── UserForm.tsx               #     이용자 등록/수정 폼
+   240→│       │   ├── UserDetail.tsx             #     이용자 상세 뷰
+   241→│       │   ├── AccountTable.tsx           #     관리자 계정 테이블
+   242→│       │   └── AccountForm.tsx            #     관리자 계정 등록/수정 폼
+   243→│       │
+   244→│       ├── books/                          #   도서 관리 컴포넌트
+   245→│       │   ├── BookTable.tsx              #     도서 목록 테이블
+   246→│       │   ├── BookForm.tsx               #     도서 등록/수정 폼
+   247→│       │   └── BookImport.tsx             #     CSV 일괄 가져오기
+   248→│       │
+   249→│       ├── settings/                       #   시스템 설정 컴포넌트
+   250→│       │   ├── KioskConfig.tsx            #     키오스크 설정 (타임아웃, 언어 등)
+   251→│       │   ├── ThemeSettings.tsx          #     테마 설정 (색상, 레이아웃)
+   252→│       │   ├── MaintenanceMode.tsx        #     유지보수 모드 토글
+   253→│       │   └── BackupRestore.tsx          #     DB 백업/복원
+   254→│       │
+   255→│       └── audit/                          #   감사 로그 컴포넌트
+   256→│           ├── AuditTable.tsx             #     감사 로그 테이블
+   257→│           └── AuditDetail.tsx            #     감사 상세 뷰 (변경 전후 diff)
+   258→│
+   259→├── stores/
+   260→│   ├── useAppStore.ts                      # 기존 키오스크 Zustand 스토어
+   261→│   └── useAdminStore.ts                    # ★ 관리자 대시보드 Zustand 스토어
+   262→│
+   263→├── lib/
+   264→│   ├── constants.ts                        # 기존 상수 (변경 없음)
+   265→│   ├── security.ts                         # 기존 보안 모듈 (변경 없음)
+   266→│   ├── db.ts                               # 기존 Prisma 클라이언트 싱글톤
+   267→│   ├── utils.ts                            # 기존 cn() 유틸리티
+   268→│   ├── tts.ts                              # 기존 TTS 모듈
+   269→│   ├── admin-auth.ts                       # ★ RBAC 인증/인가 구현
+   270→│   ├── content-sync.ts                     # ★ 실시간 콘텐츠 동기화
+   271→│   ├── audit-logger.ts                     # ★ 감사 로그 기록 유틸리티
+   272→│   └── content-cache.ts                    # ★ 콘텐츠 인메모리 캐시 + 버전 관리
+   273→│
+   274→├── hooks/
+   275→│   ├── use-pwa.ts                          # 기존 PWA 훅
+   276→│   ├── use-mobile.ts                       # 기존 모바일 감지 훅
+   277→│   ├── use-toast.ts                        # 기존 토스트 훅
+   278→│   ├── use-cms.ts                          # ★ CMS 콘텐츠 폴링 훅 (키오스크용)
+   279→│   └── use-permission.ts                   # ★ 권한 확인 훅 (대시보드용)
+   280→│
+   281→└── types/
+   282→    └── admin.ts                            # ★ 관리자 도메인 타입 정의
+   283→```
+   284→
+   285→### 2.2 신규 파일 의존성 그래프
+   286→
+   287→```
+   288→┌─────────────────────────────────────────────────────────────────┐
+   289→│                     Admin Dashboard Pages                       │
+   290→│                                                                 │
+   291→│  /admin/page.tsx (DashboardOverview)                            │
+   292→│    ├── AdminLayout                                              │
+   293→│    │     ├── AdminSidebar                                       │
+   294→│    │     ├── AdminHeader                                        │
+   295→│    │     └── AdminGuard ──► useAdminStore (auth)               │
+   296→│    ├── StatsCards ──► GET /api/admin/analytics                  │
+   297→│    ├── HourlyChart ──► GET /api/admin/analytics                 │
+   298→│    ├── TopBooksList ──► GET /api/admin/analytics                │
+   299→│    └── RecentActivity ──► GET /api/admin/audit                  │
+   300→│                                                                 │
+   301→│  /admin/content/page.tsx (ContentManagement)                    │
+   302→│    ├── ContentEditor ──► GET/PATCH /api/admin/content           │
+   303→│    │     ├── ContentGroup (화면별 그룹)                          │
+   304→│    │     ├── TextFieldEditor                                    │
+   305→│    │     ├── ColorFieldEditor                                   │
+   306→│    │     ├── ImageFieldEditor ──► POST /api/admin/content/upload│
+   307→│    │     ├── NumberFieldEditor                                  │
+   308→│    │     ├── BooleanFieldEditor                                 │
+   309→│    │     ├── JsonFieldEditor                                    │
+   310→│    │     └── ContentDiffViewer                                  │
+   311→│    └── PermissionGate ──► use-permission (role: admin+)         │
+   312→│                                                                 │
+   313→│  /admin/users/page.tsx (UserManagement)                         │
+   314→│    ├── UserTable ──► GET /api/admin/users                       │
+   315→│    ├── UserForm ──► POST/PATCH /api/admin/users                 │
+   316→│    ├── UserDetail ──► GET /api/admin/users/:id                  │
+   317→│    ├── AccountTable ──► GET /api/admin/accounts                 │
+   318→│    ├── AccountForm ──► POST/PATCH /api/admin/accounts           │
+   319→│    └── PermissionGate                                           │
+   320→│                                                                 │
+   321→│  /admin/books/page.tsx (BookManagement)                         │
+   322→│    ├── BookTable ──► GET /api/admin/books                       │
+   323→│    ├── BookForm ──► POST/PATCH /api/admin/books                 │
+   324→│    ├── BookImport ──► POST /api/admin/books/import              │
+   325→│    └── PermissionGate                                           │
+   326→│                                                                 │
+   327→│  /admin/settings/page.tsx (SystemSettings)                      │
+   328→│    ├── KioskConfig ──► GET/PATCH /api/admin/settings            │
+   329→│    ├── ThemeSettings ──► PATCH /api/admin/content (색상 CMS)    │
+   330→│    ├── MaintenanceMode ──► PATCH /api/admin/settings            │
+   331→│    ├── BackupRestore ──► GET /api/admin/settings/backup         │
+   332→│    └── PermissionGate (role: super_admin)                       │
+   333→│                                                                 │
+   334→│  /admin/audit-log/page.tsx (AuditLog)                           │
+   335→│    ├── AuditTable ──► GET /api/admin/audit                      │
+   336→│    ├── AuditDetail                                              │
+   337→│    └── PermissionGate (role: admin+)                            │
+   338→└─────────────────────────────────────────────────────────────────┘
+   339→```
+   340→
+   341→---
+   342→
+   343→## 3. 데이터 흐름 아키텍처
+   344→
+   345→### 3.1 콘텐츠 편집 흐름 (Admin UI → API → DB → Cache → Kiosk)
+   346→
+   347→```
+   348→┌──────────────┐    ① PATCH 요청    ┌───────────────────────┐    ② Prisma WRITE    ┌──────────────┐
+   349→│  Admin UI    │ ─────────────────► │ /api/admin/content/   │ ───────────────────► │  CmsContent  │
+   350→│  (편집 폼)   │                    │ :key                   │                      │  (SQLite)    │
+   351→│              │ ◄──────────────── │                        │                      └──────┬───────┘
+   352→│  ⑥ 토스트    │    ③ 200 OK       │  ③' AuditLog 기록     │                             │
+   353→│  "저장됨"    │                    │      + 캐시 갱신       │                             │
+   354→└──────────────┘                    └───────────────────────┘                             │
+   355→                                                                                          │ ④ content-cache
+   356→                                                                                          │   version++
+   357→                                                                                          ▼
+   358→                                                                                 ┌──────────────────┐
+   359→                                                                                 │ Content Cache    │
+   360→                                                                                 │ (인메모리)        │
+   361→                                                                                 │ version: N       │
+   362→                                                                                 │ data: Map<key,  │
+   363→                                                                                 │   value>         │
+   364→                                                                                 └────────┬─────────┘
+   365→                                                                                          │
+   366→                                                    ⑤ 키오스크 폴링 (30s)                  │
+   367→┌──────────────┐    ⑧ Re-render   ┌───────────────┐    ⑦ Zustand set()    ┌───────▼────────┐
+   368→│  Kiosk UI    │ ◄────────────── │  useCmsStore   │ ◄────────────────── │  GET /api/content│
+   369→│  (IdleScreen │                  │  (Zustand)     │    ⑥ JSON + ETag    │  (If-None-Match)│
+   370→│   etc.)      │                  └───────────────┘                      └────────────────┘
+   371→└──────────────┘
+   372→```
+   373→
+   374→| 단계 | 설명 | 지연 |
+   375→|------|------|------|
+   376→| ① | 관리자가 편집 폼에서 값 변경 후 "저장" 클릭 | 사용자 액션 |
+   377→| ② | Admin API가 Prisma로 `CmsContent` 테이블에 UPSERT | ~5ms |
+   378→| ③ | API가 `AuditLog`에 변경 전후값 기록 + 응답 200 OK | ~3ms |
+   379→| ③' | `content-cache.ts` 인메모리 캐시 갱신 + version++ | ~1ms |
+   380→| ④ | 캐시 버전 카운터 증분, ETag 값 변경 | ~0ms |
+   381→| ⑤ | 키오스크 프론트엔드가 30초 간격으로 `GET /api/content` 폴링 | ≤30s |
+   382→| ⑥ | 서버가 ETag 비교, 변경 시 200 + 새 데이터, 미변경 시 304 | ~2ms |
+   383→| ⑦ | Zustand `useCmsStore.setCmsContent()` 호출로 전역 상태 갱신 | ~1ms |
+   384→| ⑧ | React가 상태 변경 감지, 해당 CMS 값을 사용하는 컴포넌트만 Re-render | ~16ms |
+   385→
+   386→**총 전파 지연**: CMS 저장 후 **≤30초** 내 키오스크 화면에 반영 (ETag 기반 최적화 시 변경 즉시 응답)
+   387→
+   388→### 3.2 RBAC 인증·인가 흐름 (Login → Session → Role Check → Permission Gate)
+   389→
+   390→```
+   391→┌──────────────┐    ① POST          ┌───────────────────────┐    ② bcrypt 비교     ┌──────────────┐
+   392→│  Login Page  │ ─────────────────► │ /api/admin/auth/      │ ─────────────────► │  AdminUser   │
+   393→│  (이메일+PW) │                    │ login                  │                    │  (SQLite)    │
+   394→│              │                    │                        │ ◄──────────────── │  passwordHash │
+   395→│              │                    │                        │    ③ 일치 여부      └──────────────┘
+   396→│              │                    │  ④ JWT 발급            │
+   397→│              │ ◄──────────────── │  {accessToken,         │
+   398→│              │    Set-Cookie     │   refreshToken}        │
+   399→│              │    (httpOnly)     │                        │
+   400→└──────────────┘                    └───────────────────────┘
+   401→       │
+   402→       │ ⑤ 이후 모든 Admin API 요청
+   403→       ▼
+   404→┌──────────────────────────────────────────────────────────────────────────────┐
+   405→│  Request: GET /api/admin/content                                            │
+   406→│  Cookie: token=<JWT>                                                        │
+   407→│                                                                             │
+   408→│  ┌─────────┐    ⑥ JWT 검증     ┌──────────────┐    ⑦ 권한 확인   ┌────────┐│
+   409→│  │Middleware│ ──────────────► │  admin-auth.ts│ ─────────────► │ RBAC   ││
+   410→│  │  (Next)  │                  │  verifyJWT()  │                │ Table  ││
+   411→│  └─────────┘                    └──────────────┘                └────────┘│
+   412→│       │                                                              │     │
+   413→│       │  ⑧ 응답                                        ⑨ 허용/거부  │     │
+   414→│       ▼                                                              ▼     │
+   415→│  ┌───────────────┐                                          ┌─────────────┐│
+   416→│  │ 200 + Data    │ (권한 있음)                               │ 403         ││
+   417→│  └───────────────┘                                          │ Forbidden   ││
+   418→│                                                              └─────────────┘│
+   419→└──────────────────────────────────────────────────────────────────────────────┘
+   420→```
+   421→
+   422→| 단계 | 설명 |
+   423→|------|------|
+   424→| ① | 로그인 페이지에서 이메일 + 비밀번호 입력 후 제출 |
+   425→| ② | 서버가 `AdminUser` 테이블에서 이메일로 계정 조회 후 bcrypt 비교 |
+   426→| ③ | 비밀번호 일치 여부 확인 (5회 실패 시 15분 잠금) |
+   427→| ④ | JWT Access Token (15분) + Refresh Token (7일) 발급 |
+   428→| ⑤ | httpOnly 쿠키에 토큰 저장, 이후 모든 Admin API 요청에 자동 첨부 |
+   429→| ⑥ | Next.js 미들웨어에서 JWT 서명 검증 + 만료 확인 |
+   430→| ⑦ | `admin-auth.ts`에서 페이로드의 role 추출 후 요청 API의 필요 권한과 비교 |
+   431→| ⑧ | 권한 충족 시 200 OK + 데이터 응답 |
+   432→| ⑨ | 권한 부족 시 403 Forbidden 응답 |
+   433→
+   434→### 3.3 감사 로그 흐름 (Action → Middleware → Audit Table)
+   435→
+   436→```
+   437→┌─────────────────────────────────────────────────────────────────────┐
+   438→│                     Admin API Request                                │
+   439→│  PATCH /api/admin/content/:key  { value: "새 텍스트" }              │
+   440→└──────────────────────────┬──────────────────────────────────────────┘
+   441→                           │
+   442→                           ▼
+   443→┌──────────────────────────────────────────────────────────────────────┐
+   444→│  ① Route Handler 실행                                                │
+   445→│     - 기존값 조회: oldValue = GET CmsContent WHERE key = :key        │
+   446→│     - 새값 적용: UPSERT CmsContent SET value = "새 텍스트"          │
+   447→└──────────────────────────┬───────────────────────────────────────────┘
+   448→                           │
+   449→                           ▼
+   450→┌──────────────────────────────────────────────────────────────────────┐
+   451→│  ② audit-logger.ts 기록                                              │
+   452→│     AuditLog.create({                                                │
+   453→│       action:    "UPDATE",                                           │
+   454→│       entity:    "CmsContent",                                       │
+   455→│       entityId:  ":key",                                             │
+   456→│       oldValue:  JSON.stringify(oldValue),    // 변경 전              │
+   457→│       newValue:  JSON.stringify("새 텍스트"), // 변경 후              │
+   458→│       performedBy: adminUser.id,                                     │
+   459→│       performedAt: new Date()                                        │
+   460→│     })                                                               │
+   461→└──────────────────────────┬───────────────────────────────────────────┘
+   462→                           │
+   463→                           ▼
+   464→┌──────────────────────────────────────────────────────────────────────┐
+   465→│  ③ AuditLog 테이블 (SQLite)                                         │
+   466→│  ┌──────────┬────────┬───────────┬─────────┬──────────┬────────────┐│
+   467→│  │ action   │ entity │ entityId  │ oldValue│ newValue │ performedBy││
+   468→│  ├──────────┼────────┼───────────┼─────────┼──────────┼────────────┤│
+   469→│  │ UPDATE   │ CmsCont│ idle.title│ "스마트  │ "성북구   │ admin-001  ││
+   470→│  │          │ ent    │ _text     │ 도서관  │ 도서관"  │            ││
+   471→│  └──────────┴────────┴───────────┴─────────┴──────────┴────────────┘│
+   472→└──────────────────────────────────────────────────────────────────────┘
+   473→```
+   474→
+   475→**감사 로그가 기록되는 작업 목록**:
+   476→
+   477→| 작업 | action | 기록 시점 |
+   478→|------|--------|-----------|
+   479→| CMS 콘텐츠 변경 | `UPDATE` | PATCH /api/admin/content/:key |
+   480→| 도서 등록 | `CREATE` | POST /api/admin/books |
+   481→| 도서 수정 | `UPDATE` | PATCH /api/admin/books/:id |
+   482→| 도서 삭제 | `DELETE` | DELETE /api/admin/books/:id |
+   483→| 이용자 등록 | `CREATE` | POST /api/admin/users |
+   484→| 이용자 수정 | `UPDATE` | PATCH /api/admin/users/:id |
+   485→| 이용자 삭제 | `DELETE` | DELETE /api/admin/users/:id |
+   486→| 관리자 계정 생성 | `CREATE` | POST /api/admin/accounts |
+   487→| 관리자 권한 변경 | `UPDATE` | PATCH /api/admin/accounts/:id |
+   488→| 로그인 | `LOGIN` | POST /api/admin/auth/login |
+   489→| 로그아웃 | `LOGOUT` | POST /api/admin/auth/logout |
+   490→| 시스템 설정 변경 | `UPDATE` | PATCH /api/admin/settings |
+   491→| 이미지 업로드 | `UPLOAD` | POST /api/admin/content/upload |
+   492→
+   493→---
+   494→
+   495→## 4. 컴포넌트 아키텍처
+   496→
+   497→### 4.1 관리자 대시보드 페이지 계층
+   498→
+   499→```
+   500→┌──────────────────────────────────────────────────────────────────┐
+   501→│                     /admin/layout.tsx                             │
+   502→│  ┌────────────────────────────────────────────────────────────┐  │
+   503→│  │  AdminGuard                                                │  │
+   504→│  │    if (!isAuthenticated) redirect → /admin/login           │  │
+   505→│  │                                                            │  │
+   506→│  │  ┌──────────┐ ┌──────────────────────────────────────────┐│  │
+   507→│  │  │          │ │                                          ││  │
+   508→│  │  │  Admin   │ │            {children}                    ││  │
+   509→│  │  │  Sidebar │ │                                          ││  │
+   510→│  │  │          │ │  ┌─────────────────────────────────────┐ ││  │
+   511→│  │  │ ┌──────┐│ │  │  AdminHeader                         │ ││  │
+   512→│  │  │ │대시보드││ │  │  [사용자명] [역할] [로그아웃]        │ ││  │
+   513→│  │  │ ├──────┤│ │  └─────────────────────────────────────┘ ││  │
+   514→│  │  │ │콘텐츠││ │                                          ││  │
+   515→│  │  │ ├──────┤│ │  ┌─────────────────────────────────────┐ ││  │
+   516→│  │  │ │도서  ││ │  │                                     │ ││  │
+   517→│  │  │ ├──────┤│ │  │       Page Content                  │ ││  │
+   518→│  │  │ │사용자││ │  │                                     │ ││  │
+   519→│  │  │ ├──────┤│ │  │                                     │ ││  │
+   520→│  │  │ │설정  ││ │  │                                     │ ││  │
+   521→│  │  │ ├──────┤│ │  │                                     │ ││  │
+   522→│  │  │ │감사  ││ │  │                                     │ ││  │
+   523→│  │  │ └──────┘│ │  └─────────────────────────────────────┘ ││  │
+   524→│  │  │          │ │                                          ││  │
+   525→│  │  └──────────┘ └──────────────────────────────────────────┘│  │
+   526→│  └────────────────────────────────────────────────────────────┘  │
+   527→└──────────────────────────────────────────────────────────────────┘
+   528→```
+   529→
+   530→### 4.2 DashboardOverview (대시보드 홈)
+   531→
+   532→```
+   533→┌──────────────────────────────────────────────────────────────┐
+   534→│  /admin → DashboardOverview                                  │
+   535→│                                                              │
+   536→│  ┌───────────┐ ┌───────────┐ ┌───────────┐ ┌───────────┐   │
+   537→│  │ 금일 대출  │ │ 금일 반납  │ │ 대출 중   │ │ 연체 건수  │   │
+   538→│  │   12건     │ │   8건     │ │   34권    │ │   3건     │   │
+   539→│  │  ▲ +3     │ │  ▲ +1    │ │           │ │  ▼ -1     │   │
+   540→│  └───────────┘ └───────────┘ └───────────┘ └───────────┘   │
+   541→│  (StatsCards)                                                │
+   542→│                                                              │
+   543→│  ┌─────────────────────────┐  ┌─────────────────────────┐   │
+   544→│  │                         │  │  인기 도서 TOP 10        │   │
+   545→│  │  시간대별 대출·반납      │  │  1. 해리포터 (28회)     │   │
+   546→│  │  ▓▓░▓▓▓▓░▓▓░▓          │  │  2. 어린왕자 (24회)     │   │
+   547→│  │  (HourlyChart)          │  │  3. ...                 │   │
+   548→│  │                         │  │  (TopBooksList)         │   │
+   549→│  └─────────────────────────┘  └─────────────────────────┘   │
+   550→│                                                              │
+   551→│  ┌──────────────────────────────────────────────────────┐   │
+   552→│  │  최근 활동                                            │   │
+   553→│  │  14:32  김철수  해리포터  대출                        │   │
+   554→│  │  14:28  이영희  어린왕자  반납                        │   │
+   555→│  │  (RecentActivity)                                    │   │
+   556→│  └──────────────────────────────────────────────────────┘   │
+   557→└──────────────────────────────────────────────────────────────┘
+   558→```
+   559→
+   560→**데이터 소스**: `GET /api/admin/analytics`
+   561→
+   562→### 4.3 ContentManagement (CMS 콘텐츠 관리)
+   563→
+   564→```
+   565→┌──────────────────────────────────────────────────────────────┐
+   566→│  /admin/content → ContentManagement                          │
+   567→│                                                              │
+   568→│  ┌──────────────────────────────────────────────────────┐   │
+   569→│  │  화면 선택 탭: [대기] [메인메뉴] [인증] [선택]       │   │
+   570→│  │                [대출완료] [반납완료] [대출규칙]        │   │
+   571→│  └──────────────────────────────────────────────────────┘   │
+   572→│                                                              │
+   573→│  ┌───────────────────────────┐  ┌────────────────────────┐  │
+   574→│  │  ContentGroup: 대기 화면   │  │  미리보기 (선택)      │  │
+   575→│  │                           │  │                        │  │
+   576→│  │  로고 이미지              │  │  ┌──────────────────┐ │  │
+   577→│  │  ┌─────────────────────┐ │  │  │                  │ │  │
+   578→│  │  │ [이미지 업로드 영역] │ │  │  │  Idle Screen    │ │  │
+   579→│  │  │   (ImageFieldEditor)│ │  │  │  프리뷰         │ │  │
+   580→│  │  └─────────────────────┘ │  │  │                  │ │  │
+   581→│  │                           │  │  └──────────────────┘ │  │
+   582→│  │  타이틀 텍스트            │  │                        │  │
+   583→│  │  ┌─────────────────────┐ │  │                        │  │
+   584→│  │  │ 스마트 도서관       │ │  │                        │  │
+   585→│  │  │   (TextFieldEditor) │ │  │                        │  │
+   586→│  │  └─────────────────────┘ │  │                        │  │
+   587→│  │                           │  │                        │  │
+   588→│  │  배경색                  │  │                        │  │
+   589→│  │  ┌─────────────────────┐ │  │                        │  │
+   590→│  │  │ [■ #1E3A5F]         │ │  │                        │  │
+   591→│  │  │   (ColorFieldEditor)│ │  │                        │  │
+   592→│  │  └─────────────────────┘ │  │                        │  │
+   593→│  │                           │  │                        │  │
+   594→│  │  [저장]  [초기화]         │  │                        │  │
+   595→│  └───────────────────────────┘  └────────────────────────┘  │
+   596→└──────────────────────────────────────────────────────────────┘
+   597→```
+   598→
+   599→### 4.4 UserManagement (사용자 관리)
+
+[showing lines 100-599 of 1558; use offset=600 with limit to continue reading]

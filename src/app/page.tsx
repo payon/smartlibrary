@@ -5,6 +5,7 @@
  * - 키오스크 UI / 관리자 대시보드 전환
  * - adminMode가 true이면 관리자 대시보드 렌더
  * - adminMode가 false이면 키오스크 UI 렌더
+ * - CMS 콘텐츠 30초 폴링으로 실시간 동기화
  */
 
 'use client';
@@ -13,6 +14,7 @@ import { useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
 import { useAdminStore } from '@/stores/useAdminStore';
+import { useCmsContent } from '@/hooks/useCmsContent';
 import type { KioskViewName } from '@/lib/constants';
 import KioskIdleScreen from '@/components/kiosk/KioskIdleScreen';
 import KioskMainMenu from '@/components/kiosk/KioskMainMenu';
@@ -49,7 +51,6 @@ export default function Home() {
   const screen = useAppStore((s) => s.screen);
   const kioskMode = useAppStore((s) => s.kioskMode);
   const adminMode = useAppStore((s) => s.adminMode);
-  const setAdminMode = useAppStore((s) => s.setAdminMode);
   const isAdminAuthenticated = useAdminStore((s) => s.isAuthenticated);
 
   /* 시드 데이터 초기화 (최초 1회) */
@@ -57,12 +58,26 @@ export default function Home() {
     fetch('/api/seed', { method: 'POST' }).catch(() => {});
   }, []);
 
-  // adminMode가 켜졌는데 인증이 풀리면 adminMode도 끄기
+  /* 관리자 세션 복구 시도 (페이지 새로고침 시) */
   useEffect(() => {
-    if (adminMode && !isAdminAuthenticated) {
-      // 관리자 인증이 안 된 상태면 로그인 화면 보여주기 위해 유지
-    }
-  }, [adminMode, isAdminAuthenticated]);
+    const checkSession = async () => {
+      try {
+        const res = await fetch('/api/admin/auth/session');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.user) {
+            useAdminStore.getState().setAdminUser(data.user);
+          }
+        }
+      } catch {
+        // 세션 확인 실패는 무시
+      }
+    };
+    checkSession();
+  }, []);
+
+  /* CMS 콘텐츠 폴링 활성화 (키오스크 모드에서만) */
+  useCmsContent();
 
   const screenKey = screen + '-' + (kioskMode || '');
 

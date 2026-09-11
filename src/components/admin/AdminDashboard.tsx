@@ -2,317 +2,477 @@
  * 관리자 대시보드 컴포넌트
  *
  * [기능]
- * - CMS 콘텐츠 관리
- * - 관리자 인증 (간이 로그인)
- * - 키오스크로 돌아가기
+ * - 사이드바 네비게이션 (데스크톱: 고정, 모바일: Sheet 드로어)
+ * - 상단 헤더 바 (햄버거 메뉴, 제목, 알림, 사용자 정보, 로그아웃)
+ * - 메인 콘텐츠 영역 (7개 섹션 전환, framer-motion 페이지 전환)
+ * - 한국어 라벨 전면 적용
  *
  * [참고]
- * - 이 컴포넌트는 키오스크 관리자 모드에서 렌더링됩니다.
- * - adminMode가 true일 때 page.tsx에서 조건부 렌더링됩니다.
+ * - useAdminStore: 인증, 섹션 전환, 사이드바, 알림, 권한
+ * - useAppStore: 관리자 모드 토글
+ * - 7개 섹션 컴포넌트는 sections/ 폴더에 위치
  */
 
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useAppStore } from '@/stores/useAppStore';
-import { ArrowLeft, Save, RotateCcw, Eye, LogIn } from 'lucide-react';
-import { toast } from 'sonner';
+import { useMemo } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import {
+  LayoutDashboard,
+  Palette,
+  BookOpen,
+  Users,
+  BarChart3,
+  Settings,
+  FileText,
+  Menu,
+  Bell,
+  LogOut,
+  Monitor,
+  CheckCheck,
+  X,
+} from 'lucide-react';
 
-/** 관리자 대시보드 기본 콘텐츠 키 목록 */
-const CMS_KEYS = [
-  { key: 'idle.title', label: '대기 화면 제목', fallback: 'SMART LIBRARY' },
-  { key: 'idle.subtitle', label: '대기 화면 부제목', fallback: '무인 도서대출반납기' },
-  { key: 'idle.pulse_text', label: '터치 안내 텍스트', fallback: '화면을 터치하여 시작하세요' },
-  { key: 'idle.background_color', label: '대기 화면 배경색', fallback: '#0b1120' },
-  { key: 'mainmenu.title', label: '메인 메뉴 제목', fallback: 'SMART LIBRARY' },
-  { key: 'mainmenu.loan_button_text', label: '대출 버튼 텍스트', fallback: '도서 대출' },
-  { key: 'mainmenu.return_button_text', label: '반납 버튼 텍스트', fallback: '도서 반납' },
-  { key: 'authscan.title', label: '인증 화면 제목', fallback: '회원인증' },
-  { key: 'authscan.instruction', label: '인증 안내 텍스트', fallback: '회원증을 가져다 대세요' },
-  { key: 'authscan.demo_button_text', label: '데모 버튼 텍스트', fallback: '회원증 없이 이용하기' },
-  { key: 'authpin.title', label: 'PIN 화면 제목', fallback: '비밀번호 입력' },
-  { key: 'loanselect.title', label: '도서 선택 제목', fallback: '도서를 선택해주세요' },
-  { key: 'loanconfirm.title', label: '대출 확인 제목', fallback: '대출 정보를 확인해주세요' },
-  { key: 'loancomplete.title', label: '대출 완료 제목', fallback: '대출완료' },
-  { key: 'returninsert.title', label: '반납 안내 제목', fallback: '도서반납' },
-  { key: 'returninsert.instruction', label: '반납 안내 텍스트', fallback: '반납할 도서를 하나씩 넣어주세요' },
-  { key: 'returnscanning.title', label: '반납 스캔 제목', fallback: '도서반납' },
-  { key: 'returnconfirm.title', label: '반납 확인 제목', fallback: '반납 정보를 확인해주세요' },
-  { key: 'returncomplete.title', label: '반납 완료 제목', fallback: '반납완료' },
-  { key: 'returncomplete.message', label: '반납 완료 메시지', fallback: '도서가 정상적으로 반납되었습니다.' },
+// --- Stores ---
+import { useAdminStore, type AdminSection } from '@/stores/useAdminStore';
+import { useAppStore } from '@/stores/useAppStore';
+
+// --- Section Components ---
+import OverviewSection from '@/components/admin/sections/OverviewSection';
+import ContentSection from '@/components/admin/sections/ContentSection';
+import BooksSection from '@/components/admin/sections/BooksSection';
+import UsersSection from '@/components/admin/sections/UsersSection';
+import AnalyticsSection from '@/components/admin/sections/AnalyticsSection';
+import SettingsSection from '@/components/admin/sections/SettingsSection';
+import AuditSection from '@/components/admin/sections/AuditSection';
+
+// --- UI Components ---
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Sheet,
+  SheetContent,
+  SheetTrigger,
+  SheetTitle,
+} from '@/components/ui/sheet';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+
+// ============================================================================
+// 사이드바 네비게이션 항목 정의
+// ============================================================================
+
+interface NavItem {
+  id: AdminSection;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+}
+
+const NAV_ITEMS: NavItem[] = [
+  { id: 'overview', label: '대시보드 개요', icon: LayoutDashboard },
+  { id: 'content', label: '콘텐츠 관리', icon: Palette },
+  { id: 'books', label: '도서 관리', icon: BookOpen },
+  { id: 'users', label: '이용자 관리', icon: Users },
+  { id: 'analytics', label: '분석 대시보드', icon: BarChart3 },
+  { id: 'settings', label: '시스템 설정', icon: Settings },
+  { id: 'audit', label: '감사 로그', icon: FileText },
 ];
 
+// ============================================================================
+// 섹션 제목 매핑
+// ============================================================================
+
+const SECTION_TITLES: Record<AdminSection, string> = {
+  overview: '대시보드 개요',
+  content: '콘텐츠 관리',
+  books: '도서 관리',
+  users: '이용자 관리',
+  analytics: '분석 대시보드',
+  settings: '시스템 설정',
+  audit: '감사 로그',
+};
+
+// ============================================================================
+// 역할 표시명 매핑
+// ============================================================================
+
+const ROLE_LABELS: Record<string, string> = {
+  super_admin: '최고관리자',
+  admin: '관리자',
+  operator: '운영자',
+};
+
+// ============================================================================
+// 페이지 전환 애니메이션 설정
+// ============================================================================
+
+const pageVariants = {
+  initial: { opacity: 0, y: 8 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -8 },
+};
+
+const pageTransition = {
+  duration: 0.2,
+  ease: 'easeOut',
+};
+
+// ============================================================================
+// 섹션 렌더러
+// ============================================================================
+
+function SectionContent({ section }: { section: AdminSection }) {
+  switch (section) {
+    case 'overview':
+      return <OverviewSection />;
+    case 'content':
+      return <ContentSection />;
+    case 'books':
+      return <BooksSection />;
+    case 'users':
+      return <UsersSection />;
+    case 'analytics':
+      return <AnalyticsSection />;
+    case 'settings':
+      return <SettingsSection />;
+    case 'audit':
+      return <AuditSection />;
+    default:
+      return <OverviewSection />;
+  }
+}
+
+// ============================================================================
+// 사이드바 네비게이션 리스트 (공통 컴포넌트)
+// ============================================================================
+
+function SidebarNav({
+  activeSection,
+  onNavigate,
+}: {
+  activeSection: AdminSection;
+  onNavigate: (section: AdminSection) => void;
+}) {
+  return (
+    <nav className="flex flex-col gap-1 px-3">
+      {NAV_ITEMS.map((item) => {
+        const Icon = item.icon;
+        const isActive = activeSection === item.id;
+        return (
+          <button
+            key={item.id}
+            onClick={() => onNavigate(item.id)}
+            className={`
+              group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium
+              transition-all duration-150 outline-none
+              focus-visible:ring-2 focus-visible:ring-ring
+              ${
+                isActive
+                  ? 'bg-primary/10 text-primary shadow-xs'
+                  : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+              }
+            `}
+            aria-current={isActive ? 'page' : undefined}
+          >
+            <Icon
+              className={`size-5 shrink-0 ${
+                isActive
+                  ? 'text-primary'
+                  : 'text-muted-foreground group-hover:text-accent-foreground'
+              }`}
+            />
+            <span>{item.label}</span>
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+
+// ============================================================================
+// 메인 컴포넌트
+// ============================================================================
+
 export default function AdminDashboard() {
-  const { setAdminMode, adminAuthenticated, setAdminAuthenticated, cmsContent, setCmsContent } = useAppStore();
-  const [email, setEmail] = useState('admin@library.kr');
-  const [password, setPassword] = useState('');
-  const [editingContent, setEditingContent] = useState<Record<string, string>>({});
-  const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<'content' | 'preview'>('content');
+  // --- Store ---
+  const {
+    isAuthenticated,
+    adminUser,
+    activeSection,
+    setActiveSection,
+    sidebarOpen,
+    setSidebarOpen,
+    logout,
+    notifications,
+    unreadCount,
+    markAllAsRead,
+    markAsRead,
+  } = useAdminStore();
 
-  /** 로컬 편집 상태를 CMS 콘텐츠로 초기화 */
-  useEffect(() => {
-    setEditingContent({ ...cmsContent });
-  }, [cmsContent]);
+  const { setAdminMode } = useAppStore();
 
-  /** 관리자 로그인 */
-  const handleLogin = async () => {
-    try {
-      const res = await fetch('/api/admin/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-      if (res.ok) {
-        setAdminAuthenticated(true);
-        toast.success('관리자 로그인 성공');
-      } else {
-        toast.error('로그인에 실패했습니다');
-      }
-    } catch {
-      toast.error('네트워크 오류');
-    }
+  // --- 파생 상태 ---
+  const sectionTitle = SECTION_TITLES[activeSection];
+
+  const roleLabel = useMemo(() => {
+    if (!adminUser) return '';
+    return ROLE_LABELS[adminUser.role] || adminUser.role;
+  }, [adminUser]);
+
+  // --- 핸들러 ---
+  const handleNavigate = (section: AdminSection) => {
+    setActiveSection(section);
   };
 
-  /** 콘텐츠 저장 */
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      const changes = CMS_KEYS.map((item) => ({
-        key: item.key,
-        value: editingContent[item.key] || item.fallback,
-      }));
-
-      const res = await fetch('/api/admin/content/bulk', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: changes }),
-      });
-
-      if (res.ok) {
-        toast.success('콘텐츠가 저장되었습니다');
-        // 스토어 즉시 업데이트
-        const newContent: Record<string, string> = {};
-        for (const change of changes) {
-          newContent[change.key] = change.value;
-        }
-        setCmsContent({ ...cmsContent, ...newContent }, Date.now());
-      } else {
-        toast.error('저장에 실패했습니다');
-      }
-    } catch {
-      toast.error('네트워크 오류');
-    } finally {
-      setSaving(false);
-    }
+  const handleLogout = () => {
+    logout();
   };
 
-  /** 콘텐츠 리셋 */
-  const handleReset = async () => {
-    try {
-      const res = await fetch('/api/admin/content/reset', { method: 'POST' });
-      if (res.ok) {
-        toast.success('콘텐츠가 초기화되었습니다');
-        // 편집 상태도 리셋
-        const resetContent: Record<string, string> = {};
-        for (const item of CMS_KEYS) {
-          resetContent[item.key] = item.fallback;
-        }
-        setEditingContent(resetContent);
-        setCmsContent({ ...cmsContent, ...resetContent }, Date.now());
-      }
-    } catch {
-      toast.error('초기화에 실패했습니다');
-    }
-  };
-
-  /** 키오스크로 돌아가기 */
   const handleBackToKiosk = () => {
     setAdminMode(false);
   };
 
-  // 로그인되지 않은 경우 로그인 화면 표시
-  if (!adminAuthenticated) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-        <div className="w-full max-w-sm">
-          <div className="bg-white rounded-2xl shadow-lg p-8">
-            <h1 className="text-xl font-bold text-slate-800 text-center mb-6">관리자 로그인</h1>
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm text-slate-600 mb-1 block">이메일</label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-sky-400 focus:border-sky-400 outline-none"
-                />
-              </div>
-              <div>
-                <label className="text-sm text-slate-600 mb-1 block">비밀번호</label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
-                  className="w-full px-4 py-2.5 rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-sky-400 focus:border-sky-400 outline-none"
-                  placeholder="비밀번호를 입력하세요"
-                />
-              </div>
-              <button
-                onClick={handleLogin}
-                className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-medium text-sm transition-colors flex items-center justify-center gap-2"
-              >
-                <LogIn className="w-4 h-4" />
-                로그인
-              </button>
-            </div>
-            <button
-              onClick={handleBackToKiosk}
-              className="w-full mt-4 py-2 text-slate-500 hover:text-slate-700 text-sm transition-colors"
-            >
-              키오스크로 돌아가기
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // 미인증 시 렌더링하지 않음 (AdminLogin이 page.tsx에서 분기 처리)
+  if (!isAuthenticated) return null;
 
-  // 로그인된 경우 대시보드 표시
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
-      {/* 상단 헤더 */}
-      <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleBackToKiosk}
-            className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-            aria-label="키오스크로 돌아가기"
-          >
-            <ArrowLeft className="w-5 h-5 text-slate-600" />
-          </button>
-          <h1 className="text-lg font-bold text-slate-800">CMS 콘텐츠 관리</h1>
+    <div className="flex h-screen overflow-hidden bg-background">
+      {/* ================================================================
+          데스크톡 사이드바 (lg 이상에서만 표시)
+          ================================================================ */}
+      <aside className="hidden lg:flex lg:w-[240px] lg:flex-col lg:border-r bg-card">
+        {/* 사이드바 헤더 */}
+        <div className="flex h-16 items-center gap-2 px-6 border-b">
+          <Monitor className="size-5 text-primary shrink-0" />
+          <span className="text-base font-bold truncate">관리자 대시보드</span>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setActiveTab('content')}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-              activeTab === 'content' ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            편집
-          </button>
-          <button
-            onClick={() => setActiveTab('preview')}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-              activeTab === 'preview' ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            <Eye className="w-4 h-4 inline mr-1" />
-            미리보기
-          </button>
-        </div>
-      </header>
 
-      {/* 콘텐츠 */}
-      <main className="flex-1 overflow-y-auto p-6">
-        {activeTab === 'content' ? (
-          <div className="max-w-2xl mx-auto space-y-4">
-            {CMS_KEYS.map((item) => (
-              <div key={item.key} className="bg-white rounded-xl p-4 border border-slate-100">
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm font-medium text-slate-700">{item.label}</label>
-                  <code className="text-xs text-slate-400 bg-slate-50 px-2 py-0.5 rounded">{item.key}</code>
+        {/* 네비게이션 */}
+        <ScrollArea className="flex-1 py-4">
+          <SidebarNav
+            activeSection={activeSection}
+            onNavigate={handleNavigate}
+          />
+        </ScrollArea>
+
+        {/* 사이드바 푸터 */}
+        <div className="p-4 border-t">
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            onClick={handleBackToKiosk}
+          >
+            <Monitor className="size-4" />
+            키오스크로 돌아가기
+          </Button>
+        </div>
+      </aside>
+
+      {/* ================================================================
+          모바일 사이드바 (Sheet 드로어, lg 미만에서만 표시)
+          ================================================================ */}
+      <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+        <SheetContent side="left" className="w-[240px] p-0">
+          <SheetTitle className="sr-only">관리자 메뉴</SheetTitle>
+
+          {/* 드로어 헤더 */}
+          <div className="flex h-16 items-center gap-2 px-6 border-b">
+            <Monitor className="size-5 text-primary shrink-0" />
+            <span className="text-base font-bold truncate">관리자 대시보드</span>
+          </div>
+
+          {/* 네비게이션 */}
+          <ScrollArea className="flex-1 py-4">
+            <SidebarNav
+              activeSection={activeSection}
+              onNavigate={handleNavigate}
+            />
+          </ScrollArea>
+
+          {/* 드로어 푸터 */}
+          <div className="p-4 border-t">
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={() => {
+                handleBackToKiosk();
+                setSidebarOpen(false);
+              }}
+            >
+              <Monitor className="size-4" />
+              키오스크로 돌아가기
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* ================================================================
+          메인 영역 (헤더 + 콘텐츠)
+          ================================================================ */}
+      <div className="flex flex-1 flex-col overflow-hidden">
+        {/* --- 상단 헤더 바 --- */}
+        <header className="flex h-16 items-center gap-4 border-b bg-card px-4 lg:px-6">
+          {/* 모바일 햄버거 메뉴 버튼 */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="lg:hidden"
+            onClick={() => setSidebarOpen(true)}
+            aria-label="메뉴 열기"
+          >
+            <Menu className="size-5" />
+          </Button>
+
+          {/* 대시보드 제목 */}
+          <h1 className="text-lg font-semibold truncate">{sectionTitle}</h1>
+
+          {/* 스페이서 */}
+          <div className="flex-1" />
+
+          {/* 우측 액션 영역 */}
+          <div className="flex items-center gap-2">
+            {/* 알림 벨 */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="relative"
+                  aria-label={`알림: 읽지 않은 ${unreadCount}건`}
+                >
+                  <Bell className="size-5" />
+                  {unreadCount > 0 && (
+                    <Badge
+                      variant="destructive"
+                      className="absolute -top-1 -right-1 size-5 p-0 flex items-center justify-center text-[10px] leading-none"
+                    >
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </Badge>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-80">
+                <div className="flex items-center justify-between px-3 py-2">
+                  <span className="text-sm font-semibold">알림</span>
+                  {unreadCount > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-auto p-1 text-xs text-muted-foreground"
+                      onClick={markAllAsRead}
+                    >
+                      <CheckCheck className="size-3 mr-1" />
+                      모두 읽음
+                    </Button>
+                  )}
                 </div>
-                {item.key.includes('color') ? (
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="color"
-                      value={editingContent[item.key] || item.fallback}
-                      onChange={(e) =>
-                        setEditingContent((prev) => ({ ...prev, [item.key]: e.target.value }))
-                      }
-                      className="w-10 h-10 rounded-lg border border-slate-200 cursor-pointer"
-                    />
-                    <input
-                      type="text"
-                      value={editingContent[item.key] || item.fallback}
-                      onChange={(e) =>
-                        setEditingContent((prev) => ({ ...prev, [item.key]: e.target.value }))
-                      }
-                      className="flex-1 px-3 py-2 rounded-lg border border-slate-200 text-sm font-mono focus:ring-2 focus:ring-sky-400 outline-none"
-                    />
+                <DropdownMenuSeparator />
+                {notifications.length === 0 ? (
+                  <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+                    알림이 없습니다
                   </div>
                 ) : (
-                  <input
-                    type="text"
-                    value={editingContent[item.key] || ''}
-                    onChange={(e) =>
-                      setEditingContent((prev) => ({ ...prev, [item.key]: e.target.value }))
-                    }
-                    placeholder={item.fallback}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-sky-400 outline-none"
-                  />
+                  <ScrollArea className="max-h-72">
+                    {notifications.slice(0, 10).map((notif) => (
+                      <DropdownMenuItem
+                        key={notif.id}
+                        className="flex items-start gap-3 px-3 py-2.5 cursor-pointer"
+                        onClick={() => {
+                          if (!notif.isRead) markAsRead(notif.id);
+                        }}
+                      >
+                        {/* 읽음/안읽음 표시 */}
+                        <div className="mt-1.5 shrink-0">
+                          {notif.isRead ? (
+                            <div className="size-2 rounded-full bg-muted-foreground/30" />
+                          ) : (
+                            <div className="size-2 rounded-full bg-primary" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p
+                            className={`text-sm truncate ${
+                              notif.isRead
+                                ? 'text-muted-foreground'
+                                : 'font-medium text-foreground'
+                            }`}
+                          >
+                            {notif.title}
+                          </p>
+                          <p className="text-xs text-muted-foreground truncate mt-0.5">
+                            {notif.message}
+                          </p>
+                        </div>
+                      </DropdownMenuItem>
+                    ))}
+                  </ScrollArea>
                 )}
-              </div>
-            ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
 
-            {/* 저장/리셋 버튼 */}
-            <div className="flex gap-3 pt-4">
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-medium text-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
-              >
-                <Save className="w-4 h-4" />
-                {saving ? '저장 중...' : '저장'}
-              </button>
-              <button
-                onClick={handleReset}
-                className="py-3 px-6 bg-white hover:bg-slate-50 text-slate-600 rounded-xl font-medium text-sm transition-colors border border-slate-200 flex items-center justify-center gap-2"
-              >
-                <RotateCcw className="w-4 h-4" />
-                초기화
-              </button>
-            </div>
-          </div>
-        ) : (
-          /* 미리보기 탭 */
-          <div className="max-w-md mx-auto">
-            <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-slate-100">
-              <div className="p-4 bg-slate-800 text-white text-center">
-                <p className="text-lg font-bold">
-                  {editingContent['idle.title'] || 'SMART LIBRARY'}
-                </p>
-                <p className="text-xs text-slate-400 mt-1">
-                  {editingContent['idle.subtitle'] || '무인 도서대출반납기'}
-                </p>
+            <Separator orientation="vertical" className="h-6" />
+
+            {/* 관리자 사용자 정보 */}
+            {adminUser && (
+              <div className="hidden sm:flex items-center gap-2">
+                <span className="text-sm font-medium truncate max-w-[120px]">
+                  {adminUser.name}
+                </span>
+                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                  {roleLabel}
+                </Badge>
               </div>
-              <div className="p-4 space-y-3">
-                <div className="bg-slate-50 rounded-lg p-3">
-                  <p className="text-xs text-slate-500 mb-1">메인 메뉴</p>
-                  <p className="text-sm font-medium">
-                    {editingContent['mainmenu.loan_button_text'] || '도서 대출'} / {editingContent['mainmenu.return_button_text'] || '도서 반납'}
-                  </p>
-                </div>
-                <div className="bg-slate-50 rounded-lg p-3">
-                  <p className="text-xs text-slate-500 mb-1">인증</p>
-                  <p className="text-sm font-medium">
-                    {editingContent['authscan.title'] || '회원인증'} → {editingContent['authpin.title'] || '비밀번호 입력'}
-                  </p>
-                </div>
-                <div className="bg-slate-50 rounded-lg p-3">
-                  <p className="text-xs text-slate-500 mb-1">대출/반납</p>
-                  <p className="text-sm font-medium">
-                    {editingContent['loancomplete.title'] || '대출완료'} / {editingContent['returncomplete.title'] || '반납완료'}
-                  </p>
-                </div>
-              </div>
-            </div>
+            )}
+
+            {/* 로그아웃 버튼 */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleLogout}
+              aria-label="로그아웃"
+              title="로그아웃"
+            >
+              <LogOut className="size-4" />
+            </Button>
+
+            {/* 키오스크로 돌아가기 버튼 (데스크톡에서는 사이드바에 있으므로 모바일만) */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="lg:hidden"
+              onClick={handleBackToKiosk}
+            >
+              <Monitor className="size-4" />
+              <span className="hidden sm:inline">키오스크로</span>
+            </Button>
           </div>
-        )}
-      </main>
+        </header>
+
+        {/* --- 메인 콘텐츠 영역 --- */}
+        <main className="flex-1 overflow-y-auto">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeSection}
+              initial={pageVariants.initial}
+              animate={pageVariants.animate}
+              exit={pageVariants.exit}
+              transition={pageTransition}
+              className="h-full"
+            >
+              <SectionContent section={activeSection} />
+            </motion.div>
+          </AnimatePresence>
+        </main>
+      </div>
     </div>
   );
 }

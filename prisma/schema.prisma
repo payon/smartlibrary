@@ -168,10 +168,18 @@ model MediaAsset {
 
 model Notification {
   id        String   @id @default(cuid())
-  type      String   @default("info") // info | warning | error
+  type      String   @default("info") // info | warning | error | success
   title     String
   message   String
   isRead    Boolean  @default(false)
   createdBy String?
   createdAt DateTime @default(now())
+}
+
+model SystemHealth {
+  id        String   @id @default(cuid())
+  metric    String   // cpu | memory | disk | uptime | active_sessions | loan_count
+  value     Float
+  unit      String   // % | MB | GB | seconds | count
+  timestamp DateTime @default(now())
 }

@@ -2,7 +2,7 @@
  * 키오스크 설정 관리 API 라우트
  *
  * [GET] /api/admin/settings
- * 키오스크 설정 목록을 조회합니다.
+ * 키오스크 설정 목록을 카테고리별로 그룹화하여 조회합니다.
  *
  * [PUT] /api/admin/settings
  * 키오스크 설정을 업데이트합니다.
@@ -17,7 +17,7 @@ import { getClientIp } from '@/lib/security';
 export const dynamic = 'force-dynamic';
 
 /**
- * 설정 목록 조회
+ * 설정 목록 조회 (카테고리별 그룹화)
  */
 export async function GET(request: NextRequest) {
   try {
@@ -39,7 +39,16 @@ export async function GET(request: NextRequest) {
       orderBy: [{ category: 'asc' }, { key: 'asc' }],
     });
 
-    return NextResponse.json({ configs });
+    // 카테고리별로 그룹화
+    const grouped: Record<string, typeof configs> = {};
+    for (const config of configs) {
+      if (!grouped[config.category]) {
+        grouped[config.category] = [];
+      }
+      grouped[config.category].push(config);
+    }
+
+    return NextResponse.json({ configs, grouped });
   } catch (error) {
     console.error('설정 목록 조회 오류:', error);
     return NextResponse.json(

@@ -10,31 +10,19 @@ import { useAppStore } from '@/stores/useAppStore';
  * - 마운트 시 /api/content에서 전체 콘텐츠 조회
  * - 30초 간격으로 버전 비교 후 변경 시에만 스토어 업데이트
  * - 관리자 모드에서는 폴링하지 않음 (관리자가 자체 데이터 관리)
+ *
+ * [주의]
+ * - cmsVersion을 useEffect 의존성 배열에 넣지 않음 (무한 루프 방지)
+ * - 대신 ref로 최신 버전을 추적하여 비교
  */
 
 const POLL_INTERVAL = 30_000; // 30초
 
 export function useCmsContent() {
   const adminMode = useAppStore((s) => s.adminMode);
-  const cmsVersion = useAppStore((s) => s.cmsVersion);
   const setCmsContent = useAppStore((s) => s.setCmsContent);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  /** 콘텐츠 조회 함수 */
-  const fetchContent = async () => {
-    try {
-      const res = await fetch('/api/content');
-      if (res.ok) {
-        const data = await res.json();
-        // 버전이 변경된 경우에만 스토어 업데이트
-        if (data.version !== undefined && data.version !== cmsVersion) {
-          setCmsContent(data.content || {}, data.version);
-        }
-      }
-    } catch {
-      // 조회 실패 시 무시 (기존 콘텐츠 유지)
-    }
-  };
+  const versionRef = useRef<number>(0);
 
   useEffect(() => {
     // 관리자 모드에서는 폴링하지 않음
@@ -45,6 +33,23 @@ export function useCmsContent() {
       }
       return;
     }
+
+    /** 콘텐츠 조회 함수 */
+    const fetchContent = async () => {
+      try {
+        const res = await fetch('/api/content');
+        if (res.ok) {
+          const data = await res.json();
+          // 버전이 변경된 경우에만 스토어 업데이트
+          if (data.version !== undefined && data.version !== versionRef.current) {
+            versionRef.current = data.version;
+            setCmsContent(data.content || {}, data.version);
+          }
+        }
+      } catch {
+        // 조회 실패 시 무시 (기존 콘텐츠 유지)
+      }
+    };
 
     // 최초 1회 조회
     fetchContent();
@@ -58,7 +63,7 @@ export function useCmsContent() {
         intervalRef.current = null;
       }
     };
-  }, [adminMode, cmsVersion, setCmsContent]);
+  }, [adminMode, setCmsContent]);
 }
 
 /**

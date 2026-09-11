@@ -1,11 +1,11 @@
 /**
- * 콘텐츠 관리 API 라우트
+ * 콘텐츠 상세 API 라우트
  *
- * [GET] /api/admin/content?screen=xxx
- * 콘텐츠 아이템 목록을 조회합니다.
+ * [GET] /api/admin/content/[key]
+ * 단일 콘텐츠 아이템을 키로 조회합니다.
  *
- * [PUT] /api/admin/content
- * 콘텐츠 아이템을 업데이트합니다.
+ * [PUT] /api/admin/content/[key]
+ * 콘텐츠 아이템을 키로 업데이트합니다.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -18,11 +18,13 @@ import { getClientIp } from '@/lib/security';
 export const dynamic = 'force-dynamic';
 
 /**
- * 콘텐츠 목록 조회
+ * 단일 콘텐츠 아이템 조회
  */
-export async function GET(request: NextRequest) {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ key: string }> }
+) {
   try {
-    // 인증 확인
     const token = request.cookies.get('admin_token')?.value;
     if (!token) {
       return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
@@ -37,34 +39,43 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
     }
 
-    const { searchParams } = new URL(request.url);
-    const screen = searchParams.get('screen');
+    const { key } = await params;
 
-    const where = screen ? { screen } : {};
-
-    const items = await db.contentItem.findMany({
-      where,
-      orderBy: [{ screen: 'asc' }, { key: 'asc' }],
+    const item = await db.contentItem.findUnique({
+      where: { key },
+      include: {
+        versions: {
+          orderBy: { changedAt: 'desc' },
+          take: 5,
+        },
+      },
     });
 
-    const version = await db.contentItem.count();
+    if (!item) {
+      return NextResponse.json(
+        { error: '해당 키의 콘텐츠 아이템을 찾을 수 없습니다.' },
+        { status: 404 }
+      );
+    }
 
-    return NextResponse.json({ items, version });
+    return NextResponse.json({ item });
   } catch (error) {
-    console.error('콘텐츠 목록 조회 오류:', error);
+    console.error('콘텐츠 상세 조회 오류:', error);
     return NextResponse.json(
-      { error: '콘텐츠 목록을 조회하는 중 오류가 발생했습니다.' },
+      { error: '콘텐츠를 조회하는 중 오류가 발생했습니다.' },
       { status: 500 }
     );
   }
 }
 
 /**
- * 콘텐츠 아이템 업데이트
+ * 콘텐츠 아이템 업데이트 (키로)
  */
-export async function PUT(request: NextRequest) {
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ key: string }> }
+) {
   try {
-    // 인증 확인
     const token = request.cookies.get('admin_token')?.value;
     if (!token) {
       return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
@@ -79,17 +90,17 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
     }
 
+    const { key } = await params;
     const body = await request.json();
-    const { key, value, changedBy } = body;
+    const { value, changedBy } = body;
 
-    if (!key || value === undefined) {
+    if (value === undefined) {
       return NextResponse.json(
-        { error: 'key와 value는 필수입니다.' },
+        { error: 'value는 필수입니다.' },
         { status: 400 }
       );
     }
 
-    // 기존 콘텐츠 아이템 조회
     const existingItem = await db.contentItem.findUnique({
       where: { key },
     });

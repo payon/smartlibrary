@@ -2,7 +2,7 @@
  * 도서 반납 확인 화면
  *
  * [기능]
- * - 반납할 대출 기록 목록 표시
+ * - 반납할 대출 기록 목록 표시 (CMS 관리)
  * - 반납 API 호출
  * - 반납 완료 화면으로 이동
  */
@@ -14,6 +14,7 @@ import { motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
 import { CheckCircle2, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
+import { CmsText } from '@/components/kiosk/CmsText';
 
 export default function KioskReturnConfirm() {
   const { returnedLoans, setScreen, prevScreen } = useAppStore();
@@ -52,7 +53,9 @@ export default function KioskReturnConfirm() {
     <div className="kiosk-screen kiosk-light-bg flex flex-col">
       {/* 상단 타이틀 */}
       <header className="px-5 pt-6 pb-3">
-        <h1 className="text-xl font-bold text-slate-800">반납 정보를 확인해주세요</h1>
+        <h1 className="text-xl font-bold text-slate-800">
+          <CmsText contentKey="returnconfirm.title" fallback="반납 정보를 확인해주세요" />
+        </h1>
       </header>
 
       {/* 반납 도서 목록 */}
@@ -118,7 +121,7 @@ export default function KioskReturnConfirm() {
           ) : (
             <>
               <CheckCircle2 className="w-5 h-5" />
-              반납하기
+              <CmsText contentKey="returnconfirm.confirm_button_text" fallback="반납하기" />
             </>
           )}
         </button>

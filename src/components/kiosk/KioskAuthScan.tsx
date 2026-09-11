@@ -2,7 +2,7 @@
  * 회원증 스캔 화면
  *
  * [기능]
- * - 회원증 RFID 스캔 안내
+ * - 회원증 RFID 스캔 안내 (CMS 관리)
  * - 2초 후 자동 인식 시뮬레이션
  * - 인식 성공 메시지 표시 후 PIN 입력으로 이동
  * - 회원증 없이 이용하기 옵션 (데모용)
@@ -16,6 +16,7 @@ import { useAppStore } from '@/stores/useAppStore';
 import { CreditCard, CheckCircle2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import type { SimUser } from '@/stores/useAppStore';
+import { CmsText } from '@/components/kiosk/CmsText';
 
 export default function KioskAuthScan() {
   const { setScreen, prevScreen, kioskMode, setAuthenticatedUser } = useAppStore();
@@ -62,7 +63,9 @@ export default function KioskAuthScan() {
     <div className="kiosk-screen kiosk-dark-bg flex flex-col">
       {/* 상단 타이틀 */}
       <header className="px-6 pt-8 pb-4">
-        <h1 className="text-2xl font-bold text-white">회원인증</h1>
+        <h1 className="text-2xl font-bold text-white">
+          <CmsText contentKey="authscan.title" fallback="회원인증" />
+        </h1>
       </header>
 
       {/* 메인 스캔 영역 */}
@@ -95,7 +98,7 @@ export default function KioskAuthScan() {
               animate={{ opacity: [0.6, 1, 0.6] }}
               transition={{ duration: 2, repeat: Infinity }}
             >
-              회원증을 가져다 대세요
+              <CmsText contentKey="authscan.instruction" fallback="회원증을 가져다 대세요" />
             </motion.p>
           )}
 
@@ -142,7 +145,7 @@ export default function KioskAuthScan() {
             onClick={handleSkip}
             className="text-slate-500 hover:text-slate-300 text-sm py-2 transition-colors"
           >
-            회원증 없이 이용하기
+            <CmsText contentKey="authscan.demo_button_text" fallback="회원증 없이 이용하기" />
           </button>
         )}
       </footer>

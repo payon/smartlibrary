@@ -2,7 +2,7 @@
  * 대출 확인 화면
  *
  * [기능]
- * - 사용자 정보 카드 표시
+ * - 사용자 정보 카드 표시 (CMS 관리)
  * - 선택 도서 목록 및 반납 예정일 표시
  * - 대출 실행
  */
@@ -15,6 +15,7 @@ import { useAppStore } from '@/stores/useAppStore';
 import { LOAN_PERIOD_DAYS } from '@/lib/constants';
 import { ArrowLeft, CheckCircle2, User } from 'lucide-react';
 import { toast } from 'sonner';
+import { CmsText } from '@/components/kiosk/CmsText';
 
 export default function KioskLoanConfirm() {
   const { selectedBooks, authenticatedUser, setScreen, prevScreen } = useAppStore();
@@ -62,7 +63,9 @@ export default function KioskLoanConfirm() {
     <div className="kiosk-screen kiosk-light-bg flex flex-col">
       {/* 상단 타이틀 */}
       <header className="px-5 pt-6 pb-3">
-        <h1 className="text-xl font-bold text-slate-800">대출 정보를 확인해주세요</h1>
+        <h1 className="text-xl font-bold text-slate-800">
+          <CmsText contentKey="loanconfirm.title" fallback="대출 정보를 확인해주세요" />
+        </h1>
       </header>
 
       {/* 콘텐츠 영역 */}
@@ -146,7 +149,7 @@ export default function KioskLoanConfirm() {
           ) : (
             <>
               <CheckCircle2 className="w-5 h-5" />
-              대출하기
+              <CmsText contentKey="loanconfirm.confirm_button_text" fallback="대출하기" />
             </>
           )}
         </button>

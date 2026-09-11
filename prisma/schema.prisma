@@ -7,6 +7,10 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ============================================================================
+// 기존 키오스크 모델
+// ============================================================================
+
 model SimUser {
   id          String   @id @default(cuid())
   name        String
@@ -36,6 +40,8 @@ model Book {
   totalCopies     Int      @default(3)
   availableCopies Int      @default(3)
   shelfLocation   String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
   loans           SimLoan[]
 }
 
@@ -76,4 +82,96 @@ model Scenario {
   stepsJson   String
   category    String?
   orderIndex  Int      @default(0)
+}
+
+// ============================================================================
+// 백엔드 관리자 대시보드 모델
+// ============================================================================
+
+model AdminUser {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         String   @default("admin") // super_admin | admin | operator
+  isActive     Boolean  @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  sessions     AdminSession[]
+  auditLogs    AuditLog[]
+}
+
+model AdminSession {
+  id         String     @id @default(cuid())
+  userId     String
+  token      String     @unique
+  expiresAt  DateTime
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime   @default(now())
+  user       AdminUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ContentItem {
+  id        String   @id @default(cuid())
+  key       String   @unique // e.g. "idle.title", "mainmenu.loan_button_text"
+  value     String   // text, URL, JSON, or color value
+  type      String   @default("text") // text | image | color | json | number
+  screen    String   @default("global") // kiosk screen name
+  label     String   // Korean display name for admin UI
+  updatedAt DateTime @updatedAt
+  versions  ContentVersion[]
+}
+
+model ContentVersion {
+  id            String      @id @default(cuid())
+  contentItemId String
+  oldValue      String
+  newValue      String
+  changedBy     String?     // admin user id
+  changedAt     DateTime    @default(now())
+  contentItem   ContentItem @relation(fields: [contentItemId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id        String    @id @default(cuid())
+  userId    String?
+  action    String    // create | update | delete | login | logout
+  entity    String    // content | book | user | setting | admin
+  entityId  String?
+  details   String?   // JSON string
+  ipAddress String?
+  timestamp DateTime  @default(now())
+  user      AdminUser? @relation(fields: [userId], references: [id])
+}
+
+model KioskConfig {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String   // JSON string
+  label     String
+  category  String   @default("general")
+  updatedAt DateTime @updatedAt
+}
+
+model MediaAsset {
+  id           String   @id @default(cuid())
+  filename     String
+  originalName String
+  mimeType     String
+  size         Int
+  path         String
+  uploadedBy   String?
+  createdAt    DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  type      String   @default("info") // info | warning | error
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  createdBy String?
+  createdAt DateTime @default(now())
 }

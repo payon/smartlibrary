@@ -1,5 +1,10 @@
 /**
  * 키오스크 시뮬레이션 메인 페이지
+ *
+ * [역할]
+ * - 키오스크 UI / 관리자 대시보드 전환
+ * - adminMode가 true이면 관리자 대시보드 렌더
+ * - adminMode가 false이면 키오스크 UI 렌더
  */
 
 'use client';
@@ -7,6 +12,7 @@
 import { useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
+import { useAdminStore } from '@/stores/useAdminStore';
 import type { KioskViewName } from '@/lib/constants';
 import KioskIdleScreen from '@/components/kiosk/KioskIdleScreen';
 import KioskMainMenu from '@/components/kiosk/KioskMainMenu';
@@ -19,6 +25,8 @@ import KioskReturnInsert from '@/components/kiosk/KioskReturnInsert';
 import KioskReturnScanning from '@/components/kiosk/KioskReturnScanning';
 import KioskReturnConfirm from '@/components/kiosk/KioskReturnConfirm';
 import KioskReturnComplete from '@/components/kiosk/KioskReturnComplete';
+import AdminLogin from '@/components/admin/AdminLogin';
+import AdminDashboard from '@/components/admin/AdminDashboard';
 
 function ScreenRouter({ screen }: { screen: KioskViewName }) {
   switch (screen) {
@@ -40,14 +48,33 @@ function ScreenRouter({ screen }: { screen: KioskViewName }) {
 export default function Home() {
   const screen = useAppStore((s) => s.screen);
   const kioskMode = useAppStore((s) => s.kioskMode);
+  const adminMode = useAppStore((s) => s.adminMode);
+  const setAdminMode = useAppStore((s) => s.setAdminMode);
+  const isAdminAuthenticated = useAdminStore((s) => s.isAuthenticated);
 
   /* 시드 데이터 초기화 (최초 1회) */
   useEffect(() => {
     fetch('/api/seed', { method: 'POST' }).catch(() => {});
   }, []);
 
+  // adminMode가 켜졌는데 인증이 풀리면 adminMode도 끄기
+  useEffect(() => {
+    if (adminMode && !isAdminAuthenticated) {
+      // 관리자 인증이 안 된 상태면 로그인 화면 보여주기 위해 유지
+    }
+  }, [adminMode, isAdminAuthenticated]);
+
   const screenKey = screen + '-' + (kioskMode || '');
 
+  // 관리자 모드
+  if (adminMode) {
+    if (isAdminAuthenticated) {
+      return <AdminDashboard />;
+    }
+    return <AdminLogin />;
+  }
+
+  // 키오스크 모드
   return (
     <div className="kiosk-frame">
       <AnimatePresence mode="wait">

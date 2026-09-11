@@ -2,7 +2,7 @@
  * 키오스크 메인 메뉴 화면
  *
  * [기능]
- * - 서비스 선택 (도서 대출 / 도서 반납)
+ * - 서비스 선택 (도서 대출 / 도서 반납) (CMS 관리)
  * - 현재 시간 표시
  *
  * [디자인]
@@ -16,6 +16,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
 import { BookOpen, ArrowDownToLine, Clock, Library } from 'lucide-react';
+import { CmsText } from '@/components/kiosk/CmsText';
 
 export default function KioskMainMenu() {
   const { setScreen, setKioskMode } = useAppStore();
@@ -55,12 +56,12 @@ export default function KioskMainMenu() {
       <header className="flex flex-col items-center pt-10 pb-6 px-6">
         <div className="flex items-center gap-3 mb-1">
           <Library className="w-7 h-7 text-sky-400" strokeWidth={1.8} />
-          <h1
+          <CmsText
+            contentKey="mainmenu.title"
+            fallback="SMART LIBRARY"
+            as="h1"
             className="text-2xl font-bold tracking-[0.15em] text-white"
-            style={{ textShadow: '0 0 24px rgba(56, 189, 248, 0.25)' }}
-          >
-            SMART LIBRARY
-          </h1>
+          />
         </div>
         <p className="text-slate-500 text-xs tracking-widest mt-1">
           무인 도서대출반납기
@@ -86,7 +87,7 @@ export default function KioskMainMenu() {
         >
           <BookOpen className="w-12 h-12 text-sky-400" strokeWidth={1.5} />
           <span className="text-2xl font-bold text-white tracking-wider">
-            도서 대출
+            <CmsText contentKey="mainmenu.loan_button_text" fallback="도서 대출" />
           </span>
         </motion.button>
 
@@ -107,7 +108,7 @@ export default function KioskMainMenu() {
         >
           <ArrowDownToLine className="w-12 h-12 text-teal-400" strokeWidth={1.5} />
           <span className="text-2xl font-bold text-white tracking-wider">
-            도서 반납
+            <CmsText contentKey="mainmenu.return_button_text" fallback="도서 반납" />
           </span>
         </motion.button>
       </main>

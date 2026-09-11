@@ -2,11 +2,12 @@
  * 키오스크 대기 화면 (ECO 키오스크 어트랙트 스크린)
  *
  * [기능]
- * - SMART LIBRARY 브랜딩 표시
+ * - SMART LIBRARY 브랜딩 표시 (CMS 관리)
  * - 터치 시 메인 메뉴로 이동
+ * - 관리자 모드 진입 버튼 (우측 하단)
  *
  * [디자인]
- * - 다크 네이비 전체 화면 배경
+ * - 다크 네이비 전체 화면 배경 (CMS 관리)
  * - 중앙 브랜딩 + 하단 터치 안내
  * - 미묘한 펄스 글로우 효과
  */
@@ -16,20 +17,34 @@
 import { useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
-import { Library } from 'lucide-react';
+import { Library, Settings } from 'lucide-react';
+import { CmsText } from '@/components/kiosk/CmsText';
 
 export default function KioskIdleScreen() {
-  const { setScreen } = useAppStore();
+  const { setScreen, setAdminMode } = useAppStore();
+  const cmsContent = useAppStore((s) => s.cmsContent);
+
+  /** CMS 배경색 또는 기본값 */
+  const bgColor = cmsContent['idle.background_color'] || '#0b1120';
 
   /** 화면 터치 시 메인 메뉴로 이동 */
   const handleTouch = useCallback(() => {
     setScreen('main-menu');
   }, [setScreen]);
 
+  /** 관리자 모드 진입 */
+  const handleAdminClick = useCallback(
+    (e: React.MouseEvent | React.TouchEvent) => {
+      e.stopPropagation();
+      setAdminMode(true);
+    },
+    [setAdminMode]
+  );
+
   return (
     <div
       className="flex flex-col items-center justify-center h-screen relative select-none cursor-pointer"
-      style={{ background: '#0b1120' }}
+      style={{ background: bgColor }}
       onClick={handleTouch}
       onTouchStart={handleTouch}
       role="button"
@@ -61,17 +76,18 @@ export default function KioskIdleScreen() {
               filter: 'drop-shadow(0 0 12px rgba(56, 189, 248, 0.3))',
             }}
           />
-          <h1
+          <CmsText
+            contentKey="idle.title"
+            fallback="SMART LIBRARY"
+            as="h1"
             className="text-4xl font-bold tracking-[0.2em] text-white"
-            style={{
-              textShadow: '0 0 30px rgba(56, 189, 248, 0.3)',
-            }}
-          >
-            SMART LIBRARY
-          </h1>
-          <p className="text-slate-500 text-sm tracking-[0.3em] mt-3">
-            무인 도서대출반납기
-          </p>
+          />
+          <CmsText
+            contentKey="idle.subtitle"
+            fallback="무인 도서대출반납기"
+            as="p"
+            className="text-slate-500 text-sm tracking-[0.3em] mt-3"
+          />
         </motion.div>
 
         {/* 하단 터치 안내 */}
@@ -84,7 +100,7 @@ export default function KioskIdleScreen() {
             ease: 'easeInOut',
           }}
         >
-          화면을 터치하여 시작하세요
+          <CmsText contentKey="idle.pulse_text" fallback="화면을 터치하여 시작하세요" />
         </motion.p>
       </div>
 
@@ -107,6 +123,16 @@ export default function KioskIdleScreen() {
           border: '1.5px solid rgba(56, 189, 248, 0.3)',
         }}
       />
+
+      {/* 관리자 모드 진입 버튼 (작고 반투명) */}
+      <button
+        onClick={handleAdminClick}
+        onTouchStart={handleAdminClick}
+        className="absolute bottom-4 right-4 w-6 h-6 flex items-center justify-center text-slate-600 hover:text-slate-400 transition-colors opacity-30 hover:opacity-60 z-20"
+        aria-label="관리자 모드"
+      >
+        <Settings className="w-4 h-4" />
+      </button>
     </div>
   );
 }

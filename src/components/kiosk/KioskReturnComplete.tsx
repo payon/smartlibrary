@@ -1,5 +1,5 @@
 /**
- * 도서 반납 완료 화면
+ * 도서 반납 완료 화면 (CMS 관리)
  */
 
 'use client';
@@ -7,6 +7,7 @@
 import { motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
 import { CheckCircle2 } from 'lucide-react';
+import { CmsText } from '@/components/kiosk/CmsText';
 
 export default function KioskReturnComplete() {
   const { returnedLoans, setScreen, clearReturnedLoans } = useAppStore();
@@ -33,7 +34,7 @@ export default function KioskReturnComplete() {
         transition={{ delay: 0.4 }}
         className="text-2xl font-bold text-slate-800 mb-2"
       >
-        반납완료
+        <CmsText contentKey="returncomplete.title" fallback="반납완료" />
       </motion.h1>
 
       <motion.p
@@ -42,7 +43,7 @@ export default function KioskReturnComplete() {
         transition={{ delay: 0.6 }}
         className="text-slate-500 text-base mb-8"
       >
-        도서가 정상적으로 반납되었습니다.
+        <CmsText contentKey="returncomplete.message" fallback="도서가 정상적으로 반납되었습니다." />
       </motion.p>
 
       <motion.div
@@ -75,7 +76,7 @@ export default function KioskReturnComplete() {
         className="kiosk-btn bg-slate-800 hover:bg-slate-700 text-white w-full max-w-xs"
       >
         <CheckCircle2 className="w-5 h-5" />
-        확인하기
+        <CmsText contentKey="returncomplete.confirm_button_text" fallback="확인하기" />
       </motion.button>
     </div>
   );

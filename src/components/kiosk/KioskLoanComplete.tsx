@@ -2,7 +2,7 @@
  * 대출 완료 화면
  *
  * [기능]
- * - 성공 체크마크 애니메이션
+ * - 성공 체크마크 애니메이션 (CMS 관리)
  * - 사용자 대출 통계 대시보드
  * - 대출 도서 목록 및 반납일 표시
  */
@@ -15,6 +15,7 @@ import { useAppStore } from '@/stores/useAppStore';
 import type { LoanItem } from '@/stores/useAppStore';
 import { MAX_LOAN_COUNT, LOAN_PERIOD_DAYS } from '@/lib/constants';
 import { CheckCircle2, BookOpen, AlertTriangle, CheckCircle } from 'lucide-react';
+import { CmsText } from '@/components/kiosk/CmsText';
 
 export default function KioskLoanComplete() {
   const { authenticatedUser, setScreen, clearSelectedBooks } = useAppStore();
@@ -74,7 +75,9 @@ export default function KioskLoanComplete() {
         >
           <CheckCircle2 className="w-9 h-9 text-white" />
         </motion.div>
-        <h1 className="text-2xl font-bold text-emerald-600">대출완료</h1>
+        <h1 className="text-2xl font-bold text-emerald-600">
+          <CmsText contentKey="loancomplete.title" fallback="대출완료" />
+        </h1>
       </header>
 
       {/* 통계 대시보드 */}
@@ -120,7 +123,9 @@ export default function KioskLoanComplete() {
 
       {/* 대출 도서 목록 */}
       <div className="flex-1 overflow-y-auto kiosk-scroll px-5 pb-4">
-        <p className="text-sm font-semibold text-slate-600 mb-2">대출 도서 목록</p>
+        <p className="text-sm font-semibold text-slate-600 mb-2">
+          <CmsText contentKey="loancomplete.list_title" fallback="대출 도서 목록" />
+        </p>
         {activeLoans.length === 0 ? (
           <p className="text-sm text-slate-400 text-center py-4">대출 도서가 없습니다</p>
         ) : (
@@ -155,7 +160,7 @@ export default function KioskLoanComplete() {
           onClick={handleConfirm}
           className="kiosk-btn bg-slate-800 hover:bg-slate-700 text-white w-full"
         >
-          확인하기
+          <CmsText contentKey="loancomplete.confirm_button_text" fallback="확인하기" />
         </button>
       </footer>
     </div>

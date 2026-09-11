@@ -2,7 +2,7 @@
  * 도서 반납 스캔 화면
  *
  * [기능]
- * - RFID 스캔 애니메이션
+ * - RFID 스캔 애니메이션 (CMS 관리)
  * - 인식된 대출 도서 표시
  * - 추가 반납 또는 반납 완료 선택
  */
@@ -14,6 +14,7 @@ import { motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
 import { BookPlus, CheckCircle2, Loader2 } from 'lucide-react';
 import type { LoanItem } from '@/stores/useAppStore';
+import { CmsText } from '@/components/kiosk/CmsText';
 
 export default function KioskReturnScanning() {
   const { returnedLoans, setScreen, authenticatedUser } = useAppStore();
@@ -58,7 +59,9 @@ export default function KioskReturnScanning() {
     <div className="kiosk-screen kiosk-dark-bg flex flex-col">
       {/* 상단 타이틀 */}
       <header className="px-6 pt-8 pb-4">
-        <h1 className="text-2xl font-bold text-white">도서반납</h1>
+        <h1 className="text-2xl font-bold text-white">
+          <CmsText contentKey="returnscanning.title" fallback="도서반납" />
+        </h1>
         <p className="text-slate-400 text-sm mt-1">
           인식된 도서: {returnedLoans.length}권
         </p>
@@ -102,7 +105,7 @@ export default function KioskReturnScanning() {
             transition={{ duration: 1.5, repeat: Infinity }}
             className="text-slate-300 text-base"
           >
-            도서가 인식되었습니다. 잠시 기다려주세요.
+            <CmsText contentKey="returnscanning.scanning_text" fallback="도서가 인식되었습니다. 잠시 기다려주세요." />
           </motion.p>
         ) : (
           <motion.p
@@ -110,7 +113,7 @@ export default function KioskReturnScanning() {
             animate={{ opacity: 1 }}
             className="text-emerald-400 text-lg font-semibold"
           >
-            스캔이 완료되었습니다
+            <CmsText contentKey="returnscanning.complete_text" fallback="스캔이 완료되었습니다" />
           </motion.p>
         )}
 
@@ -152,7 +155,7 @@ export default function KioskReturnScanning() {
               className="kiosk-btn bg-sky-700 hover:bg-sky-600 text-white"
             >
               <BookPlus className="w-5 h-5" />
-              더 넣기 ({remainingLoans.length}권 남음)
+              <CmsText contentKey="returnscanning.more_button_text" fallback={`더 넣기 (${remainingLoans.length}권 남음)`} />
             </button>
           )}
           <button
@@ -160,7 +163,7 @@ export default function KioskReturnScanning() {
             className="kiosk-btn bg-emerald-600 hover:bg-emerald-500 text-white"
           >
             <CheckCircle2 className="w-5 h-5" />
-            반납 완료하기
+            <CmsText contentKey="returnscanning.complete_button_text" fallback="반납 완료하기" />
           </button>
         </footer>
       )}

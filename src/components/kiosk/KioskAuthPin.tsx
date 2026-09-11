@@ -2,7 +2,7 @@
  * 비밀번호 입력 화면
  *
  * [기능]
- * - 4자리 숫자 비밀번호 입력
+ * - 4자리 숫자 비밀번호 입력 (CMS 관리)
  * - 숫자 키패드 (1-9, 0, 삭제, 확인)
  * - 데모 모드에서는 임의의 4자리 입력 가능
  */
@@ -15,6 +15,7 @@ import { useAppStore } from '@/stores/useAppStore';
 import { Delete, CheckCircle2, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import type { SimUser } from '@/stores/useAppStore';
+import { CmsText } from '@/components/kiosk/CmsText';
 
 /**
  * 데모 사용자 조회
@@ -105,7 +106,9 @@ export default function KioskAuthPin() {
     <div className="kiosk-screen kiosk-dark-bg flex flex-col">
       {/* 상단 타이틀 */}
       <header className="px-6 pt-8 pb-4">
-        <h1 className="text-2xl font-bold text-white">비밀번호 입력</h1>
+        <h1 className="text-2xl font-bold text-white">
+          <CmsText contentKey="authpin.title" fallback="비밀번호 입력" />
+        </h1>
         <p className="text-slate-400 text-sm mt-1">
           4자리 비밀번호를 입력해주세요
         </p>

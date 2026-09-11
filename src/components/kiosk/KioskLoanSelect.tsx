@@ -2,7 +2,7 @@
  * 도서 대출 선택 화면
  *
  * [기능]
- * - 검색 바 및 카테고리 필터
+ * - 검색 바 및 카테고리 필터 (CMS 관리)
  * - 도서 그리드 (2열) 표시
  * - 도서 선택/해제
  * - 선택된 도서 칩 표시
@@ -17,6 +17,7 @@ import type { BookItem } from '@/stores/useAppStore';
 import { BOOK_CATEGORIES, MAX_LOAN_COUNT } from '@/lib/constants';
 import { Search, X, ArrowLeft, Check, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
+import { CmsText } from '@/components/kiosk/CmsText';
 
 export default function KioskLoanSelect() {
   const { selectedBooks, addBook, removeBook, setScreen, prevScreen } = useAppStore();
@@ -52,13 +53,16 @@ export default function KioskLoanSelect() {
     return books.filter((b) => b.availableCopies > 0);
   }, [books]);
 
+  const cmsContent = useAppStore((s) => s.cmsContent);
+
   /** 도서 선택/해제 토글 */
   const toggleBook = (book: BookItem) => {
     if (selectedBooks.some((b) => b.id === book.id)) {
       removeBook(book.id);
     } else {
       if (selectedBooks.length >= MAX_LOAN_COUNT) {
-        toast.error(`최대 ${MAX_LOAN_COUNT}권까지 대출할 수 있습니다`);
+        const warning = cmsContent['loanselect.max_selection_warning'] || `최대 ${MAX_LOAN_COUNT}권까지 대출할 수 있습니다`;
+        toast.error(warning);
         return;
       }
       addBook(book);
@@ -75,7 +79,9 @@ export default function KioskLoanSelect() {
     <div className="kiosk-screen kiosk-light-bg flex flex-col">
       {/* 상단 타이틀 */}
       <header className="px-5 pt-6 pb-3">
-        <h1 className="text-xl font-bold text-slate-800">도서를 선택해주세요</h1>
+        <h1 className="text-xl font-bold text-slate-800">
+          <CmsText contentKey="loanselect.title" fallback="도서를 선택해주세요" />
+        </h1>
         <p className="text-slate-500 text-sm mt-1">
           최대 {MAX_LOAN_COUNT}권까지 대출할 수 있습니다
           {selectedBooks.length > 0 && (
@@ -230,7 +236,7 @@ export default function KioskLoanSelect() {
           disabled={selectedBooks.length === 0}
           className="kiosk-btn bg-slate-800 hover:bg-slate-700 text-white flex-1 disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          다음 단계
+          <CmsText contentKey="loanselect.confirm_button_text" fallback="다음 단계" />
           <ChevronRight className="w-5 h-5" />
         </button>
       </footer>

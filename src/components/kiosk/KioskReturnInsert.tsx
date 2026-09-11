@@ -2,7 +2,7 @@
  * 도서 반납 삽입 화면
  *
  * [기능]
- * - 반납 도서 투입 안내
+ * - 반납 도서 투입 안내 (CMS 관리)
  * - 사용자의 대출 중인 도서를 조회하여 자동 감지 시뮬레이션
  * - 2초 후 첫 번째 대출 도서를 자동 인식
  */
@@ -14,6 +14,7 @@ import { motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
 import { BookDown, ArrowDown, X, Info } from 'lucide-react';
 import type { LoanItem } from '@/stores/useAppStore';
+import { CmsText } from '@/components/kiosk/CmsText';
 
 export default function KioskReturnInsert() {
   const { setScreen, prevScreen, addReturnedLoan, clearReturnedLoans, authenticatedUser } = useAppStore();
@@ -63,7 +64,9 @@ export default function KioskReturnInsert() {
     <div className="kiosk-screen kiosk-dark-bg flex flex-col">
       {/* 상단 타이틀 */}
       <header className="px-6 pt-8 pb-4">
-        <h1 className="text-2xl font-bold text-white">도서반납</h1>
+        <h1 className="text-2xl font-bold text-white">
+          <CmsText contentKey="returninsert.title" fallback="도서반납" />
+        </h1>
       </header>
 
       {/* 메인 안내 영역 */}
@@ -76,10 +79,10 @@ export default function KioskReturnInsert() {
           >
             <Info className="w-16 h-16 text-sky-400 mx-auto mb-4" />
             <p className="text-slate-200 text-lg font-medium mb-2">
-              반납할 도서가 없습니다
+              <CmsText contentKey="returninsert.no_loans_title" fallback="반납할 도서가 없습니다" />
             </p>
             <p className="text-slate-500 text-sm">
-              대출 중인 도서가 없습니다.
+              <CmsText contentKey="returninsert.no_loans_desc" fallback="대출 중인 도서가 없습니다." />
             </p>
           </motion.div>
         ) : (
@@ -119,15 +122,15 @@ export default function KioskReturnInsert() {
                 animate={{ opacity: 1 }}
                 className="text-emerald-400 text-lg font-semibold"
               >
-                도서가 감지되었습니다
+                <CmsText contentKey="returninsert.detected_text" fallback="도서가 감지되었습니다" />
               </motion.p>
             ) : (
               <>
                 <p className="text-slate-200 text-lg font-medium mb-2">
-                  반납할 도서를 하나씩 넣어주세요
+                  <CmsText contentKey="returninsert.instruction" fallback="반납할 도서를 하나씩 넣어주세요" />
                 </p>
                 <p className="text-slate-500 text-sm">
-                  도서를 넣으면 자동으로 인식됩니다
+                  <CmsText contentKey="returninsert.instruction_sub" fallback="도서를 넣으면 자동으로 인식됩니다" />
                 </p>
               </>
             )}

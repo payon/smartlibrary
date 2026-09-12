@@ -25,6 +25,10 @@ import KioskReturnInsert from '@/components/kiosk/KioskReturnInsert';
 import KioskReturnScanning from '@/components/kiosk/KioskReturnScanning';
 import KioskReturnConfirm from '@/components/kiosk/KioskReturnConfirm';
 import KioskReturnComplete from '@/components/kiosk/KioskReturnComplete';
+import KioskCardApply from '@/components/kiosk/KioskCardApply';
+import KioskCardForm from '@/components/kiosk/KioskCardForm';
+import KioskCardPending from '@/components/kiosk/KioskCardPending';
+import KioskCardComplete from '@/components/kiosk/KioskCardComplete';
 
 /** 키오스크 화면 렌더러 */
 function ScreenRouter({ screen }: { screen: KioskViewName }) {
@@ -51,6 +55,14 @@ function ScreenRouter({ screen }: { screen: KioskViewName }) {
       return <KioskReturnConfirm />;
     case 'return-complete':
       return <KioskReturnComplete />;
+    case 'card-apply':
+      return <KioskCardApply />;
+    case 'card-form':
+      return <KioskCardForm />;
+    case 'card-pending':
+      return <KioskCardPending />;
+    case 'card-complete':
+      return <KioskCardComplete />;
     default:
       return <KioskIdleScreen />;
   }

@@ -324,6 +324,10 @@ export const OVERDUE_BLOCK_MULTIPLIER = 1;
 export type KioskViewName =
   | 'idle'
   | 'main-menu'
+  | 'card-apply'
+  | 'card-form'
+  | 'card-pending'
+  | 'card-complete'
   | 'auth-scan'
   | 'auth-pin'
   | 'loan-select'
@@ -335,12 +339,16 @@ export type KioskViewName =
   | 'return-complete';
 
 /** 키오스크 모드 타입 */
-export type KioskMode = 'loan' | 'return' | null;
+export type KioskMode = 'loan' | 'return' | 'card' | null;
 
 /** 키오스크 화면 상수 */
 export const KIOSK_VIEWS = {
   IDLE: 'idle' as const,
   MAIN_MENU: 'main-menu' as const,
+  CARD_APPLY: 'card-apply' as const,
+  CARD_FORM: 'card-form' as const,
+  CARD_PENDING: 'card-pending' as const,
+  CARD_COMPLETE: 'card-complete' as const,
   AUTH_SCAN: 'auth-scan' as const,
   AUTH_PIN: 'auth-pin' as const,
   LOAN_SELECT: 'loan-select' as const,

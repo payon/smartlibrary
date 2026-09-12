@@ -40,7 +40,7 @@ interface AuditLog {
 }
 
 const ACTION_OPTIONS = [
-  { value: '', label: '전체' },
+  { value: 'all', label: '전체' },
   { value: 'create', label: '생성' },
   { value: 'update', label: '수정' },
   { value: 'delete', label: '삭제' },
@@ -49,7 +49,7 @@ const ACTION_OPTIONS = [
 ];
 
 const ENTITY_OPTIONS = [
-  { value: '', label: '전체' },
+  { value: 'all', label: '전체' },
   { value: 'content', label: '콘텐츠' },
   { value: 'book', label: '도서' },
   { value: 'user', label: '사용자' },
@@ -88,8 +88,8 @@ export default function AuditSection() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
-  const [actionFilter, setActionFilter] = useState('');
-  const [entityFilter, setEntityFilter] = useState('');
+  const [actionFilter, setActionFilter] = useState('all');
+  const [entityFilter, setEntityFilter] = useState('all');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const pageSize = 20;
@@ -100,8 +100,8 @@ export default function AuditSection() {
       const params = new URLSearchParams();
       params.set('page', String(page));
       params.set('pageSize', String(pageSize));
-      if (actionFilter) params.set('action', actionFilter);
-      if (entityFilter) params.set('entity', entityFilter);
+      if (actionFilter && actionFilter !== 'all') params.set('action', actionFilter);
+      if (entityFilter && entityFilter !== 'all') params.set('entity', entityFilter);
       if (fromDate) params.set('from', fromDate);
       if (toDate) params.set('to', toDate);
 

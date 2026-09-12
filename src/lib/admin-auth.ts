@@ -17,12 +17,17 @@ import { ROLE_HIERARCHY, ROLE_PERMISSIONS } from '@/lib/permissions';
 // ============================================================================
 
 /** JWT 시크릿 키 — 반드시 환경변수로 설정해야 함 */
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
+const JWT_SECRET = process.env.JWT_SECRET || '';
+if (!JWT_SECRET && process.env.NODE_ENV === 'production') {
   throw new Error(
     '[SECURITY] JWT_SECRET 환경변수가 설정되지 않았습니다. .env에 JWT_SECRET를 추가하세요.'
   );
 }
+if (!JWT_SECRET) {
+  console.warn('[SECURITY] JWT_SECRET이 설정되지 않았습니다. 개발용 기본값을 사용합니다.');
+}
+/** 개발 환경 폴백 시크릿 (프로덕션에서는 반드시 환경변수 설정) */
+const EFFECTIVE_JWT_SECRET = JWT_SECRET || 'dev-only-insecure-jwt-secret-do-not-use-in-prod';
 
 /** JWT 페이로드 타입 */
 export interface TokenPayload {
@@ -71,7 +76,7 @@ export async function generateToken(payload: Omit<TokenPayload, 'iat' | 'exp'>):
   // Bun의 crypto를 사용한 HMAC-SHA256 서명
   const key = await crypto.subtle.importKey(
     'raw',
-    new TextEncoder().encode(JWT_SECRET),
+    new TextEncoder().encode(EFFECTIVE_JWT_SECRET),
     { name: 'HMAC', hash: 'SHA-256' },
     false,
     ['sign']
@@ -102,7 +107,7 @@ export async function verifyToken(token: string): Promise<TokenPayload | null> {
     // 서명 검증
     const key = await crypto.subtle.importKey(
       'raw',
-      new TextEncoder().encode(JWT_SECRET),
+      new TextEncoder().encode(EFFECTIVE_JWT_SECRET),
       { name: 'HMAC', hash: 'SHA-256' },
       false,
       ['sign']

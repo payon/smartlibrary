@@ -46,6 +46,15 @@ export interface BookItem {
   coverUrl: string | null;
 }
 
+/** 카드 발급 신청 인터페이스 */
+export interface CardApplication {
+  applicantName: string;
+  birthDate: string;
+  phone: string;
+  address: string;
+  cardType: 'mobile' | 'physical';
+}
+
 /** 대출 기록 인터페이스 */
 export interface LoanItem {
   id: string;
@@ -75,7 +84,7 @@ interface KioskState {
   // ------------------------------------------------------------------------
   // 키오스크 모드
   // ------------------------------------------------------------------------
-  /** 현재 키오스크 모드 (대출/반납) */
+  /** 현재 키오스크 모드 (대출/반납/카드) */
   kioskMode: KioskMode;
   /** 키오스크 모드 설정 */
   setKioskMode: (mode: KioskMode) => void;
@@ -87,6 +96,14 @@ interface KioskState {
   authenticatedUser: SimUser | null;
   /** 인증된 사용자 설정 */
   setAuthenticatedUser: (user: SimUser | null) => void;
+
+  // ------------------------------------------------------------------------
+  // 카드 발급 신청
+  // ------------------------------------------------------------------------
+  /** 카드 발급 신청 데이터 */
+  cardApplication: CardApplication | null;
+  /** 카드 발급 신청 설정 */
+  setCardApplication: (app: CardApplication | null) => void;
 
   // ------------------------------------------------------------------------
   // 대출 선택 도서
@@ -151,6 +168,10 @@ const screenHistory: KioskViewName[] = [];
 /** 이전 화면 매핑 */
 const PREV_SCREEN_MAP: Partial<Record<KioskViewName, KioskViewName>> = {
   'main-menu': 'idle',
+  'card-apply': 'main-menu',
+  'card-form': 'card-apply',
+  'card-pending': 'card-form',
+  'card-complete': 'idle',
   'auth-scan': 'main-menu',
   'auth-pin': 'auth-scan',
   'loan-select': 'auth-pin',
@@ -202,6 +223,12 @@ export const useAppStore = create<KioskState>((set, get) => ({
   // ------------------------------------------------------------------------
   authenticatedUser: null,
   setAuthenticatedUser: (user) => set({ authenticatedUser: user }),
+
+  // ------------------------------------------------------------------------
+  // 카드 발급 신청 초기값 및 액션
+  // ------------------------------------------------------------------------
+  cardApplication: null,
+  setCardApplication: (app) => set({ cardApplication: app }),
 
   // ------------------------------------------------------------------------
   // 대출 선택 도서 초기값 및 액션

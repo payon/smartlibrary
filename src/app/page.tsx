@@ -27,6 +27,10 @@ import KioskReturnInsert from '@/components/kiosk/KioskReturnInsert';
 import KioskReturnScanning from '@/components/kiosk/KioskReturnScanning';
 import KioskReturnConfirm from '@/components/kiosk/KioskReturnConfirm';
 import KioskReturnComplete from '@/components/kiosk/KioskReturnComplete';
+import KioskCardApply from '@/components/kiosk/KioskCardApply';
+import KioskCardForm from '@/components/kiosk/KioskCardForm';
+import KioskCardPending from '@/components/kiosk/KioskCardPending';
+import KioskCardComplete from '@/components/kiosk/KioskCardComplete';
 import AdminLogin from '@/components/admin/AdminLogin';
 import AdminDashboard from '@/components/admin/AdminDashboard';
 
@@ -34,6 +38,10 @@ function ScreenRouter({ screen }: { screen: KioskViewName }) {
   switch (screen) {
     case 'idle': return <KioskIdleScreen />;
     case 'main-menu': return <KioskMainMenu />;
+    case 'card-apply': return <KioskCardApply />;
+    case 'card-form': return <KioskCardForm />;
+    case 'card-pending': return <KioskCardPending />;
+    case 'card-complete': return <KioskCardComplete />;
     case 'auth-scan': return <KioskAuthScan />;
     case 'auth-pin': return <KioskAuthPin />;
     case 'loan-select': return <KioskLoanSelect />;

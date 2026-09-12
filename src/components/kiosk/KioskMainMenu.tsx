@@ -15,7 +15,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
-import { BookOpen, ArrowDownToLine, Clock, Library } from 'lucide-react';
+import { BookOpen, ArrowDownToLine, Clock, Library, CreditCard } from 'lucide-react';
 import { CmsText } from '@/components/kiosk/CmsText';
 
 export default function KioskMainMenu() {
@@ -34,6 +34,12 @@ export default function KioskMainMenu() {
     const interval = setInterval(update, 1000);
     return () => clearInterval(interval);
   }, []);
+
+  /** 도서카드 발급 선택 */
+  const handleCardApply = () => {
+    setKioskMode('card');
+    setScreen('card-apply');
+  };
 
   /** 도서 대출 선택 */
   const handleLoan = () => {
@@ -70,11 +76,32 @@ export default function KioskMainMenu() {
 
       {/* 메인 버튼 영역 */}
       <main className="flex-1 flex flex-col items-center justify-center px-8 gap-6">
+        {/* 도서카드 발급 버튼 */}
+        <motion.button
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.05 }}
+          whileTap={{ scale: 0.97 }}
+          onClick={handleCardApply}
+          className="w-full max-w-md rounded-2xl flex items-center justify-center gap-5 cursor-pointer transition-shadow duration-200 hover:shadow-xl active:shadow-md"
+          style={{
+            minHeight: '140px',
+            background: 'linear-gradient(135deg, #4a3620 0%, #3a2a15 100%)',
+            boxShadow: '0 4px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255,255,255,0.06)',
+            border: '1px solid rgba(251, 191, 36, 0.15)',
+          }}
+        >
+          <CreditCard className="w-12 h-12 text-amber-400" strokeWidth={1.5} />
+          <span className="text-2xl font-bold text-white tracking-wider">
+            <CmsText contentKey="mainmenu.card_button_text" fallback="도서카드 발급" />
+          </span>
+        </motion.button>
+
         {/* 도서 대출 버튼 */}
         <motion.button
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.1 }}
+          transition={{ duration: 0.4, delay: 0.15 }}
           whileTap={{ scale: 0.97 }}
           onClick={handleLoan}
           className="w-full max-w-md rounded-2xl flex items-center justify-center gap-5 cursor-pointer transition-shadow duration-200 hover:shadow-xl active:shadow-md"
@@ -95,7 +122,7 @@ export default function KioskMainMenu() {
         <motion.button
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.25 }}
+          transition={{ duration: 0.4, delay: 0.3 }}
           whileTap={{ scale: 0.97 }}
           onClick={handleReturn}
           className="w-full max-w-md rounded-2xl flex items-center justify-center gap-5 cursor-pointer transition-shadow duration-200 hover:shadow-xl active:shadow-md"

@@ -183,3 +183,25 @@ model SystemHealth {
   unit      String   // % | MB | GB | seconds | count
   timestamp DateTime @default(now())
 }
+
+// ============================================================================
+// 도서 카드 발급 모델
+// ============================================================================
+
+model LibraryCard {
+  id            String   @id @default(cuid())
+  applicantName String
+  birthDate     String
+  phone         String
+  address       String?
+  cardType      String   @default("mobile") // mobile | physical
+  cardNumber    String?  @unique
+  status        String   @default("pending") // pending | approved | rejected | issued
+  appliedAt     DateTime @default(now())
+  approvedAt    DateTime?
+  approvedBy    String?  // admin user id
+  issuedAt      DateTime?
+  userId        String?  // linked SimUser after approval
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}

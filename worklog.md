@@ -24,3 +24,24 @@ Stage Summary:
 - 인증: JWT + bcrypt + RBAC (3역할 22권한)
 - 콘텐츠 동기화: 30초 폴링 + 버전 비교
 - 검증 결과: 로그인, 콘텐츠, 관리자 목록, 설정, 분석, 감사 로그 API 모두 200 응답
+---
+Task ID: 1
+Agent: main
+Task: Create comprehensive UI 설계서 (UI Design Specification Document) for entire kiosk platform
+
+Work Log:
+- Explored entire codebase: 17 kiosk components, 9 admin components, 2 Zustand stores, 14 Prisma models, 26 API routes
+- Read all kiosk screen components in detail (KioskIdleScreen, KioskMainMenu, KioskCardApply, KioskCardForm, KioskCardPending, KioskCardComplete, KioskAuthScan, KioskAuthPin, KioskLoanSelect, KioskLoanConfirm, KioskLoanComplete, KioskReturnInsert, KioskReturnScanning, KioskReturnConfirm, KioskReturnComplete)
+- Read admin components (AdminLogin, AdminDashboard with 7 sections)
+- Read both Zustand stores (useAppStore, useAdminStore) for state/actions
+- Analyzed PREV_SCREEN_MAP for navigation flow
+- Created comprehensive UI 설계서 at doc/ui-specification.md
+
+Stage Summary:
+- Created /home/z/my-project/doc/ui-specification.md (comprehensive UI design specification document)
+- Document covers: 15 kiosk screens + 8 admin screens = 23 total screens
+- Each screen includes: ID, layout ASCII diagram, UI element table, action specification, transitions
+- Includes: 9 appendices (general, state transition, kiosk screens, admin screens, common patterns, animations, accessibility, error handling, timeouts)
+- Total 38 kiosk actions + 18 admin actions documented
+- All 50+ CMS content keys listed
+- All 26+ API endpoints mapped to screens

@@ -55,6 +55,13 @@ export interface CardApplication {
   cardType: 'mobile' | 'physical';
 }
 
+/** 카드 발급 API 응답 인터페이스 */
+export interface CardApplicationResult {
+  cardNumber: string | null;
+  pin: string | null;
+  userId: string | null;
+}
+
 /** 대출 기록 인터페이스 */
 export interface LoanItem {
   id: string;
@@ -104,6 +111,10 @@ interface KioskState {
   cardApplication: CardApplication | null;
   /** 카드 발급 신청 설정 */
   setCardApplication: (app: CardApplication | null) => void;
+  /** 카드 발급 API 결과 (PIN, 카드번호 등) */
+  cardResult: CardApplicationResult | null;
+  /** 카드 발급 API 결과 설정 */
+  setCardResult: (result: CardApplicationResult | null) => void;
 
   // ------------------------------------------------------------------------
   // 대출 선택 도서
@@ -229,6 +240,8 @@ export const useAppStore = create<KioskState>((set, get) => ({
   // ------------------------------------------------------------------------
   cardApplication: null,
   setCardApplication: (app) => set({ cardApplication: app }),
+  cardResult: null,
+  setCardResult: (result) => set({ cardResult: result }),
 
   // ------------------------------------------------------------------------
   // 대출 선택 도서 초기값 및 액션

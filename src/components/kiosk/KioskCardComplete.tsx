@@ -3,7 +3,8 @@
  *
  * [기능]
  * - 발급 완료 안내 및 카드 정보 표시 (CMS 관리)
- * - 카드 번호: LIB-YYYYMMDD-XXXX 형식
+ * - 카드 번호: API 응답 또는 LIB-YYYYMMDD-XXXX 형식
+ * - 비밀번호(PIN): API 응답에서 받은 자동 할당 PIN 표시
  * - 모바일: QR 코드 플레이스홀더
  * - 실물: 3영업일 내 발급 안내
  * - 확인 버튼: 대기 화면 복귀
@@ -20,21 +21,22 @@
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
-import { CheckCircle2, CreditCard, BookOpen, QrCode, CalendarDays } from 'lucide-react';
+import { CheckCircle2, CreditCard, BookOpen, QrCode, CalendarDays, KeyRound } from 'lucide-react';
 import { CmsText } from '@/components/kiosk/CmsText';
 
 export default function KioskCardComplete() {
-  const { cardApplication, setScreen, setKioskMode } = useAppStore();
+  const { cardApplication, cardResult, setScreen, setKioskMode } = useAppStore();
 
   const isMobile = cardApplication?.cardType === 'mobile';
 
-  /** 카드 번호 생성: LIB-YYYYMMDD-XXXX */
+  /** 카드 번호: API 결과 우선, 없으면A 로컬 생성 */
   const cardNumber = useMemo(() => {
+    if (cardResult?.cardNumber) return cardResult.cardNumber;
     const now = new Date();
     const datePart = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
     const random = String(Math.floor(1000 + Math.random() * 9000));
     return `LIB-${datePart}-${random}`;
-  }, []);
+  }, [cardResult]);
 
   /** 발급일 포맷팅 */
   const issueDate = useMemo(() => {
@@ -79,7 +81,7 @@ export default function KioskCardComplete() {
           transition={{ duration: 0.5, delay: 0.15 }}
           className="text-2xl font-bold text-emerald-400 tracking-wider"
         >
-          <CmsText contentKey="cardcomplete.title" fallback="도서증 발급이 완료되었습니다!" />
+          <CmsText contentKey="cardcomplete.title" fallback="도서증 발급이 �*료되었습니다!" />
         </motion.h1>
 
         <motion.p
@@ -96,7 +98,7 @@ export default function KioskCardComplete() {
       </header>
 
       {/* 카드 정보 영역 */}
-      <main className="flex-1 px-8 pb-4">
+      <main className="flex-1 overflow-y-auto px-8 pb-4">
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
@@ -124,6 +126,22 @@ export default function KioskCardComplete() {
               <p className="text-white text-base">{cardApplication?.applicantName ?? '-'}</p>
             </div>
           </div>
+
+          {/* 비밀번호(PIN) - API에서 자동 할당된 PIN 표시 */}
+          {cardResult?.pin && (
+            <motion.div
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.3, delay: 0.5 }}
+              className="flex items-center gap-3"
+            >
+              <KeyRound className="w-5 h-5 text-amber-400 shrink-0" />
+              <div>
+                <p className="text-amber-300 text-xs font-medium">비밀번호 (PIN)</p>
+                <p className="text-amber-400 text-2xl font-mono font-bold tracking-[0.3em]">{cardResult.pin}</p>
+              </div>
+            </motion.div>
+          )}
 
           {/* 카드 종류 */}
           <div className="flex items-center gap-3">
@@ -166,6 +184,27 @@ export default function KioskCardComplete() {
             </motion.div>
           )}
         </motion.div>
+
+        {/* PIN 안내 메시지 */}
+        {cardResult?.pin && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.7 }}
+            className="mt-4 rounded-xl p-4 text-center"
+            style={{
+              background: 'rgba(251, 191, 36, 0.08)',
+              border: '1px solid rgba(251, 191, 36, 0.15)',
+            }}
+          >
+            <p className="text-amber-300 text-sm font-medium">
+              ⚠ 대출/반납 시 이 비밀번호가 필요합니다
+            </p>
+            <p className="text-amber-400/60 text-xs mt-1">
+              비밀번호를 메모해주세요
+            </p>
+          </motion.div>
+        )}
       </main>
 
       {/* 하단 버튼 */}

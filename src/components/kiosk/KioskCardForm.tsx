@@ -29,7 +29,7 @@ interface FormErrors {
 }
 
 export default function KioskCardForm() {
-  const { cardApplication, setCardApplication, setScreen } = useAppStore();
+  const { cardApplication, setCardApplication, setCardResult, setScreen } = useAppStore();
 
   const [name, setName] = useState(cardApplication?.applicantName ?? '');
   const [birthDate, setBirthDate] = useState(cardApplication?.birthDate ?? '');
@@ -96,12 +96,30 @@ export default function KioskCardForm() {
         body: JSON.stringify(applicationData),
       });
 
-      if (!res.ok) {
+      if (res.ok) {
+        const data = await res.json();
+        // API 응답에서 PIN 및 카드번호 저장
+        if (data.user) {
+          setCardResult({
+            cardNumber: data.card?.cardNumber || data.user.cardNumber || null,
+            pin: data.user.pin || null,
+            userId: data.user.id || null,
+          });
+        } else if (data.card) {
+          setCardResult({
+            cardNumber: data.card.cardNumber || null,
+            pin: null,
+            userId: null,
+          });
+        }
+      } else {
         const data = await res.json().catch(() => ({}));
         console.error('카드 신청 오류:', data);
+        setCardResult(null);
       }
     } catch (err) {
       console.error('카드 신청 네트워크 오류:', err);
+      setCardResult(null);
     }
 
     // 화면 전환: 모바일은 완료, 실물은 대기

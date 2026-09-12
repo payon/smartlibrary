@@ -8,7 +8,8 @@
  * - LibraryCard 레코드 생성
  * - 모바일 카드: 자동 승인 (status='issued'), 카드 번호 생성
  * - 실물 카드: 승인 대기 (status='pending')
- * - 동일 전화번호 SimUser가 없으면 생성
+ * - 동일 전화번호 SimUser가 없으면 생성 (PIN 자동 할당)
+ * - PIN: 전화번호 뒤 4자리, 4자리 미만이면 앞에 0 패딩
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -91,9 +92,23 @@ export async function POST(request: NextRequest) {
       where: { phone: sanitizedPhone },
     });
 
+    // PIN 자동 생성: 전화번호 뒤 4자리 (4자리 미만이면 앞에 0 패딩)
+    const autoPin = sanitizedPhone.slice(-4).padStart(4, '0');
+
     if (!existingUser) {
       const newUserCardNumber = generateCardNumber();
       const today = new Date().toISOString().split('T')[0];
+
+      // PIN 중복 확인 → 중복이면 랜덤 4자리 생성
+      let assignedPin = autoPin;
+      const pinConflict = await db.simUser.findUnique({ where: { pin: assignedPin } });
+      if (pinConflict) {
+        assignedPin = String(1000 + Math.floor(Math.random() * 9000));
+        const secondConflict = await db.simUser.findUnique({ where: { pin: assignedPin } });
+        if (secondConflict) {
+          assignedPin = String(1000 + Math.floor(Math.random() * 9000));
+        }
+      }
 
       const newUser = await db.simUser.create({
         data: {
@@ -105,6 +120,7 @@ export async function POST(request: NextRequest) {
           cardNumber: newUserCardNumber,
           cardIssued: today,
           isActive: true,
+          pin: assignedPin,
         },
       });
 
@@ -114,7 +130,18 @@ export async function POST(request: NextRequest) {
         data: { userId: newUser.id },
       });
     } else {
-      // 기존 사용자에게 연결
+      // 기존 사용자에게 연결 (PIN이 없으면 설정)
+      if (!existingUser.pin) {
+        let assignedPin = autoPin;
+        const pinConflict = await db.simUser.findUnique({ where: { pin: assignedPin } });
+        if (pinConflict && pinConflict.id !== existingUser.id) {
+          assignedPin = String(1000 + Math.floor(Math.random() * 9000));
+        }
+        await db.simUser.update({
+          where: { id: existingUser.id },
+          data: { pin: assignedPin },
+        });
+      }
       await db.libraryCard.update({
         where: { id: card.id },
         data: { userId: existingUser.id },
@@ -126,6 +153,11 @@ export async function POST(request: NextRequest) {
       where: { id: card.id },
     });
 
+    // 최종 사용자 정보 조회 (PIN 포함하여 반환)
+    const finalUser = await db.simUser.findFirst({
+      where: { phone: sanitizedPhone },
+    });
+
     return NextResponse.json(
       {
         success: true,
@@ -135,6 +167,12 @@ export async function POST(request: NextRequest) {
           status: updatedCard!.status,
           cardType: updatedCard!.cardType,
         },
+        user: finalUser ? {
+          id: finalUser.id,
+          name: finalUser.name,
+          pin: finalUser.pin,
+          cardNumber: finalUser.cardNumber,
+        } : null,
       },
       { status: 201 }
     );

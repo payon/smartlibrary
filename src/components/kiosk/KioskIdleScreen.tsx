@@ -125,14 +125,14 @@ export default function KioskIdleScreen() {
         }}
       />
 
-      {/* 관리자 모드 진입 버튼 (작고 반투명) */}
+      {/* 관리자 모드 진입 버튼 */}
       <button
         onClick={handleAdminClick}
         onTouchStart={handleAdminClick}
-        className="absolute bottom-4 right-4 w-6 h-6 flex items-center justify-center text-slate-600 hover:text-slate-400 transition-colors opacity-30 hover:opacity-60 z-20"
+        className="absolute bottom-4 right-4 w-10 h-10 flex items-center justify-center rounded-lg text-slate-400 hover:text-sky-300 hover:bg-white/5 transition-all opacity-50 hover:opacity-100 z-20"
         aria-label="관리자 모드"
       >
-        <Settings className="w-4 h-4" />
+        <Settings className="w-5 h-5" />
       </button>
     </div>
   );

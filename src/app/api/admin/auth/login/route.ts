@@ -9,12 +9,22 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { generateToken, verifyPassword, createSession } from '@/lib/admin-auth';
 import { logAudit } from '@/lib/audit-logger';
-import { getClientIp } from '@/lib/security';
+import { getClientIp, checkRateLimit } from '@/lib/security';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
+    // [보안] 레이트 리미팅 — 5분당 5회 로그인 시도 제한 (브루트포스 방지)
+    const clientIp = getClientIp(request);
+    const loginRateLimit = checkRateLimit(`login:${clientIp}`, 5 * 60 * 1000, 5);
+    if (!loginRateLimit.allowed) {
+      return NextResponse.json(
+        { error: '로그인 시도 횟수를 초과했습니다. 5분 후에 다시 시도해주세요.' },
+        { status: 429 }
+      );
+    }
+
     const body = await request.json();
     const { email, password } = body;
 

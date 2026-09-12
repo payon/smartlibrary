@@ -40,7 +40,6 @@ export default function KioskLoanConfirm() {
           userId: authenticatedUser.id,
           bookIds: selectedBooks.map((b) => b.id),
           method: 'kiosk',
-          pin: authenticatedUser.pin || '1234',
         }),
       });
 

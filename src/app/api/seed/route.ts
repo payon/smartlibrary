@@ -28,19 +28,19 @@ const RATE_LIMIT_PREFIX = 'seed:';
 const DEFAULT_ADMIN_USERS = [
   {
     email: 'superadmin@library.go.kr',
-    password: 'admin1234',
+    password: process.env.ADMIN_SEED_PASSWORD || 'admin1234',
     name: '최고관리자',
     role: 'super_admin',
   },
   {
     email: 'admin@library.go.kr',
-    password: 'admin1234',
+    password: process.env.ADMIN_SEED_PASSWORD || 'admin1234',
     name: '관리자',
     role: 'admin',
   },
   {
     email: 'operator@library.go.kr',
-    password: 'admin1234',
+    password: process.env.ADMIN_SEED_PASSWORD || 'admin1234',
     name: '운영자',
     role: 'operator',
   },
@@ -74,6 +74,14 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(request: NextRequest) {
   try {
+    // [보안] 프로덕션 환경에서는 시드 엔드포인트 비활성화
+    if (process.env.NODE_ENV === 'production') {
+      return NextResponse.json(
+        { error: '프로덕션 환경에서는 데이터 초기화를 사용할 수 없습니다.' },
+        { status: 403 }
+      );
+    }
+
     // [보안] 레이트 리미팅 체크 (초기화는 1분당 1회로 엄격 제한)
     const clientIp = getClientIp(request);
     const rateLimit = checkRateLimit(`${RATE_LIMIT_PREFIX}${clientIp}`, 60000, 1);

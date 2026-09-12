@@ -1,7 +1,7 @@
 /**
  * 사용자 API 라우트
  *
- * [GET] /api/users?pin=xxx - PIN으로 사용자 조회
+ * [GET] /api/users (X-PIN header or ?pin=xxx deprecated) - PIN으로 사용자 조회
  * [POST] /api/users - 회원가입
  *
  * [보안 조치]
@@ -55,8 +55,10 @@ function generateCardNumber(): string {
  */
 export async function GET(request: NextRequest) {
   try {
+    // [보안] PIN은 URL 쿼리 파라미터 대신 헤더로 전송 권장
+    // 쿼리 파라미터 PIN은 서버 로그에 기록될 수 있어 보안상 취약
     const { searchParams } = new URL(request.url);
-    const rawPin = searchParams.get('pin')?.trim();
+    const rawPin = (request.headers.get('x-pin') || searchParams.get('pin'))?.trim();
 
     if (!rawPin) {
       return NextResponse.json(

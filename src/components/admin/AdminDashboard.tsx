@@ -231,7 +231,12 @@ export default function AdminDashboard() {
     setActiveSection(section);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/admin/auth/logout', { method: 'POST' });
+    } catch {
+      // 서버 로그아웃 실패 시에도 클라이언트 상태는 초기화
+    }
     logout();
   };
 

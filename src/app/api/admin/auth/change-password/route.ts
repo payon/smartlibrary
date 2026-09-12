@@ -53,9 +53,21 @@ export async function POST(request: NextRequest) {
     }
 
     // 새 비밀번호 길이 검증
-    if (newPassword.length < 8) {
+    if (!newPassword || newPassword.length < 8) {
       return NextResponse.json(
-        { error: '새 비밀번호는 8자 이상이어야 합니다.' },
+        { error: '비밀번호는 8자 이상이어야 합니다.' },
+        { status: 400 }
+      );
+    }
+    // [보안] 비밀번호 복잡도 검증
+    const hasUpper = /[A-Z]/.test(newPassword);
+    const hasLower = /[a-z]/.test(newPassword);
+    const hasDigit = /\d/.test(newPassword);
+    const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(newPassword);
+    const complexityCount = [hasUpper, hasLower, hasDigit, hasSpecial].filter(Boolean).length;
+    if (complexityCount < 3) {
+      return NextResponse.json(
+        { error: '비밀번호는 대문자, 소문자, 숫자, 특수문자 중 3가지 이상을 포함해야 합니다.' },
         { status: 400 }
       );
     }

@@ -10,10 +10,19 @@
 
 import bcrypt from 'bcryptjs';
 import { db } from '@/lib/db';
+import { ROLE_HIERARCHY, ROLE_PERMISSIONS } from '@/lib/permissions';
 
 // ============================================================================
 // JWT 토큰 관리
 // ============================================================================
+
+/** JWT 시크릿 키 — 반드시 환경변수로 설정해야 함 */
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error(
+    '[SECURITY] JWT_SECRET 환경변수가 설정되지 않았습니다. .env에 JWT_SECRET를 추가하세요.'
+  );
+}
 
 /** JWT 페이로드 타입 */
 export interface TokenPayload {
@@ -23,9 +32,6 @@ export interface TokenPayload {
   iat?: number;
   exp?: number;
 }
-
-/** JWT 시크릿 키 (운영 환경에서는 환경변수 사용) */
-const JWT_SECRET = process.env.JWT_SECRET || 'smart-library-admin-secret-key-2024';
 
 /** 토큰 만료 시간 (24시간) */
 const TOKEN_EXPIRY_MS = 24 * 60 * 60 * 1000;
@@ -152,40 +158,6 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
 // ============================================================================
 // 권한 관리
 // ============================================================================
-
-/** 역할 계층 구조 (높을수록 더 많은 권한) */
-const ROLE_HIERARCHY: Record<string, number> = {
-  operator: 1,
-  admin: 2,
-  super_admin: 3,
-};
-
-/** 역할별 허용 액션 정의 */
-const ROLE_PERMISSIONS: Record<string, string[]> = {
-  super_admin: ['*'], // 모든 권한
-  admin: [
-    'content:read', 'content:write',
-    'books:read', 'books:write',
-    'users:read',
-    'loans:read',
-    'analytics:read',
-    'audit:read',
-    'settings:read', 'settings:write',
-    'notifications:read', 'notifications:write',
-    'kiosk-users:read',
-  ],
-  operator: [
-    'content:read',
-    'books:read',
-    'users:read',
-    'loans:read',
-    'analytics:read',
-    'audit:read',
-    'settings:read',
-    'notifications:read',
-    'kiosk-users:read',
-  ],
-};
 
 /**
  * 권한 확인

@@ -24,7 +24,7 @@ import { CmsText } from '@/components/kiosk/CmsText';
  */
 async function fetchDemoUser(): Promise<SimUser | null> {
   try {
-    const res = await fetch('/api/users?pin=1234');
+    const res = await fetch('/api/users', { headers: { 'X-PIN': '1234' } });
     if (res.ok) {
       const users: SimUser[] = await res.json();
       if (users.length > 0) return users[0];
@@ -46,7 +46,7 @@ export default function KioskAuthPin() {
     setIsProcessing(true);
 
     try {
-      const res = await fetch('/api/users?pin=' + inputPin);
+      const res = await fetch('/api/users', { headers: { 'X-PIN': inputPin } });
       if (res.ok) {
         const users: SimUser[] = await res.json();
         if (users.length > 0) {

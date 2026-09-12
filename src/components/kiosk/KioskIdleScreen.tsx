@@ -24,8 +24,9 @@ export default function KioskIdleScreen() {
   const { setScreen, setAdminMode } = useAppStore();
   const cmsContent = useAppStore((s) => s.cmsContent);
 
-  /** CMS 배경색 또는 기본값 */
-  const bgColor = cmsContent['idle.background_color'] || '#0b1120';
+  /** CMS 배경색 또는 기본값 (hex 색상만 허용하여 CSS 인젝션 방지) */
+  const rawBgColor = cmsContent['idle.background_color'] || '#0b1120';
+  const bgColor = /^#[0-9a-fA-F]{3,8}$/.test(rawBgColor) ? rawBgColor : '#0b1120';
 
   /** 화면 터치 시 메인 메뉴로 이동 */
   const handleTouch = useCallback(() => {

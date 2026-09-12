@@ -14,6 +14,9 @@ import { verifyToken, hasPermission, hashPassword } from '@/lib/admin-auth';
 import { logAudit } from '@/lib/audit-logger';
 import { getClientIp } from '@/lib/security';
 
+/** 유효한 관리자 역할 목록 */
+const VALID_ADMIN_ROLES = ['super_admin', 'admin', 'operator'] as const;
+
 export const dynamic = 'force-dynamic';
 
 /**
@@ -89,6 +92,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // [보안] 역할 검증
+    if (!VALID_ADMIN_ROLES.includes(role as any)) {
+      return NextResponse.json(
+        { error: '유효하지 않은 역할입니다. (super_admin, admin, operator)' },
+        { status: 400 }
+      );
+    }
+
     // 이메일 중복 확인
     const existing = await db.adminUser.findUnique({
       where: { email },
@@ -112,6 +123,16 @@ export async function POST(request: NextRequest) {
         role,
         isActive: true,
       },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        isActive: true,
+        lastLoginAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     });
 
     await logAudit({
@@ -123,11 +144,8 @@ export async function POST(request: NextRequest) {
       ipAddress: getClientIp(request),
     });
 
-    // passwordHash 제외하고 반환
-    const { passwordHash: _, ...userWithoutHash } = user;
-
     return NextResponse.json({
-      user: userWithoutHash,
+      user,
       message: '관리자 계정이 생성되었습니다',
     });
   } catch (error) {

@@ -132,11 +132,13 @@ export default function AdminLogin() {
             </Button>
           </form>
 
-          <div className="mt-6 p-3 rounded-lg bg-muted text-xs text-muted-foreground">
-            <p className="font-medium mb-1">테스트 계정 안내</p>
-            <p>이메일: superadmin@library.go.kr</p>
-            <p>비밀번호: admin1234</p>
-          </div>
+          {process.env.NODE_ENV !== 'production' && (
+            <div className="mt-6 p-3 rounded-lg bg-muted text-xs text-muted-foreground">
+              <p className="font-medium mb-1">테스트 계정 안내</p>
+              <p>이메일: superadmin@library.go.kr</p>
+              <p>비밀번호: admin1234</p>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

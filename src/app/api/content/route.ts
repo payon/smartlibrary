@@ -8,6 +8,7 @@
 
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { getContentVersion } from '@/lib/content-cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,7 +23,7 @@ export async function GET() {
       content[item.key] = item.value;
     }
 
-    const version = Date.now();
+    const version = getContentVersion();
     const updatedAt = new Date().toISOString();
 
     return NextResponse.json(

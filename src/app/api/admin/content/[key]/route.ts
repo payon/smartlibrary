@@ -13,9 +13,14 @@ import { db } from '@/lib/db';
 import { verifyToken, hasPermission } from '@/lib/admin-auth';
 import { logAudit } from '@/lib/audit-logger';
 import { invalidateCache } from '@/lib/content-cache';
-import { getClientIp } from '@/lib/security';
+import { getClientIp, sanitizeString } from '@/lib/security';
 
 export const dynamic = 'force-dynamic';
+
+/** 콘텐츠 값 최대 길이 */
+const MAX_CONTENT_VALUE_LENGTH = 2000;
+/** 허용되는 콘텐츠 타입 */
+const VALID_CONTENT_TYPES = ['text', 'image', 'color', 'json', 'number'] as const;
 
 /**
  * 단일 콘텐츠 아이템 조회
@@ -92,7 +97,7 @@ export async function PUT(
 
     const { key } = await params;
     const body = await request.json();
-    const { value, changedBy } = body;
+    const { value, type, changedBy } = body;
 
     if (value === undefined) {
       return NextResponse.json(
@@ -100,6 +105,23 @@ export async function PUT(
         { status: 400 }
       );
     }
+
+    // [보안] 콘텐츠 값 길이 제한
+    if (value && value.length > MAX_CONTENT_VALUE_LENGTH) {
+      return NextResponse.json(
+        { error: `콘텐츠 값은 ${MAX_CONTENT_VALUE_LENGTH}자를 초과할 수 없습니다.` },
+        { status: 400 }
+      );
+    }
+    // [보안] 콘텐츠 타입 검증
+    if (type && !VALID_CONTENT_TYPES.includes(type as any)) {
+      return NextResponse.json(
+        { error: '유효하지 않은 콘텐츠 타입입니다.' },
+        { status: 400 }
+      );
+    }
+    // [보안] 콘텐츠 값 새니타이즈
+    const sanitizedValue = typeof value === 'string' ? sanitizeString(value) : value;
 
     const existingItem = await db.contentItem.findUnique({
       where: { key },
@@ -117,7 +139,7 @@ export async function PUT(
     // 콘텐츠 업데이트
     const item = await db.contentItem.update({
       where: { key },
-      data: { value },
+      data: { value: sanitizedValue },
     });
 
     // 버전 기록 생성
@@ -125,7 +147,7 @@ export async function PUT(
       data: {
         contentItemId: item.id,
         oldValue,
-        newValue: value,
+        newValue: sanitizedValue,
         changedBy: changedBy || payload.userId,
       },
     });
@@ -139,7 +161,7 @@ export async function PUT(
       action: 'update',
       entity: 'content',
       entityId: item.id,
-      details: { key, oldValue, newValue: value },
+      details: { key, oldValue, newValue: sanitizedValue },
       ipAddress: getClientIp(request),
     });
 

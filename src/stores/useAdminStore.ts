@@ -10,6 +10,7 @@
  */
 
 import { create } from 'zustand';
+import { ROLE_PERMISSIONS } from '@/lib/permissions';
 
 // ============================================================================
 // 타입 정의
@@ -32,40 +33,6 @@ export interface AdminNotification {
   isRead: boolean;
   createdAt: string;
 }
-
-// ============================================================================
-// 권한 매핑
-// ============================================================================
-
-const ROLE_PERMISSIONS: Record<string, string[]> = {
-  super_admin: [
-    'dashboard:read', 'content:read', 'content:write',
-    'books:read', 'books:write',
-    'users:read', 'users:write',
-    'kiosk-users:read',
-    'analytics:read',
-    'settings:read', 'settings:write',
-    'audit:read',
-    'admin:manage',
-  ],
-  admin: [
-    'dashboard:read', 'content:read', 'content:write',
-    'books:read', 'books:write',
-    'users:read',
-    'kiosk-users:read',
-    'analytics:read',
-    'settings:read',
-    'audit:read',
-  ],
-  operator: [
-    'dashboard:read', 'content:read',
-    'books:read',
-    'kiosk-users:read',
-    'analytics:read',
-    'settings:read',
-    'audit:read',
-  ],
-};
 
 // ============================================================================
 // 스토어 인터페이스

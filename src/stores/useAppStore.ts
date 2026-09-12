@@ -27,7 +27,6 @@ export interface SimUser {
   cardType: string;
   cardNumber: string;
   cardIssued: string;
-  pin: string;
   isActive: boolean;
   createdAt: string;
 }
@@ -120,12 +119,6 @@ interface KioskState {
   setSensorActive: (active: boolean) => void;
 
   // ------------------------------------------------------------------------
-  // 타임아웃
-  // ------------------------------------------------------------------------
-  /** 타임아웃 리셋 (화면 전환 시 호출) */
-  resetTimeout: () => void;
-
-  // ------------------------------------------------------------------------
   // 관리자 모드
   // ------------------------------------------------------------------------
   /** 관리자 모드 활성화 여부 */
@@ -144,12 +137,8 @@ interface KioskState {
   setCmsContent: (content: Record<string, string>, version: number) => void;
 
   // ------------------------------------------------------------------------
-  // 관리자 인증 상태
+  // 관리자 모드
   // ------------------------------------------------------------------------
-  /** 관리자 인증 여부 */
-  adminAuthenticated: boolean;
-  /** 관리자 인증 설정 */
-  setAdminAuthenticated: (auth: boolean) => void;
 }
 
 // ============================================================================
@@ -186,22 +175,19 @@ export const useAppStore = create<KioskState>((set, get) => ({
   // 화면 상태 초기값 및 액션
   // ------------------------------------------------------------------------
   screen: 'idle',
-  /** 화면 전환 (이력에 현재 화면을 저장) */
+  /** 화면 전환 (이력에 현재 화면을 저장) — 타임아웃은 각 화면에서 useEffect로 관리 */
   setScreen: (newScreen) => {
     const current = get().screen;
     screenHistory.push(current);
     // 이력이 너무 길어지면 앞부분 제거
     if (screenHistory.length > 20) screenHistory.shift();
     set({ screen: newScreen });
-    // 타임아웃 리셋
-    get().resetTimeout();
   },
   /** 이전 화면으로 이동 */
   prevScreen: () => {
     if (screenHistory.length > 0) {
       const prev = screenHistory.pop()!;
       set({ screen: prev });
-      get().resetTimeout();
     }
   },
 
@@ -251,13 +237,6 @@ export const useAppStore = create<KioskState>((set, get) => ({
   setSensorActive: (active) => set({ sensorActive: active }),
 
   // ------------------------------------------------------------------------
-  // 타임아웃 초기값 및 액션
-  // ------------------------------------------------------------------------
-  resetTimeout: () => {
-    // 자동 타임아웃은 각 화면에서 useEffect로 관리
-  },
-
-  // ------------------------------------------------------------------------
   // 관리자 모드 초기값 및 액션
   // ------------------------------------------------------------------------
   adminMode: false,
@@ -270,11 +249,6 @@ export const useAppStore = create<KioskState>((set, get) => ({
   cmsVersion: 0,
   setCmsContent: (content, version) => set({ cmsContent: content, cmsVersion: version }),
 
-  // ------------------------------------------------------------------------
-  // 관리자 인증 초기값 및 액션
-  // ------------------------------------------------------------------------
-  adminAuthenticated: false,
-  setAdminAuthenticated: (auth) => set({ adminAuthenticated: auth }),
 }));
 
 /**

@@ -31,6 +31,20 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // [보안] DB에서 세션 존재 확인 (로그아웃된 토큰 재사용 방지)
+    const session = await db.adminSession.findFirst({
+      where: {
+        token,
+        expiresAt: { gt: new Date() },
+      },
+    });
+    if (!session) {
+      return NextResponse.json(
+        { error: '만료되거나 로그아웃된 세션입니다.', authenticated: false },
+        { status: 401 }
+      );
+    }
+
     // 사용자 정보 조회 (활성 상태 확인)
     const user = await db.adminUser.findUnique({
       where: { id: payload.userId },

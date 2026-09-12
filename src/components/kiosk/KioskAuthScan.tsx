@@ -40,7 +40,7 @@ export default function KioskAuthScan() {
   const handleSkip = async () => {
     setStatus('skipped');
     try {
-      const res = await fetch('/api/users?pin=1234');
+      const res = await fetch('/api/users', { headers: { 'X-PIN': '1234' } });
       if (res.ok) {
         const users: SimUser[] = await res.json();
         if (users.length > 0) {

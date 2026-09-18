@@ -1,0 +1,80 @@
+# ============================================================================
+# 무인 도서 대출 반납기 키오스크 시뮬레이터 - Docker Compose
+# ============================================================================
+#
+# 사용 방법:
+#   개발 모드:    docker compose up
+#   백그라운드:   docker compose up -d
+#   재빌드:      docker compose up --build
+#   종료:        docker compose down
+#   완전 초기화:  docker compose down -v
+#
+# 접속:
+#   키오스크:    http://localhost:3000
+#   관리자:      http://localhost:3000 (우측 상단 설정 아이콘 클릭)
+#
+# 기본 관리자 계정:
+#   최고관리자:  superadmin@library.go.kr / admin1234
+#   관리자:      admin@library.go.kr / admin1234
+#   운영자:      operator@library.go.kr / admin1234
+#
+# 데모 키오스크 사용자:
+#   PIN: 1234 (또는 임의의 4자리 숫자 - 데모 모드)
+# ============================================================================
+
+services:
+  # ── 키오스크 앱 (Next.js) ──────────────────────────────────────────────
+  kiosk:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: library-kiosk
+    restart: unless-stopped
+    ports:
+      - "${KIOSK_PORT:-3000}:3000"
+    environment:
+      # 데이터베이스
+      - DATABASE_URL=file:/app/db/custom.db
+      # JWT 시크릿 (관리자 인증)
+      - JWT_SECRET=${JWT_SECRET:-kiosk-simulator-jwt-secret-2024}
+      # 관리자 시드 비밀번호
+      - ADMIN_SEED_PASSWORD=${ADMIN_SEED_PASSWORD:-admin1234}
+      # Node 환경
+      - NODE_ENV=production
+      # 시드 허용 (최초 실행 시 데이터 초기화, 이후 비활성화 가능)
+      - ALLOW_SEED=${ALLOW_SEED:-true}
+      # Next.js
+      - NEXT_TELEMETRY_DISABLED=1
+      # 호스트
+      - HOSTNAME=0.0.0.0
+      - PORT=3000
+    volumes:
+      # SQLite 데이터베이스 영속화
+      - kiosk-db:/app/db
+      # 업로드 파일 영속화 (옵션)
+      - kiosk-uploads:/app/public/uploads
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+    networks:
+      - kiosk-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# ── 볼륨 ──────────────────────────────────────────────────────────────────
+volumes:
+  kiosk-db:
+    driver: local
+  kiosk-uploads:
+    driver: local
+
+# ── 네트워크 ──────────────────────────────────────────────────────────────
+networks:
+  kiosk-network:
+    driver: bridge

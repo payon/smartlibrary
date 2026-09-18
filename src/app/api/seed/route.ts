@@ -74,10 +74,11 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(request: NextRequest) {
   try {
-    // [보안] 프로덕션 환경에서는 시드 엔드포인트 비활성화
-    if (process.env.NODE_ENV === 'production') {
+    // [보안] 프로덕션 환경에서는 ALLOW_SEED=true일 때만 시드 허용
+    // Docker 컨테이너 초기화 시 ALLOW_SEED=true로 설정하여 시드 가능
+    if (process.env.NODE_ENV === 'production' && process.env.ALLOW_SEED !== 'true') {
       return NextResponse.json(
-        { error: '프로덕션 환경에서는 데이터 초기화를 사용할 수 없습니다.' },
+        { error: '프로덕션 환경에서는 데이터 초기화를 사용할 수 없습니다. (ALLOW_SEED=true 필요)' },
         { status: 403 }
       );
     }

@@ -45,3 +45,30 @@ Stage Summary:
 - Total 38 kiosk actions + 18 admin actions documented
 - All 50+ CMS content keys listed
 - All 26+ API endpoints mapped to screens
+
+---
+Task ID: 2
+Agent: Main
+Task: Docker Compose 환경 구축 - 무인 도서 대출 반납기 키오스크 시뮬레이터
+
+Work Log:
+- 프로젝트 구조 분석: Next.js 16 + Prisma SQLite + Bun + standalone 출력
+- Dockerfile 생성: 3단계 멀티스테이지 빌드 (deps → builder → runner)
+  - Stage 1: Bun으로 의존성 설치 (--frozen-lockfile)
+  - Stage 2: Prisma generate + Next.js standalone 빌드
+  - Stage 3: Node.js 24-slim 런타임 + non-root 사용자 보안
+- docker-compose.yml 생성: 단일 서비스 (kiosk) + SQLite 볼륨 영속화
+- docker-entrypoint.sh 생성: Prisma db push + 자동 시드 (최초 실행만)
+- .dockerignore 생성: 불필요 파일 제외, bun.lock과 prisma 스키마 포함
+- .env.docker 생성: Docker 환경 변수 템플릿
+- Makefile 생성: 빌드/시작/중지/재시작/초기화 편의 명령
+- 시드 API 수정: NODE_ENV=production에서도 ALLOW_SEED=true로 시드 허용
+- lint 0 에러 확인
+
+Stage Summary:
+- Docker 파일: Dockerfile, docker-compose.yml, .dockerignore, docker-entrypoint.sh
+- 환경 설정: .env.docker, Makefile
+- 시드 API: ALLOW_SEED 환경 변수로 프로덕션 시드 제어
+- SQLite DB: Docker 볼륨(/app/db)으로 영속화, 컨테이너 재시작 시 데이터 유지
+- 보안: non-root 사용자(appuser:1001), 헬스 체크, 로그 로테이션
+- 사용법: docker compose up --build (또는 make up)

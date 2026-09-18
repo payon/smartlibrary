@@ -1,0 +1,61 @@
+# ============================================================================
+# 무인 도서 대출 반납기 키오스크 시뮬레이터 - Docker Ignore
+# ============================================================================
+
+# ── Dependencies (빌드 시 재설치) ────────────────────────────────────────
+node_modules
+
+# ── Next.js 빌드 결과물 (빌드 시 재생성) ───────────────────────────────
+.next
+out
+
+# ── 로컬 데이터베이스 (Docker 볼륨으로 관리) ─────────────────────────────
+db/
+
+# ── 환경 변수 파일 (docker-compose.yml에서 관리) ─────────────────────────
+.env
+.env*.local
+
+# ── 테스트 & 분석 파일 ──────────────────────────────────────────────────
+tests
+coverage
+upload/
+_archive/
+tool-results/
+agent-ctx/
+
+# ── 스크린샷 & 디버그 파일 (루트 레벨만) ──────────────────────────────────
+debug-screenshot.png
+screenshot-check.png
+pin-step.png
+idle-screen.png
+admin-dashboard-screenshot.png
+
+# ── 문서 (런타임에 불필요) ──────────────────────────────────────────────
+doc/
+download/
+README.md
+
+# ── Docker 파일 자체 (Dockerfile과 compose는 빌드 컨텍스트에 불필요)
+Dockerfile
+docker-compose.yml
+docker-compose.yaml
+.dockerignore
+# 주: docker-entrypoint.sh와 Makefile은 COPY에 필요하므로 제외하지 않음
+
+# ── Git ───────────────────────────────────────────────────────────────────
+.git
+.gitignore
+
+# ── IDE ───────────────────────────────────────────────────────────────────
+.vscode
+.idea
+
+# ── OS ────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── 기타 ──────────────────────────────────────────────────────────────────
+*.log
+*.pem
+# bun.lock is needed for --frozen-lockfile install

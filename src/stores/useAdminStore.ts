@@ -16,7 +16,7 @@ import { ROLE_PERMISSIONS } from '@/lib/permissions';
 // 타입 정의
 // ============================================================================
 
-export type AdminSection = 'overview' | 'content' | 'books' | 'users' | 'analytics' | 'settings' | 'audit';
+export type AdminSection = 'overview' | 'content' | 'books' | 'cards' | 'users' | 'analytics' | 'settings' | 'audit';
 
 export interface AdminUser {
   id: string;

@@ -72,3 +72,38 @@ Stage Summary:
 - SQLite DB: Docker 볼륨(/app/db)으로 영속화, 컨테이너 재시작 시 데이터 유지
 - 보안: non-root 사용자(appuser:1001), 헬스 체크, 로그 로테이션
 - 사용법: docker compose up --build (또는 make up)
+
+---
+Task ID: 3
+Agent: Main
+Task: 관리자 대시보드에 도서카드 발급 관리 프로세스 추가 및 프론트엔드 적용
+
+Work Log:
+- 기존 관리자 대시보드 구조 분석: 7개 섹션(overview/content/books/users/analytics/settings/audit)
+- 도서카드 모델 분석: LibraryCard (pending/approved/rejected/issued 상태)
+- 키오스크 카드 발급 화면 4개 분석: card-apply, card-form, card-pending, card-complete
+- 권한 시스템에 cards:read, cards:write 추가 (admin: 읽기+쓰기, operator: 읽기)
+- AdminSection 타입에 'cards' 추가
+- 관리자 카드 API 라우트 2개 생성:
+  - /api/admin/cards: GET(목록+통계), POST(직접 발급)
+  - /api/admin/cards/[id]: GET(상세), PUT(승인/거부/발급/취소), DELETE(삭제)
+- CardsSection.tsx 관리자 섹션 컴포넌트 생성:
+  - 통계 카드 (전체/대기/승인/발급완료/거부)
+  - 상태별 필터 + 검색 + 카드유형 필터
+  - 카드 목록 테이블 + 관리 액션 (승인/거부/발급/삭제)
+  - 상세 정보 다이얼로그
+  - 거부 사유 입력 다이얼로그
+  - 관리자 직접 발급 다이얼로그
+- AdminDashboard.tsx에 도서카드 발급 네비게이션 추가 (CreditCard 아이콘)
+- CardApplicationResult 인터페이스에 cardId 필드 추가
+- KioskCardForm에서 cardId 저장하도록 수정
+- KioskCardPending 개선: 시뮬레이션 5초 후 실제 승인 API 호출 (approve→issue)
+- ESLint 0 에러 확인
+
+Stage Summary:
+- 관리자 도서카드 발급 섹션: 8개 섹션으로 확장 (overview/content/books/cards/users/analytics/settings/audit)
+- API 라우트: /api/admin/cards (GET+POST), /api/admin/cards/[id] (GET+PUT+DELETE)
+- 권한: cards:read (admin+operator), cards:write (admin+super_admin)
+- CardsSection: 통계 대시보드 + 필터 + 테이블 + 3개 다이얼로그 (상세/거부/직접발급)
+- 프론트엔드: KioskCardPending 실제 승인 API 연동, cardId 추적
+- 도서 대여/반납 프로세스와 동일한 관리 패턴 적용 (목록/필터/액션/다이얼로그)

@@ -101,12 +101,14 @@ export default function KioskCardForm() {
         // API 응답에서 PIN 및 카드번호 저장
         if (data.user) {
           setCardResult({
+            cardId: data.card?.id || null,
             cardNumber: data.card?.cardNumber || data.user.cardNumber || null,
             pin: data.user.pin || null,
             userId: data.user.id || null,
           });
         } else if (data.card) {
           setCardResult({
+            cardId: data.card.id || null,
             cardNumber: data.card.cardNumber || null,
             pin: null,
             userId: null,

@@ -6,6 +6,7 @@
  * - 신청 내역 요약 표시
  * - 애니메이션 대기 인디케이터 (펄스 도트)
  * - 시뮬레이션: 5초 후 자동 승인 후 완료 화면 이동
+ *   - 승인 시 관리자 API 호출하여 카드 상태를 approved→issued로 변경
  * - 취소 버튼으로 메인 메뉴 복귀
  *
  * [디자인]
@@ -16,26 +17,61 @@
 
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
-import { Clock, User, CalendarDays, Phone, XCircle, CreditCard } from 'lucide-react';
+import { Clock, User, CalendarDays, Phone, XCircle, CreditCard, CheckCircle2 } from 'lucide-react';
 import { CmsText } from '@/components/kiosk/CmsText';
 
 export default function KioskCardPending() {
-  const { cardApplication, setScreen, setCardApplication } = useAppStore();
+  const { cardApplication, cardResult, setCardResult, setScreen, setCardApplication } = useAppStore();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [autoApproved, setAutoApproved] = useState(false);
 
   /** 5초 후 자동 승인 (시뮬레이션) */
   useEffect(() => {
-    timerRef.current = setTimeout(() => {
-      setScreen('card-complete');
+    timerRef.current = setTimeout(async () => {
+      // 시뮬레이션: 관리자 승인 API 호출
+      if (cardResult?.cardId) {
+        try {
+          // 1. 승인
+          await fetch(`/api/admin/cards/${cardResult.cardId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'approve' }),
+          });
+          // 2. 발급
+          const issueRes = await fetch(`/api/admin/cards/${cardResult.cardId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'issue' }),
+          });
+          if (issueRes.ok) {
+            const data = await issueRes.json();
+            // 카드 번호 업데이트
+            if (data.card?.cardNumber && cardResult) {
+              setCardResult({
+                ...cardResult,
+                cardNumber: data.card.cardNumber,
+              });
+            }
+          }
+        } catch (err) {
+          console.error('자동 승인 시뮬레이션 오류:', err);
+        }
+      }
+
+      setAutoApproved(true);
+      // 1초 후 완료 화면으로 이동
+      setTimeout(() => {
+        setScreen('card-complete');
+      }, 1000);
     }, 5000);
 
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [setScreen]);
+  }, [cardResult, setCardResult, setScreen]);
 
   /** 취소 - 메인 메뉴로 복귀 */
   const handleCancel = () => {
@@ -70,18 +106,26 @@ export default function KioskCardPending() {
     >
       {/* 상단 안내 영역 */}
       <header className="text-center pt-16 pb-6 px-6">
-        {/* 대기 아이콘 */}
+        {/* 대기 → 승인 애니메이션 */}
         <motion.div
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
           transition={{ type: 'spring', stiffness: 200, damping: 15 }}
           className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5"
           style={{
-            background: 'linear-gradient(135deg, #4a3620 0%, #3a2a15 100%)',
-            boxShadow: '0 0 24px rgba(251, 191, 36, 0.15)',
+            background: autoApproved
+              ? 'linear-gradient(135deg, #065f46 0%, #047857 100%)'
+              : 'linear-gradient(135deg, #4a3620 0%, #3a2a15 100%)',
+            boxShadow: autoApproved
+              ? '0 0 24px rgba(16, 185, 129, 0.25)'
+              : '0 0 24px rgba(251, 191, 36, 0.15)',
           }}
         >
-          <Clock className="w-8 h-8 text-amber-400" />
+          {autoApproved ? (
+            <CheckCircle2 className="w-8 h-8 text-emerald-400" />
+          ) : (
+            <Clock className="w-8 h-8 text-amber-400" />
+          )}
         </motion.div>
 
         <motion.h1
@@ -90,38 +134,48 @@ export default function KioskCardPending() {
           transition={{ duration: 0.5, delay: 0.15 }}
           className="text-2xl font-bold text-white tracking-wider"
         >
-          <CmsText contentKey="cardpending.title" fallback="발급 신청이 완료되었습니다" />
+          {autoApproved ? (
+            <CmsText contentKey="cardpending.approved_title" fallback="승인이 완료되었습니다!" />
+          ) : (
+            <CmsText contentKey="cardpending.title" fallback="발급 신청이 완료되었습니다" />
+          )}
         </motion.h1>
 
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.5, delay: 0.3 }}
-          className="text-amber-300/70 text-base mt-3 tracking-wider"
+          className={`text-base mt-3 tracking-wider ${autoApproved ? 'text-emerald-300/70' : 'text-amber-300/70'}`}
         >
-          <CmsText contentKey="cardpending.wait_message" fallback="담당자 승인을 기다려주세요" />
+          {autoApproved ? (
+            <CmsText contentKey="cardpending.approved_message" fallback="발급 처리 중..." />
+          ) : (
+            <CmsText contentKey="cardpending.wait_message" fallback="담당자 승인을 기다려주세요" />
+          )}
         </motion.p>
       </header>
 
       {/* 펄스 대기 인디케이터 */}
-      <div className="flex items-center justify-center gap-3 py-6">
-        {[0, 1, 2].map((i) => (
-          <motion.div
-            key={i}
-            className="w-3 h-3 rounded-full bg-amber-400"
-            animate={{
-              scale: [1, 1.4, 1],
-              opacity: [0.4, 1, 0.4],
-            }}
-            transition={{
-              duration: 1.2,
-              repeat: Infinity,
-              delay: i * 0.25,
-              ease: 'easeInOut',
-            }}
-          />
-        ))}
-      </div>
+      {!autoApproved && (
+        <div className="flex items-center justify-center gap-3 py-6">
+          {[0, 1, 2].map((i) => (
+            <motion.div
+              key={i}
+              className="w-3 h-3 rounded-full bg-amber-400"
+              animate={{
+                scale: [1, 1.4, 1],
+                opacity: [0.4, 1, 0.4],
+              }}
+              transition={{
+                duration: 1.2,
+                repeat: Infinity,
+                delay: i * 0.25,
+                ease: 'easeInOut',
+              }}
+            />
+          ))}
+        </div>
+      )}
 
       {/* 신청 내역 요약 */}
       <main className="flex-1 px-8 pb-4">
@@ -173,29 +227,47 @@ export default function KioskCardPending() {
             </>
           )}
         </motion.div>
+
+        {/* 시뮬레이션 안내 */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.4, delay: 0.7 }}
+          className="mt-4 rounded-xl p-3 text-center"
+          style={{
+            background: 'rgba(56, 189, 248, 0.06)',
+            border: '1px solid rgba(56, 189, 248, 0.1)',
+          }}
+        >
+          <p className="text-sky-300/70 text-xs">
+            💡 시뮬레이션: 5초 후 자동 승인 처리됩니다
+          </p>
+        </motion.div>
       </main>
 
       {/* 취소 버튼 */}
-      <footer className="pb-8 px-8 pt-4">
-        <motion.button
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.6 }}
-          whileTap={{ scale: 0.97 }}
-          onClick={handleCancel}
-          className="w-full max-w-md mx-auto rounded-2xl flex items-center justify-center gap-3 cursor-pointer transition-shadow duration-200"
-          style={{
-            minHeight: '56px',
-            background: 'rgba(30, 41, 59, 0.6)',
-            border: '1px solid rgba(148, 163, 184, 0.15)',
-          }}
-        >
-          <XCircle className="w-5 h-5 text-slate-400" strokeWidth={1.5} />
-          <span className="text-base font-semibold text-slate-400 tracking-wider">
-            <CmsText contentKey="cardpending.cancel_button_text" fallback="취소" />
-          </span>
-        </motion.button>
-      </footer>
+      {!autoApproved && (
+        <footer className="pb-8 px-8 pt-4">
+          <motion.button
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.6 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={handleCancel}
+            className="w-full max-w-md mx-auto rounded-2xl flex items-center justify-center gap-3 cursor-pointer transition-shadow duration-200"
+            style={{
+              minHeight: '56px',
+              background: 'rgba(30, 41, 59, 0.6)',
+              border: '1px solid rgba(148, 163, 184, 0.15)',
+            }}
+          >
+            <XCircle className="w-5 h-5 text-slate-400" strokeWidth={1.5} />
+            <span className="text-base font-semibold text-slate-400 tracking-wider">
+              <CmsText contentKey="cardpending.cancel_button_text" fallback="취소" />
+            </span>
+          </motion.button>
+        </footer>
+      )}
     </div>
   );
 }

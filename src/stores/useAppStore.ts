@@ -57,6 +57,7 @@ export interface CardApplication {
 
 /** 카드 발급 API 응답 인터페이스 */
 export interface CardApplicationResult {
+  cardId: string | null;
   cardNumber: string | null;
   pin: string | null;
   userId: string | null;

@@ -21,6 +21,7 @@ import {
   LayoutDashboard,
   Palette,
   BookOpen,
+  CreditCard,
   Users,
   BarChart3,
   Settings,
@@ -41,6 +42,7 @@ import { useAppStore } from '@/stores/useAppStore';
 import OverviewSection from '@/components/admin/sections/OverviewSection';
 import ContentSection from '@/components/admin/sections/ContentSection';
 import BooksSection from '@/components/admin/sections/BooksSection';
+import CardsSection from '@/components/admin/sections/CardsSection';
 import UsersSection from '@/components/admin/sections/UsersSection';
 import AnalyticsSection from '@/components/admin/sections/AnalyticsSection';
 import SettingsSection from '@/components/admin/sections/SettingsSection';
@@ -79,6 +81,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'overview', label: '대시보드 개요', icon: LayoutDashboard },
   { id: 'content', label: '콘텐츠 관리', icon: Palette },
   { id: 'books', label: '도서 관리', icon: BookOpen },
+  { id: 'cards', label: '도서카드 발급', icon: CreditCard },
   { id: 'users', label: '이용자 관리', icon: Users },
   { id: 'analytics', label: '분석 대시보드', icon: BarChart3 },
   { id: 'settings', label: '시스템 설정', icon: Settings },
@@ -93,6 +96,7 @@ const SECTION_TITLES: Record<AdminSection, string> = {
   overview: '대시보드 개요',
   content: '콘텐츠 관리',
   books: '도서 관리',
+  cards: '도서카드 발급',
   users: '이용자 관리',
   analytics: '분석 대시보드',
   settings: '시스템 설정',
@@ -136,6 +140,8 @@ function SectionContent({ section }: { section: AdminSection }) {
       return <ContentSection />;
     case 'books':
       return <BooksSection />;
+    case 'cards':
+      return <CardsSection />;
     case 'users':
       return <UsersSection />;
     case 'analytics':

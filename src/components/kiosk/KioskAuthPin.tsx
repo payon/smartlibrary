@@ -4,10 +4,11 @@
  * [기능]
  * - 4자리 숫자 비밀번호 입력 (CMS 관리)
  * - 숫자 키패드 (1-9, 0, 삭제, 확인)
- * - 4자리 완성 즉시 백엔드 PIN 검증
+ * - 4자리 완성 + 확인 버튼 → PIN 검증
  * - PIN 일치 → 인증 성공 → 다음 화면
- * - PIN 불일치 → 에러 표시 + PIN 초기화 (즉시 피드백)
- * - 시뮬레이션 모드: PIN이 DB에 없어도 데모 사용자로 인증 허용
+ * - PIN 불일치 → 에러 표시 "PIN 번호가 일치하지 않습니다" + PIN 초기화
+ * - 시뮬레이션 모드: authenticatedUser가 없으면 아무 4자리 PIN 허용
+ * - 카드 모드: kioskMode === 'card' → card-apply
  */
 
 'use client';
@@ -21,13 +22,23 @@ import type { SimUser } from '@/stores/useAppStore';
 import { CmsText } from '@/components/kiosk/CmsText';
 
 export default function KioskAuthPin() {
-  const { setScreen, prevScreen, kioskMode, setAuthenticatedUser } = useAppStore();
+  const { setScreen, prevScreen, kioskMode, authenticatedUser, setAuthenticatedUser } = useAppStore();
   const [pin, setPin] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isError, setIsError] = useState(false);
   const shakeRef = useRef(false);
 
-  /** PIN 검증 후 다음 화면으로 이동 */
+  /** kioskMode에 따른 다음 화면 결정 */
+  const getNextScreen = useCallback(() => {
+    switch (kioskMode) {
+      case 'loan': return 'loan-select' as const;
+      case 'return': return 'return-insert' as const;
+      case 'card': return 'card-apply' as const;
+      default: return 'loan-select' as const;
+    }
+  }, [kioskMode]);
+
+  /** PIN 검증 성공 → 다음 화면 이동 */
   const proceedToNext = useCallback((user: SimUser, isDemo: boolean) => {
     setAuthenticatedUser(user);
     if (isDemo) {
@@ -38,15 +49,14 @@ export default function KioskAuthPin() {
       toast.success(`${user.name}님 환영합니다`);
     }
     setTimeout(() => {
-      setScreen(kioskMode === 'loan' ? 'loan-select' : 'return-insert');
+      setScreen(getNextScreen());
     }, 500);
-  }, [setAuthenticatedUser, setScreen, kioskMode]);
+  }, [setAuthenticatedUser, setScreen, getNextScreen]);
 
   /** PIN 에러 처리: 빨간 도트 + 흔들림 + 초기화 */
   const handlePinError = useCallback(() => {
     setIsError(true);
     shakeRef.current = true;
-    // 1초 후 에러 상태 해제 및 PIN 초기화
     setTimeout(() => {
       setIsError(false);
       setPin('');
@@ -55,62 +65,97 @@ export default function KioskAuthPin() {
     }, 1000);
   }, []);
 
-  /** 비밀번호 확인 (4자리 완성 시 즉시 실행) */
-  const handleConfirm = useCallback(async (inputPin: string) => {
-    if (isProcessing) return;
+  /** 비밀번호 확인 버튼 클릭 */
+  const handleConfirm = useCallback(async () => {
+    if (pin.length !== 4 || isProcessing) return;
     setIsProcessing(true);
     setIsError(false);
 
     try {
-      // 1차: 입력한 PIN으로 DB 조회
-      const res = await fetch('/api/users', { headers: { 'X-PIN': inputPin } });
-      if (res.ok) {
-        const users: SimUser[] = await res.json();
-        if (users.length > 0) {
-          // PIN 일치 → 인증 성공
-          proceedToNext(users[0], false);
+      // ── 1차: authenticatedUser가 있고 pin이 있으면 직접 비교 ──
+      if (authenticatedUser && authenticatedUser.pin) {
+        if (pin === authenticatedUser.pin) {
+          proceedToNext(authenticatedUser, false);
           return;
         }
+        // PIN 불일치
+        handlePinError();
+        toast.error('PIN 번호가 일치하지 않습니다');
+        return;
       }
 
-      // 2차: PIN이 DB에 없음 → 시뮬레이션 모드에서 데모 사용자로 인증
-      // (시뮬레이터이므로 아무 PIN이나 허용)
-      const demoRes = await fetch('/api/users', { headers: { 'X-PIN': '1234' } });
+      // ── 2차: authenticatedUser가 있지만 pin이 없으면 API로 조회 ──
+      if (authenticatedUser) {
+        const res = await fetch('/api/users', { headers: { 'X-PIN': pin } });
+        if (res.ok) {
+          const users: SimUser[] = await res.json();
+          // 응답에서 PIN이 제거되므로 id로 매칭
+          if (users.length > 0 && users[0].id === authenticatedUser.id) {
+            proceedToNext({ ...users[0], pin: pin }, false);
+            return;
+          }
+        }
+        // PIN 불일치
+        handlePinError();
+        toast.error('PIN 번호가 일치하지 않습니다');
+        return;
+      }
+
+      // ── 3차: authenticatedUser가 없음 → 데모/시뮬레이션 모드 ──
+      // 임의의 4자리 PIN을 허용 (시뮬레이터)
+      // DB에서 첫 번째 활성 사용자를 데모 사용자로 사용
+      const demoRes = await fetch('/api/users', { headers: { 'X-PIN': pin } });
       if (demoRes.ok) {
-        const demoUsers: SimUser[] = await demoRes.json();
-        if (demoUsers.length > 0) {
-          // 데모 모드로 인증 (PIN은 틀렸지만 시뮬레이션이므로 통과)
-          proceedToNext(demoUsers[0], true);
+        const users: SimUser[] = await demoRes.json();
+        if (users.length > 0) {
+          proceedToNext({ ...users[0], pin }, false);
           return;
         }
       }
 
-      // 3차: 데모 사용자도 없으면 → 첫 번째 활성 사용자 조회
-      const allUsersRes = await fetch('/api/users?pin=0000');
-      // 위 API는 PIN 0000 검색이므로 실패할 수 있음
-      // 대안: DB에 사용자가 전혀 없으면 에러
-      handlePinError();
-      toast.error('등록된 사용자가 없습니다. 도서증을 먼저 발급받아주세요.');
+      // PIN으로 사용자를 찾을 수 없어도 데모 모드에서는 통과
+      // 가상의 데모 사용자 생성
+      const demoUser: SimUser = {
+        id: 'demo-user',
+        name: '데모 이용자',
+        birthDate: '20000101',
+        phone: '01000000000',
+        address: '',
+        cardType: 'mobile',
+        cardNumber: 'LIB-DEMO-0000',
+        cardIssued: new Date().toISOString().split('T')[0],
+        isActive: true,
+        createdAt: new Date().toISOString(),
+        pin,
+      };
+      proceedToNext(demoUser, true);
     } catch {
-      // 네트워크 오류 → 시뮬레이션 모드에서는 통과시킴
-      handlePinError();
-      toast.error('네트워크 오류. 다시 시도해주세요.');
+      // 네트워크 오류 → 데모 모드에서는 통과시킴
+      const demoUser: SimUser = {
+        id: 'demo-user',
+        name: '데모 이용자',
+        birthDate: '20000101',
+        phone: '01000000000',
+        address: '',
+        cardType: 'mobile',
+        cardNumber: 'LIB-DEMO-0000',
+        cardIssued: new Date().toISOString().split('T')[0],
+        isActive: true,
+        createdAt: new Date().toISOString(),
+        pin,
+      };
+      proceedToNext(demoUser, true);
     }
-  }, [isProcessing, proceedToNext, handlePinError]);
+  }, [pin, isProcessing, authenticatedUser, proceedToNext, handlePinError]);
 
   /** 숫자 키 입력 처리 */
   const handleKeyPress = useCallback((digit: string) => {
     if (isProcessing || isError) return;
     setPin((prev) => {
       if (prev.length >= 4) return prev;
-      const newPin = prev + digit;
-      // 4자리 입력 완료 시 자동 확인
-      if (newPin.length === 4) {
-        setTimeout(() => handleConfirm(newPin), 0);
-      }
-      return newPin;
+      return prev + digit;
     });
-  }, [handleConfirm, isProcessing, isError]);
+  }, [isProcessing, isError]);
 
   /** 삭제 버튼 */
   const handleDelete = useCallback(() => {
@@ -180,7 +225,7 @@ export default function KioskAuthPin() {
           className="text-center mb-4"
         >
           <XCircle className="w-8 h-8 text-red-500 mx-auto" />
-          <p className="text-red-400 text-sm mt-2 font-medium">비밀번호가 틀렸습니다</p>
+          <p className="text-red-400 text-sm mt-2 font-medium">PIN 번호가 일치하지 않습니다</p>
         </motion.div>
       )}
 
@@ -223,7 +268,7 @@ export default function KioskAuthPin() {
           <motion.button
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            onClick={() => handleConfirm(pin)}
+            onClick={handleConfirm}
             className="kiosk-btn bg-sky-600 hover:bg-sky-500 text-white"
           >
             <CheckCircle2 className="w-5 h-5" />

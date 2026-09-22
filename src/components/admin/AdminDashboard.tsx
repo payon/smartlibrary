@@ -4,18 +4,24 @@
  * [기능]
  * - 사이드바 네비게이션 (데스크톱: 고정, 모바일: Sheet 드로어)
  * - 상단 헤더 바 (햄버거 메뉴, 제목, 알림, 사용자 정보, 로그아웃)
- * - 메인 콘텐츠 영역 (7개 섹션 전환, framer-motion 페이지 전환)
+ * - 메인 콘텐츠 영역 (8개 섹션 전환, framer-motion 페이지 전환)
  * - 한국어 라벨 전면 적용
+ *
+ * [디자인]
+ * - 키오스크 스타일 다크 네이비 사이드바
+ * - 스카이블루 액센트 컬러
+ * - 글래스모피즘 헤더
+ * - 키오스크 브랜딩 요소
  *
  * [참고]
  * - useAdminStore: 인증, 섹션 전환, 사이드바, 알림, 권한
  * - useAppStore: 관리자 모드 토글
- * - 7개 섹션 컴포넌트는 sections/ 폴더에 위치
+ * - 8개 섹션 컴포넌트는 sections/ 폴더에 위치
  */
 
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   LayoutDashboard,
@@ -29,9 +35,11 @@ import {
   Menu,
   Bell,
   LogOut,
-  Monitor,
   CheckCheck,
-  X,
+  Library,
+  ArrowLeft,
+  Monitor,
+  PictureInPicture2,
 } from 'lucide-react';
 
 // --- Stores ---
@@ -48,15 +56,16 @@ import AnalyticsSection from '@/components/admin/sections/AnalyticsSection';
 import SettingsSection from '@/components/admin/sections/SettingsSection';
 import AuditSection from '@/components/admin/sections/AuditSection';
 
+// --- Kiosk Preview ---
+import KioskPreview from '@/components/admin/KioskPreview';
+
 // --- UI Components ---
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Sheet,
   SheetContent,
-  SheetTrigger,
   SheetTitle,
 } from '@/components/ui/sheet';
 import {
@@ -156,7 +165,39 @@ function SectionContent({ section }: { section: AdminSection }) {
 }
 
 // ============================================================================
-// 사이드바 네비게이션 리스트 (공통 컴포넌트)
+// 사이드바 브랜딩 헤더 컴포넌트
+// ============================================================================
+
+function SidebarBranding() {
+  return (
+    <div className="flex flex-col items-center gap-2 py-5 px-4">
+      {/* 라이브러리 아이콘 - 글로우 */}
+      <div className="relative">
+        <div
+          className="absolute inset-0 rounded-xl"
+          style={{
+            background: 'radial-gradient(circle, rgba(56,189,248,0.15) 0%, transparent 70%)',
+            transform: 'scale(2)',
+          }}
+        />
+        <div className="relative w-10 h-10 rounded-xl flex items-center justify-center border border-sky-400/20"
+          style={{ backgroundColor: 'rgba(14,165,233,0.1)' }}
+        >
+          <Library className="w-5 h-5 text-sky-400" />
+        </div>
+      </div>
+      <div className="text-center">
+        <h2 className="text-sm font-bold tracking-widest text-white">
+          SMART LIBRARY
+        </h2>
+        <p className="text-[10px] text-slate-500 mt-0.5 tracking-wider">관리자</p>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// 사이드바 네비게이션 리스트 (키오스크 스타일)
 // ============================================================================
 
 function SidebarNav({
@@ -176,22 +217,27 @@ function SidebarNav({
             key={item.id}
             onClick={() => onNavigate(item.id)}
             className={`
-              group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium
+              group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium
               transition-all duration-150 outline-none
-              focus-visible:ring-2 focus-visible:ring-ring
+              focus-visible:ring-2 focus-visible:ring-sky-400/50
               ${
                 isActive
-                  ? 'bg-primary/10 text-primary shadow-xs'
-                  : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                  ? 'text-sky-400'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]'
               }
             `}
+            style={isActive ? {
+              backgroundColor: 'rgba(56,189,248,0.08)',
+              borderLeft: '3px solid #38bdf8',
+              paddingLeft: '9px', // 12px - 3px border
+            } : undefined}
             aria-current={isActive ? 'page' : undefined}
           >
             <Icon
               className={`size-5 shrink-0 ${
                 isActive
-                  ? 'text-primary'
-                  : 'text-muted-foreground group-hover:text-accent-foreground'
+                  ? 'text-sky-400'
+                  : 'text-slate-500 group-hover:text-slate-300'
               }`}
             />
             <span>{item.label}</span>
@@ -199,6 +245,61 @@ function SidebarNav({
         );
       })}
     </nav>
+  );
+}
+
+// ============================================================================
+// 키오스크로 돌아가기 버튼 (키오스크 스타일)
+// ============================================================================
+
+function KioskBackButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium
+        text-slate-400 hover:text-teal-400 border border-white/[0.06] hover:border-teal-400/30
+        transition-all duration-150 hover:bg-teal-400/[0.06]"
+    >
+      <ArrowLeft className="size-4" />
+      <span>키오스크로 돌아가기</span>
+    </button>
+  );
+}
+
+// ============================================================================
+// 사이드바 공통 콘텐츠 (데스크톱/모바일 공통)
+// ============================================================================
+
+function SidebarContent({
+  activeSection,
+  onNavigate,
+  onBackToKiosk,
+}: {
+  activeSection: AdminSection;
+  onNavigate: (section: AdminSection) => void;
+  onBackToKiosk: () => void;
+}) {
+  return (
+    <>
+      {/* 브랜딩 */}
+      <SidebarBranding />
+
+      {/* 구분선 */}
+      <div className="mx-4 h-px bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
+
+      {/* 네비게이션 */}
+      <ScrollArea className="flex-1 py-4">
+        <SidebarNav
+          activeSection={activeSection}
+          onNavigate={onNavigate}
+        />
+      </ScrollArea>
+
+      {/* 사이드바 푸터 */}
+      <div className="p-4 border-t border-white/[0.06]">
+        <KioskBackButton onClick={onBackToKiosk} />
+      </div>
+    </>
   );
 }
 
@@ -223,6 +324,9 @@ export default function AdminDashboard() {
   } = useAdminStore();
 
   const { setAdminMode } = useAppStore();
+
+  // --- 키오스크 프리뷰 상태 ---
+  const [showKioskPreview, setShowKioskPreview] = useState(false);
 
   // --- 파생 상태 ---
   const sectionTitle = SECTION_TITLES[activeSection];
@@ -254,74 +358,47 @@ export default function AdminDashboard() {
   if (!isAuthenticated) return null;
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-screen overflow-hidden" style={{ backgroundColor: '#0b1120' }}>
       {/* ================================================================
-          데스크톡 사이드바 (lg 이상에서만 표시)
+          데스크톱 사이드바 (lg 이상에서만 표시)
           ================================================================ */}
-      <aside className="hidden lg:flex lg:w-[240px] lg:flex-col lg:border-r bg-card">
-        {/* 사이드바 헤더 */}
-        <div className="flex h-16 items-center gap-2 px-6 border-b">
-          <Monitor className="size-5 text-primary shrink-0" />
-          <span className="text-base font-bold truncate">관리자 대시보드</span>
-        </div>
-
-        {/* 네비게이션 */}
-        <ScrollArea className="flex-1 py-4">
-          <SidebarNav
-            activeSection={activeSection}
-            onNavigate={handleNavigate}
-          />
-        </ScrollArea>
-
-        {/* 사이드바 푸터 */}
-        <div className="p-4 border-t">
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full"
-            onClick={handleBackToKiosk}
-          >
-            <Monitor className="size-4" />
-            키오스크로 돌아가기
-          </Button>
-        </div>
+      <aside
+        className="hidden lg:flex lg:w-[240px] lg:flex-col lg:border-r border-white/[0.06]"
+        style={{
+          background: 'linear-gradient(180deg, #0f1729 0%, #0b1120 100%)',
+        }}
+      >
+        <SidebarContent
+          activeSection={activeSection}
+          onNavigate={handleNavigate}
+          onBackToKiosk={handleBackToKiosk}
+        />
       </aside>
 
       {/* ================================================================
           모바일 사이드바 (Sheet 드로어, lg 미만에서만 표시)
           ================================================================ */}
       <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-        <SheetContent side="left" className="w-[240px] p-0">
+        <SheetContent
+          side="left"
+          className="w-[240px] p-0 border-white/[0.06]"
+          style={{
+            background: 'linear-gradient(180deg, #0f1729 0%, #0b1120 100%)',
+          }}
+        >
           <SheetTitle className="sr-only">관리자 메뉴</SheetTitle>
-
-          {/* 드로어 헤더 */}
-          <div className="flex h-16 items-center gap-2 px-6 border-b">
-            <Monitor className="size-5 text-primary shrink-0" />
-            <span className="text-base font-bold truncate">관리자 대시보드</span>
-          </div>
-
-          {/* 네비게이션 */}
-          <ScrollArea className="flex-1 py-4">
-            <SidebarNav
+          <div className="flex flex-col h-full">
+            <SidebarContent
               activeSection={activeSection}
-              onNavigate={handleNavigate}
-            />
-          </ScrollArea>
-
-          {/* 드로어 푸터 */}
-          <div className="p-4 border-t">
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full"
-              onClick={() => {
+              onNavigate={(section) => {
+                handleNavigate(section);
+                setSidebarOpen(false);
+              }}
+              onBackToKiosk={() => {
                 handleBackToKiosk();
                 setSidebarOpen(false);
               }}
-            >
-              <Monitor className="size-4" />
-              키오스크로 돌아가기
-            </Button>
+            />
           </div>
         </SheetContent>
       </Sheet>
@@ -331,54 +408,77 @@ export default function AdminDashboard() {
           ================================================================ */}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* --- 상단 헤더 바 --- */}
-        <header className="flex h-16 items-center gap-4 border-b bg-card px-4 lg:px-6">
+        <header
+          className="flex h-16 items-center gap-4 border-b border-white/[0.06] px-4 lg:px-6"
+          style={{
+            background: 'linear-gradient(90deg, rgba(15,23,41,0.95) 0%, rgba(15,23,41,0.85) 100%)',
+            backdropFilter: 'blur(12px)',
+          }}
+        >
           {/* 모바일 햄버거 메뉴 버튼 */}
           <Button
             variant="ghost"
             size="icon"
-            className="lg:hidden"
+            className="lg:hidden text-slate-400 hover:text-white hover:bg-white/[0.06]"
             onClick={() => setSidebarOpen(true)}
             aria-label="메뉴 열기"
           >
             <Menu className="size-5" />
           </Button>
 
-          {/* 대시보드 제목 */}
-          <h1 className="text-lg font-semibold truncate">{sectionTitle}</h1>
+          {/* 온라인 상태 표시 점 + 대시보드 제목 */}
+          <div className="flex items-center gap-3">
+            <div className="relative flex items-center justify-center">
+              <div className="size-2.5 rounded-full bg-emerald-400" />
+              <div className="absolute size-2.5 rounded-full bg-emerald-400 animate-ping opacity-40" />
+            </div>
+            <h1 className="text-lg font-semibold text-white tracking-wide truncate">{sectionTitle}</h1>
+          </div>
 
           {/* 스페이서 */}
           <div className="flex-1" />
 
           {/* 우측 액션 영역 */}
           <div className="flex items-center gap-2">
+            {/* 키오스크 프리뷰 토글 */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`relative transition-all duration-200 ${showKioskPreview ? 'text-sky-400 bg-sky-400/10 hover:bg-sky-400/20' : 'text-slate-400 hover:text-white hover:bg-white/[0.06]'}`}
+              onClick={() => setShowKioskPreview(!showKioskPreview)}
+              aria-label="키오스크 프리뷰"
+              title="키오스크 프리뷰"
+            >
+              <PictureInPicture2 className="size-4" />
+            </Button>
             {/* 알림 벨 */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="relative"
+                  className="relative text-slate-400 hover:text-white hover:bg-white/[0.06]"
                   aria-label={`알림: 읽지 않은 ${unreadCount}건`}
                 >
                   <Bell className="size-5" />
                   {unreadCount > 0 && (
-                    <Badge
-                      variant="destructive"
-                      className="absolute -top-1 -right-1 size-5 p-0 flex items-center justify-center text-[10px] leading-none"
+                    <span
+                      className="absolute -top-1 -right-1 size-5 p-0 flex items-center justify-center text-[10px] leading-none font-bold rounded-full text-white"
+                      style={{ backgroundColor: '#ef4444' }}
                     >
                       {unreadCount > 9 ? '9+' : unreadCount}
-                    </Badge>
+                    </span>
                   )}
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-80">
+              <DropdownMenuContent align="end" className="w-80" style={{ backgroundColor: '#0f1729', borderColor: 'rgba(255,255,255,0.08)' }}>
                 <div className="flex items-center justify-between px-3 py-2">
-                  <span className="text-sm font-semibold">알림</span>
+                  <span className="text-sm font-semibold text-white">알림</span>
                   {unreadCount > 0 && (
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-auto p-1 text-xs text-muted-foreground"
+                      className="h-auto p-1 text-xs text-slate-400 hover:text-sky-400"
                       onClick={markAllAsRead}
                     >
                       <CheckCheck className="size-3 mr-1" />
@@ -386,9 +486,9 @@ export default function AdminDashboard() {
                     </Button>
                   )}
                 </div>
-                <DropdownMenuSeparator />
+                <DropdownMenuSeparator className="bg-white/[0.06]" />
                 {notifications.length === 0 ? (
-                  <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+                  <div className="px-3 py-6 text-center text-sm text-slate-500">
                     알림이 없습니다
                   </div>
                 ) : (
@@ -396,7 +496,7 @@ export default function AdminDashboard() {
                     {notifications.slice(0, 10).map((notif) => (
                       <DropdownMenuItem
                         key={notif.id}
-                        className="flex items-start gap-3 px-3 py-2.5 cursor-pointer"
+                        className="flex items-start gap-3 px-3 py-2.5 cursor-pointer text-slate-300 hover:bg-white/[0.04] focus:bg-white/[0.04]"
                         onClick={() => {
                           if (!notif.isRead) markAsRead(notif.id);
                         }}
@@ -404,22 +504,22 @@ export default function AdminDashboard() {
                         {/* 읽음/안읽음 표시 */}
                         <div className="mt-1.5 shrink-0">
                           {notif.isRead ? (
-                            <div className="size-2 rounded-full bg-muted-foreground/30" />
+                            <div className="size-2 rounded-full bg-slate-600" />
                           ) : (
-                            <div className="size-2 rounded-full bg-primary" />
+                            <div className="size-2 rounded-full bg-sky-400" />
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
                           <p
                             className={`text-sm truncate ${
                               notif.isRead
-                                ? 'text-muted-foreground'
-                                : 'font-medium text-foreground'
+                                ? 'text-slate-500'
+                                : 'font-medium text-white'
                             }`}
                           >
                             {notif.title}
                           </p>
-                          <p className="text-xs text-muted-foreground truncate mt-0.5">
+                          <p className="text-xs text-slate-500 truncate mt-0.5">
                             {notif.message}
                           </p>
                         </div>
@@ -430,17 +530,24 @@ export default function AdminDashboard() {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <Separator orientation="vertical" className="h-6" />
+            <Separator orientation="vertical" className="h-6 bg-white/[0.08]" />
 
             {/* 관리자 사용자 정보 */}
             {adminUser && (
               <div className="hidden sm:flex items-center gap-2">
-                <span className="text-sm font-medium truncate max-w-[120px]">
+                <span className="text-sm font-medium text-slate-300 truncate max-w-[120px]">
                   {adminUser.name}
                 </span>
-                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                <span
+                  className="text-[10px] font-medium px-1.5 py-0.5 rounded-full tracking-wider"
+                  style={{
+                    backgroundColor: 'rgba(56,189,248,0.1)',
+                    color: '#38bdf8',
+                    border: '1px solid rgba(56,189,248,0.2)',
+                  }}
+                >
                   {roleLabel}
-                </Badge>
+                </span>
               </div>
             )}
 
@@ -448,6 +555,7 @@ export default function AdminDashboard() {
             <Button
               variant="ghost"
               size="icon"
+              className="text-slate-400 hover:text-white hover:bg-white/[0.06]"
               onClick={handleLogout}
               aria-label="로그아웃"
               title="로그아웃"
@@ -455,11 +563,11 @@ export default function AdminDashboard() {
               <LogOut className="size-4" />
             </Button>
 
-            {/* 키오스크로 돌아가기 버튼 (데스크톡에서는 사이드바에 있으므로 모바일만) */}
+            {/* 키오스크로 돌아가기 버튼 (모바일만) */}
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
-              className="lg:hidden"
+              className="lg:hidden text-slate-400 hover:text-teal-400 hover:bg-teal-400/[0.06]"
               onClick={handleBackToKiosk}
             >
               <Monitor className="size-4" />
@@ -469,7 +577,10 @@ export default function AdminDashboard() {
         </header>
 
         {/* --- 메인 콘텐츠 영역 --- */}
-        <main className="flex-1 overflow-y-auto">
+        <main
+          className="flex-1 overflow-y-auto"
+          style={{ backgroundColor: '#0f1729' }}
+        >
           <AnimatePresence mode="wait">
             <motion.div
               key={activeSection}
@@ -484,6 +595,32 @@ export default function AdminDashboard() {
           </AnimatePresence>
         </main>
       </div>
+
+      {/* ================================================================
+          키오스크 프리뷰 플로팅 패널
+          ================================================================ */}
+      {showKioskPreview && (
+        <KioskPreview onClose={() => setShowKioskPreview(false)} />
+      )}
+
+      {/* ================================================================
+          키오스크 프리뷰 플로팅 토글 버튼 (프리뷰가 닫혀있을 때만 표시)
+          ================================================================ */}
+      {!showKioskPreview && (
+        <button
+          onClick={() => setShowKioskPreview(true)}
+          className="fixed bottom-4 right-4 z-50 w-12 h-12 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-105 active:scale-95"
+          style={{
+            background: 'linear-gradient(135deg, #0f2744, #1e3a5f)',
+            border: '1px solid rgba(56,189,248,0.2)',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.4), 0 0 12px rgba(56,189,248,0.1)',
+          }}
+          aria-label="키오스크 프리뷰 열기"
+          title="키오스크 프리뷰"
+        >
+          <Monitor className="w-5 h-5 text-sky-400" />
+        </button>
+      )}
     </div>
   );
 }

@@ -81,7 +81,7 @@ export default function KioskCardComplete() {
           transition={{ duration: 0.5, delay: 0.15 }}
           className="text-2xl font-bold text-emerald-400 tracking-wider"
         >
-          <CmsText contentKey="cardcomplete.title" fallback="도서증 발급이 �*료되었습니다!" />
+          <CmsText contentKey="cardcomplete.title" fallback="도서증 발급이 완료되었습니다!" />
         </motion.h1>
 
         <motion.p

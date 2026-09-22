@@ -1,0 +1,994 @@
+     1→/**
+     2→ * 도서카드 발급 관리 섹션
+     3→ *
+     4→ * [역할]
+     5→ * - 도서카드 발급 신청 목록 조회 (상태별 필터)
+     6→ * - 승인/거부/발급/취소 액션
+     7→ * - 관리자 직접 발급
+     8→ * - 신청 상세 정보 다이얼로그
+     9→ * - 발급 통계 대시보드
+    10→ *
+    11→ * [Enhanced]
+    12→ * - 카드 비주얼 디자인 (신용카드 형태)
+    13→ * - 발급 워크플로우 파이프라인 시각화
+    14→ * - 키오스크 스타일 그라디언트 통계 카드
+    15→ * - 테이블 개선 (아이콘, 아바타, 생생한 배지, 호버)
+    16→ * - 카드 템플릿 프리뷰
+    17→ * - 키오스크 다크 테마
+    18→ */
+    19→
+    20→'use client';
+    21→
+    22→import { useEffect, useState, useCallback } from 'react';
+    23→import {
+    24→  CreditCard, CheckCircle2, XCircle, Clock, Search, Loader2,
+    25→  Plus, Eye, Trash2, CardIcon, UserPlus, AlertCircle,
+    26→  Smartphone, BookOpen, ArrowRight, ChevronRight
+    27→} from 'lucide-react';
+    28→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+    29→import { Button } from '@/components/ui/button';
+    30→import { Input } from '@/components/ui/input';
+    31→import { Label } from '@/components/ui/label';
+    32→import { Badge } from '@/components/ui/badge';
+    33→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+    34→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+    35→import { Textarea } from '@/components/ui/textarea';
+    36→import {
+    37→  Table,
+    38→  TableBody,
+    39→  TableCell,
+    40→  TableHead,
+    41→  TableHeader,
+    42→  TableRow,
+    43→} from '@/components/ui/table';
+    44→import {
+    45→  Dialog,
+    46→  DialogContent,
+    47→  DialogDescription,
+    48→  DialogFooter,
+    49→  DialogHeader,
+    50→  DialogTitle,
+    51→} from '@/components/ui/dialog';
+    52→import { Skeleton } from '@/components/ui/skeleton';
+    53→import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+    54→import { toast } from 'sonner';
+    55→import Image from 'next/image';
+    56→
+    57→// ============================================================================
+    58→// 타입 정의
+    59→// ============================================================================
+    60→
+    61→interface LibraryCard {
+    62→  id: string;
+    63→  applicantName: string;
+    64→  birthDate: string;
+    65→  phone: string;
+    66→  address: string | null;
+    67→  cardType: string;
+    68→  cardNumber: string | null;
+    69→  status: string;
+    70→  appliedAt: string;
+    71→  approvedAt: string | null;
+    72→  approvedBy: string | null;
+    73→  issuedAt: string | null;
+    74→  userId: string | null;
+    75→  createdAt: string;
+    76→  updatedAt: string;
+    77→}
+    78→
+    79→interface CardStats {
+    80→  total: number;
+    81→  pending: number;
+    82→  approved: number;
+    83→  issued: number;
+    84→  rejected: number;
+    85→}
+    86→
+    87→// ============================================================================
+    88→// 상태 매핑
+    89→// ============================================================================
+    90→
+    91→const STATUS_LABELS: Record<string, string> = {
+    92→  pending: '대기',
+    93→  approved: '승인',
+    94→  issued: '발급완료',
+    95→  rejected: '거부',
+    96→};
+    97→
+    98→const STATUS_COLORS: Record<string, string> = {
+    99→  pending: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+   100→  approved: 'bg-sky-500/20 text-sky-300 border-sky-500/30',
+   101→  issued: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+   102→  rejected: 'bg-rose-500/20 text-rose-300 border-rose-500/30',
+   103→};
+   104→
+   105→const STATUS_VIVID_COLORS: Record<string, string> = {
+   106→  pending: 'bg-amber-500 text-white',
+   107→  approved: 'bg-sky-500 text-white',
+   108→  issued: 'bg-emerald-500 text-white',
+   109→  rejected: 'bg-rose-500 text-white',
+   110→};
+   111→
+   112→const CARD_TYPE_LABELS: Record<string, string> = {
+   113→  mobile: '모바일',
+   114→  physical: '실물카드',
+   115→};
+   116→
+   117→// ============================================================================
+   118→// CardVisual 서브 컴포넌트 (신용카드 형태 디자인)
+   119→// ============================================================================
+   120→
+   121→function CardVisual({ card }: { card: LibraryCard }) {
+   122→  const maskedNumber = card.cardNumber
+   123→    ? `**** **** **** ${card.cardNumber.slice(-4)}`
+   124→    : '**** **** **** ****';
+   125→
+   126→  return (
+   127→    <div
+   128→      className="relative w-[340px] h-[200px] rounded-xl shadow-lg overflow-hidden flex-shrink-0"
+   129→      style={{ background: 'linear-gradient(135deg, #1e3a5f, #0f2744)' }}
+   130→    >
+   131→      {/* 카드 내부 패턴 오버레이 */}
+   132→      <div className="absolute inset-0 opacity-10">
+   133→        <div className="absolute top-0 right-0 w-48 h-48 rounded-full border border-white/30 translate-x-16 -translate-y-16" />
+   134→        <div className="absolute bottom-0 left-0 w-36 h-36 rounded-full border border-white/20 -translate-x-10 translate-y-10" />
+   135→      </div>
+   136→
+   137→      {/* 상단: SMART LIBRARY 텍스트 + 도서관 아이콘 */}
+   138→      <div className="relative z-10 p-5 flex items-start justify-between">
+   139→        <div className="flex items-center gap-2">
+   140→          <BookOpen className="w-5 h-5 text-amber-400" />
+   141→          <span className="text-sm font-bold tracking-wider text-white/90">SMART LIBRARY</span>
+   142→        </div>
+   143→        <Badge className="bg-white/20 text-white border-white/30 text-[10px] font-bold px-2">
+   144→          {CARD_TYPE_LABELS[card.cardType] || card.cardType}
+   145→        </Badge>
+   146→      </div>
+   147→
+   148→      {/* 중간: 마스킹된 카드 번호 */}
+   149→      <div className="relative z-10 px-5 mt-2">
+   150→        <p className="text-lg font-mono tracking-[0.18em] text-white/80">{maskedNumber}</p>
+   151→      </div>
+   152→
+   153→      {/* 하단: 신청자 이름 + 골드 라인 */}
+   154→      <div className="absolute bottom-0 left-0 right-0 z-10">
+   155→        <div className="h-[3px] w-full" style={{ background: 'linear-gradient(90deg, #c9a84c, #f0d68a, #c9a84c)' }} />
+   156→        <div className="px-5 py-3 flex items-end justify-between">
+   157→          <div>
+   158→            <span className="text-[10px] text-white/50 uppercase tracking-wider">Card Holder</span>
+   159→            <p className="text-sm font-semibold text-white/90 mt-0.5">{card.applicantName}</p>
+   160→          </div>
+   161→          <div className="text-right">
+   162→            <span className="text-[10px] text-white/50 uppercase tracking-wider">Status</span>
+   163→            <p className="text-xs font-semibold text-amber-400 mt-0.5">{STATUS_LABELS[card.status]}</p>
+   164→          </div>
+   165→        </div>
+   166→      </div>
+   167→
+   168→      {/* EMV 칩 아이콘 */}
+   169→      <div className="absolute top-14 left-5 z-10 w-9 h-7 rounded-md" style={{ background: 'linear-gradient(135deg, #c9a84c, #a08030)' }}>
+   170→        <div className="w-full h-full grid grid-cols-3 grid-rows-2 p-0.5 gap-px">
+   171→          {Array.from({ length: 6 }).map((_, i) => (
+   172→            <div key={i} className="bg-yellow-800/40 rounded-[1px]" />
+   173→          ))}
+   174→        </div>
+   175→      </div>
+   176→    </div>
+   177→  );
+   178→}
+   179→
+   180→// ============================================================================
+   181→// IssuanceWorkflowPipeline 서브 컴포넌트
+   182→// ============================================================================
+   183→
+   184→function IssuanceWorkflowPipeline({ stats }: { stats: CardStats }) {
+   185→  const steps = [
+   186→    {
+   187→      id: 'apply',
+   188→      label: '신청',
+   189→      icon: UserPlus,
+   190→      count: stats.pending,
+   191→      countLabel: `${stats.pending}건 대기`,
+   192→      status: stats.pending > 0 ? 'active' : (stats.total > 0 ? 'completed' : 'pending') as 'active' | 'completed' | 'pending',
+   193→    },
+   194→    {
+   195→      id: 'approve',
+   196→      label: '승인',
+   197→      icon: CheckCircle2,
+   198→      count: stats.approved,
+   199→      countLabel: `${stats.approved}건 대기`,
+   200→      status: stats.approved > 0 ? 'active' : (stats.issued > 0 ? 'completed' : 'pending') as 'active' | 'completed' | 'pending',
+   201→    },
+   202→    {
+   203→      id: 'issue',
+   204→      label: '발급',
+   205→      icon: CreditCard,
+   206→      count: stats.issued,
+   207→      countLabel: `${stats.issued}건 완료`,
+   208→      status: stats.issued > 0 ? 'completed' : 'pending' as 'completed' | 'pending',
+   209→    },
+   210→  ];
+   211→
+   212→  const statusStyles = {
+   213→    completed: 'bg-emerald-500 text-white border-emerald-400 shadow-emerald-500/30',
+   214→    active: 'bg-sky-500 text-white border-sky-400 shadow-sky-500/30',
+   215→    pending: 'bg-slate-700 text-slate-300 border-slate-600',
+   216→  };
+   217→
+   218→  const lineStyles = {
+   219→    completed: 'bg-emerald-500',
+   220→    active: 'bg-sky-500',
+   221→    pending: 'bg-slate-700',
+   222→  };
+   223→
+   224→  const iconColorStyles = {
+   225→    completed: 'text-white',
+   226→    active: 'text-white',
+   227→    pending: 'text-slate-400',
+   228→  };
+   229→
+   230→  return (
+   231→    <Card className="bg-slate-900 border-slate-700 shadow-md">
+   232→      <CardContent className="p-5">
+   233→        <div className="flex items-center justify-between mb-4">
+   234→          <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+   235→            <ArrowRight className="w-4 h-4 text-sky-400" />
+   236→            발급 워크플로우
+   237→          </h3>
+   238→          <span className="text-xs text-slate-400">전체 {stats.total}건</span>
+   239→        </div>
+   240→        <div className="flex items-center justify-center">
+   241→          {steps.map((step, idx) => {
+   242→            const Icon = step.icon;
+   243→            return (
+   244→              <div key={step.id} className="flex items-center">
+   245→                {/* 스텝 노드 */}
+   246→                <div className="flex flex-col items-center gap-2">
+   247→                  <div
+   248→                    className={`w-14 h-14 rounded-xl border flex items-center justify-center shadow-lg transition-all duration-300 ${statusStyles[step.status]}`}
+   249→                  >
+   250→                    <Icon className={`w-6 h-6 ${iconColorStyles[step.status]}`} />
+   251→                  </div>
+   252→                  <span className={`text-xs font-semibold ${step.status === 'pending' ? 'text-slate-400' : 'text-white'}`}>
+   253→                    {step.label}
+   254→                  </span>
+   255→                  <span className={`text-[10px] px-2 py-0.5 rounded-full ${
+   256→                    step.status === 'completed' ? 'bg-emerald-500/20 text-emerald-300' :
+   257→                    step.status === 'active' ? 'bg-sky-500/20 text-sky-300' :
+   258→                    'bg-slate-700 text-slate-400'
+   259→                  }`}>
+   260→                    {step.countLabel}
+   261→                  </span>
+   262→                </div>
+   263→
+   264→                {/* 연결 화살표 (마지막 제외) */}
+   265→                {idx < steps.length - 1 && (
+   266→                  <div className="flex items-center mx-2 sm:mx-4">
+   267→                    <div className={`w-8 sm:w-16 h-0.5 ${lineStyles[steps[idx + 1].status === 'pending' ? 'pending' : 'completed']}`} />
+   268→                    <ChevronRight className={`w-4 h-4 -ml-1 ${
+   269→                      steps[idx + 1].status === 'pending' ? 'text-slate-500' : 'text-emerald-500'
+   270→                    }`} />
+   271→                  </div>
+   272→                )}
+   273→              </div>
+   274→            );
+   275→          })}
+   276→        </div>
+   277→      </CardContent>
+   278→    </Card>
+   279→  );
+   280→}
+   281→
+   282→// ============================================================================
+   283→// ApplicantAvatar 서브 컴포넌트
+   284→// ============================================================================
+   285→
+   286→function ApplicantAvatar({ name }: { name: string }) {
+   287→  const initials = name
+   288→    .split('')
+   289→    .filter((_, i) => i === 0 || (name.length > 2 && i === 1))
+   290→    .join('')
+   291→    .slice(0, 2);
+   292→
+   293→  return (
+   294→    <Avatar className="w-8 h-8 border border-slate-600">
+   295→      <AvatarFallback className="bg-slate-700 text-slate-200 text-xs font-semibold">
+   296→        {initials}
+   297→      </AvatarFallback>
+   298→    </Avatar>
+   299→  );
+   300→}
+   301→
+   302→// ============================================================================
+   303→// 메인 컴포넌트
+   304→// ============================================================================
+   305→
+   306→export default function CardsSection() {
+   307→  // 상태
+   308→  const [cards, setCards] = useState<LibraryCard[]>([]);
+   309→  const [stats, setStats] = useState<CardStats>({ total: 0, pending: 0, approved: 0, issued: 0, rejected: 0 });
+   310→  const [loading, setLoading] = useState(true);
+   311→  const [search, setSearch] = useState('');
+   312→  const [statusFilter, setStatusFilter] = useState<string>('all');
+   313→  const [cardTypeFilter, setCardTypeFilter] = useState<string>('all');
+   314→
+   315→  // 다이얼로그
+   316→  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
+   317→  const [issueDialogOpen, setIssueDialogOpen] = useState(false);
+   318→  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+   319→  const [selectedCard, setSelectedCard] = useState<LibraryCard | null>(null);
+   320→  const [rejectReason, setRejectReason] = useState('');
+   321→  const [saving, setSaving] = useState(false);
+   322→
+   323→  // 직접 발급 폼
+   324→  const [issueForm, setIssueForm] = useState({
+   325→    applicantName: '',
+   326→    birthDate: '',
+   327→    phone: '',
+   328→    address: '',
+   329→    cardType: 'mobile',
+   330→  });
+   331→
+   332→  // ==========================================================================
+   333→  // 데이터 로드
+   334→  // ==========================================================================
+   335→
+   336→  const fetchCards = useCallback(async (searchVal?: string, statusVal?: string, cardTypeVal?: string) => {
+   337→    try {
+   338→      setLoading(true);
+   339→      const params = new URLSearchParams();
+   340→      if (searchVal) params.set('search', searchVal);
+   341→      if (statusVal && statusVal !== 'all') params.set('status', statusVal);
+   342→      if (cardTypeVal && cardTypeVal !== 'all') params.set('cardType', cardTypeVal);
+   343→      const res = await fetch(`/api/admin/cards?${params.toString()}`);
+   344→      if (!res.ok) throw new Error();
+   345→      const json = await res.json();
+   346→      setCards(json.cards || []);
+   347→      if (json.stats) setStats(json.stats);
+   348→    } catch {
+   349→      toast.error('도서카드 목록을 불러오는데 실패했습니다.');
+   350→    } finally {
+   351→      setLoading(false);
+   352→    }
+   353→  }, []);
+   354→
+   355→  useEffect(() => {
+   356→    fetchCards();
+   357→  }, [fetchCards]);
+   358→
+   359→  // ==========================================================================
+   360→  // 액션 핸들러
+   361→  // ==========================================================================
+   362→
+   363→  const handleCardAction = async (cardId: string, action: string, extra?: Record<string, unknown>) => {
+   364→    setSaving(true);
+   365→    try {
+   366→      const res = await fetch(`/api/admin/cards/${cardId}`, {
+   367→        method: 'PUT',
+   368→        headers: { 'Content-Type': 'application/json' },
+   369→        body: JSON.stringify({ action, ...extra }),
+   370→      });
+   371→      if (!res.ok) {
+   372→        const data = await res.json();
+   373→        throw new Error(data.error || '작업 실패');
+   374→      }
+   375→      const data = await res.json();
+   376→      toast.success(data.message || '작업이 완료되었습니다.');
+   377→      await fetchCards(search, statusFilter, cardTypeFilter);
+   378→    } catch (err) {
+   379→      toast.error(err instanceof Error ? err.message : '작업에 실패했습니다.');
+   380→    } finally {
+   381→      setSaving(false);
+   382→    }
+   383→  };
+   384→
+   385→  const handleApprove = (card: LibraryCard) => handleCardAction(card.id, 'approve');
+   386→  const handleIssue = (card: LibraryCard) => handleCardAction(card.id, 'issue');
+   387→
+   388→  const handleReject = async () => {
+   389→    if (!selectedCard) return;
+   390→    await handleCardAction(selectedCard.id, 'reject', { reason: rejectReason });
+   391→    setRejectDialogOpen(false);
+   392→    setRejectReason('');
+   393→    setSelectedCard(null);
+   394→  };
+   395→
+   396→  const handleDelete = async (card: LibraryCard) => {
+   397→    if (!confirm(`'${card.applicantName}'님의 도서카드 신청을 삭제하시겠습니까?`)) return;
+   398→    try {
+   399→      const res = await fetch(`/api/admin/cards/${card.id}`, { method: 'DELETE' });
+   400→      if (!res.ok) throw new Error();
+   401→      toast.success('도서카드 신청이 삭제되었습니다.');
+   402→      await fetchCards(search, statusFilter, cardTypeFilter);
+   403→    } catch {
+   404→      toast.error('삭제에 실패했습니다.');
+   405→    }
+   406→  };
+   407→
+   408→  const handleDirectIssue = async () => {
+   409→    const { applicantName, birthDate, phone } = issueForm;
+   410→    if (!applicantName || !birthDate || !phone) {
+   411→      toast.error('이름, 생년월일, 전화번호는 필수입니다.');
+   412→      return;
+   413→    }
+   414→    if (birthDate.length !== 8) {
+   415→      toast.error('생년월일은 8자리로 입력하세요.');
+   416→      return;
+   417→    }
+   418→    setSaving(true);
+   419→    try {
+   420→      const res = await fetch('/api/admin/cards', {
+   421→        method: 'POST',
+   422→        headers: { 'Content-Type': 'application/json' },
+   423→        body: JSON.stringify(issueForm),
+   424→      });
+   425→      if (!res.ok) {
+   426→        const data = await res.json();
+   427→        throw new Error(data.error || '발급 실패');
+   428→      }
+   429→      const data = await res.json();
+   430→      toast.success(`도서카드가 발급되었습니다. (카드번호: ${data.card?.cardNumber})`);
+   431→      setIssueDialogOpen(false);
+   432→      setIssueForm({ applicantName: '', birthDate: '', phone: '', address: '', cardType: 'mobile' });
+   433→      await fetchCards(search, statusFilter, cardTypeFilter);
+   434→    } catch (err) {
+   435→      toast.error(err instanceof Error ? err.message : '발급에 실패했습니다.');
+   436→    } finally {
+   437→      setSaving(false);
+   438→    }
+   439→  };
+   440→
+   441→  const openDetail = (card: LibraryCard) => {
+   442→    setSelectedCard(card);
+   443→    setDetailDialogOpen(true);
+   444→  };
+   445→
+   446→  const openReject = (card: LibraryCard) => {
+   447→    setSelectedCard(card);
+   448→    setRejectDialogOpen(true);
+   449→  };
+   450→
+   451→  // ==========================================================================
+   452→  // 렌더
+   453→  // ==========================================================================
+   454→
+   455→  const formatDate = (d: string | null) =>
+   456→    d ? new Date(d).toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }) : '-';
+   457→
+   458→  const formatDateTime = (d: string | null) =>
+   459→    d ? new Date(d).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-';
+   460→
+   461→  return (
+   462→    <div className="space-y-5">
+   463→      {/* ── 섹션 헤더 (키오스크 스타일) ─────────────────────────────── */}
+   464→      <div className="relative">
+   465→        <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+   466→          <CreditCard className="w-5 h-5 text-sky-500" />
+   467→          도서카드 발급 관리
+   468→        </h2>
+   469→        <div className="mt-1.5 h-[3px] w-32 rounded-full" style={{ background: 'linear-gradient(90deg, #0ea5e9, #38bdf8, transparent)' }} />
+   470→      </div>
+   471→
+   472→      {/* ── 발급 워크플로우 파이프라인 ─────────────────────────────── */}
+   473→      <IssuanceWorkflowPipeline stats={stats} />
+   474→
+   475→      {/* ── 통계 카드 (키오스크 그라디언트 스타일) ────────────────────── */}
+   476→      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+   477→        {/* 전체 */}
+   478→        <div className="relative overflow-hidden rounded-xl p-4 text-white shadow-md" style={{ background: 'linear-gradient(135deg, #475569, #334155)' }}>
+   479→          <div className="absolute top-0 right-0 w-20 h-20 rounded-full bg-white/5 -translate-y-6 translate-x-6" />
+   480→          <div className="relative z-10">
+   481→            <div className="text-xs text-white/60 mb-1 flex items-center gap-1">
+   482→              <CardIcon className="w-3 h-3" /> 전체
+   483→            </div>
+   484→            <div className="text-2xl font-bold">{stats.total}</div>
+   485→          </div>
+   486→        </div>
+   487→        {/* 대기 */}
+   488→        <div className="relative overflow-hidden rounded-xl p-4 text-white shadow-md" style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}>
+   489→          <div className="absolute top-0 right-0 w-20 h-20 rounded-full bg-white/10 -translate-y-6 translate-x-6" />
+   490→          <div className="relative z-10">
+   491→            <div className="text-xs text-white/70 mb-1 flex items-center gap-1">
+   492→              <Clock className="w-3 h-3" /> 대기
+   493→            </div>
+   494→            <div className="text-2xl font-bold">{stats.pending}</div>
+   495→          </div>
+   496→        </div>
+   497→        {/* 승인 */}
+   498→        <div className="relative overflow-hidden rounded-xl p-4 text-white shadow-md" style={{ background: 'linear-gradient(135deg, #0ea5e9, #0284c7)' }}>
+   499→          <div className="absolute top-0 right-0 w-20 h-20 rounded-full bg-white/10 -translate-y-6 translate-x-6" />
+   500→          <div className="relative z-10">
+   501→            <div className="text-xs text-white/70 mb-1 flex items-center gap-1">
+   502→              <CheckCircle2 className="w-3 h-3" /> 승인
+   503→            </div>
+   504→            <div className="text-2xl font-bold">{stats.approved}</div>
+   505→          </div>
+   506→        </div>
+   507→        {/* 발급완료 */}
+   508→        <div className="relative overflow-hidden rounded-xl p-4 text-white shadow-md" style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}>
+   509→          <div className="absolute top-0 right-0 w-20 h-20 rounded-full bg-white/10 -translate-y-6 translate-x-6" />
+   510→          <div className="relative z-10">
+   511→            <div className="text-xs text-white/70 mb-1 flex items-center gap-1">
+   512→              <CreditCard className="w-3 h-3" /> 발급완료
+   513→            </div>
+   514→            <div className="text-2xl font-bold">{stats.issued}</div>
+   515→          </div>
+   516→        </div>
+   517→        {/* 거부 */}
+   518→        <div className="relative overflow-hidden rounded-xl p-4 text-white shadow-md col-span-2 sm:col-span-1" style={{ background: 'linear-gradient(135deg, #f43f5e, #e11d48)' }}>
+   519→          <div className="absolute top-0 right-0 w-20 h-20 rounded-full bg-white/10 -translate-y-6 translate-x-6" />
+   520→          <div className="relative z-10">
+   521→            <div className="text-xs text-white/70 mb-1 flex items-center gap-1">
+   522→              <XCircle className="w-3 h-3" /> 거부
+   523→            </div>
+   524→            <div className="text-2xl font-bold">{stats.rejected}</div>
+   525→          </div>
+   526→        </div>
+   527→      </div>
+   528→
+   529→      {/* ── 필터 & 액션 바 (키오스크 스타일) ────────────────────────── */}
+   530→      <Card className="bg-slate-900 border-slate-700 shadow-md">
+   531→        <CardContent className="p-3">
+   532→          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+   533→            <div className="relative flex-1 max-w-sm">
+   534→              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+   535→              <Input
+   536→                placeholder="이름, 전화번호, 카드번호 검색..."
+   537→                value={search}
+   538→                onChange={(e) => setSearch(e.target.value)}
+   539→                onBlur={() => fetchCards(search, statusFilter, cardTypeFilter)}
+   540→                onKeyDown={(e) => e.key === 'Enter' && fetchCards(search, statusFilter, cardTypeFilter)}
+   541→                className="pl-9 h-10 bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:ring-sky-500 focus:border-sky-500"
+   542→              />
+   543→            </div>
+   544→            <div className="flex items-center gap-2">
+   545→              <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); fetchCards(search, v, cardTypeFilter); }}>
+   546→                <SelectTrigger className="h-10 w-28 bg-slate-800 border-slate-600 text-white">
+   547→                  <SelectValue placeholder="상태" />
+   548→                </SelectTrigger>
+   549→                <SelectContent className="bg-slate-800 border-slate-600 text-white">
+   550→                  <SelectItem value="all">전체 상태</SelectItem>
+   551→                  <SelectItem value="pending">대기</SelectItem>
+   552→                  <SelectItem value="approved">승인</SelectItem>
+   553→                  <SelectItem value="issued">발급완료</SelectItem>
+   554→                  <SelectItem value="rejected">거부</SelectItem>
+   555→                </SelectContent>
+   556→              </Select>
+   557→              <Select value={cardTypeFilter} onValueChange={(v) => { setCardTypeFilter(v); fetchCards(search, statusFilter, v); }}>
+   558→                <SelectTrigger className="h-10 w-28 bg-slate-800 border-slate-600 text-white">
+   559→                  <SelectValue placeholder="유형" />
+   560→                </SelectTrigger>
+   561→                <SelectContent className="bg-slate-800 border-slate-600 text-white">
+   562→                  <SelectItem value="all">전체 유형</SelectItem>
+   563→                  <SelectItem value="mobile">모바일</SelectItem>
+   564→                  <SelectItem value="physical">실물카드</SelectItem>
+   565→                </SelectContent>
+   566→              </Select>
+   567→            </div>
+   568→            <div className="flex items-center gap-2 ml-auto">
+   569→              {stats.pending > 0 && (
+   570→                <Button
+   571→                  variant="outline"
+   572→                  size="sm"
+   573→                  className="h-9 text-amber-300 border-amber-500/50 bg-amber-500/10 hover:bg-amber-500/20 hover:text-amber-200"
+   574→                  onClick={() => { setStatusFilter('pending'); fetchCards(search, 'pending', cardTypeFilter); }}
+   575→                >
+   576→                  <AlertCircle className="w-4 h-4 mr-1" />
+   577→                  대기 {stats.pending}건
+   578→                </Button>
+   579→              )}
+   580→              <Button
+   581→                onClick={() => setIssueDialogOpen(true)}
+   582→                className="h-10 bg-sky-600 hover:bg-sky-700 text-white"
+   583→              >
+   584→                <Plus className="w-4 h-4 mr-1.5" />
+   585→                직접 발급
+   586→              </Button>
+   587→            </div>
+   588→          </div>
+   589→        </CardContent>
+   590→      </Card>
+   591→
+   592→      {/* ── 도서카드 목록 테이블 (키오스크 다크 스타일) ──────────────── */}
+   593→      <Card className="bg-slate-900 border-slate-700 shadow-md overflow-hidden">
+   594→        <CardContent className="p-0">
+   595→          <div className="overflow-x-auto">
+   596→            <Table>
+   597→              <TableHeader>
+   598→                <TableRow className="bg-slate-800 hover:bg-slate-800 border-slate-700">
+   599→                  <TableHead className="text-slate-300">신청자</TableHead>
+   600→                  <TableHead className="hidden md:table-cell text-slate-300">전화번호</TableHead>
+   601→                  <TableHead className="text-slate-300">카드유형</TableHead>
+   602→                  <TableHead className="text-slate-300">카드번호</TableHead>
+   603→                  <TableHead className="text-slate-300">상태</TableHead>
+   604→                  <TableHead className="hidden lg:table-cell text-slate-300">신청일</TableHead>
+   605→                  <TableHead className="text-center text-slate-300">관리</TableHead>
+   606→                </TableRow>
+   607→              </TableHeader>
+   608→              <TableBody>
+   609→                {loading ? (
+   610→                  Array.from({ length: 5 }).map((_, i) => (
+   611→                    <TableRow key={i} className="border-slate-700">
+   612→                      <TableCell colSpan={7}><Skeleton className="h-8 w-full bg-slate-700" /></TableCell>
+   613→                    </TableRow>
+   614→                  ))
+   615→                ) : cards.length === 0 ? (
+   616→                  <TableRow className="border-slate-700">
+   617→                    <TableCell colSpan={7} className="text-center py-12 text-slate-400">
+   618→                      <CreditCard className="w-8 h-8 mx-auto mb-2 opacity-40" />
+   619→                      도서카드 발급 신청이 없습니다.
+   620→                    </TableCell>
+   621→                  </TableRow>
+   622→                ) : (
+   623→                  cards.map((card) => (
+   624→                    <TableRow
+   625→                      key={card.id}
+   626→                      className="group border-slate-700 hover:bg-slate-800/60 transition-colors duration-150"
+   627→                    >
+   628→                      {/* 신청자 - 아바타 + 이름 */}
+   629→                      <TableCell className="font-medium text-sm text-white">
+   630→                        <div className="flex items-center gap-2">
+   631→                          <ApplicantAvatar name={card.applicantName} />
+   632→                          <span>{card.applicantName}</span>
+   633→                        </div>
+   634→                      </TableCell>
+   635→                      <TableCell className="hidden md:table-cell text-sm text-slate-300">{card.phone}</TableCell>
+   636→                      {/* 카드유형 - 아이콘 포함 */}
+   637→                      <TableCell>
+   638→                        <div className="flex items-center gap-1.5">
+   639→                          {card.cardType === 'mobile' ? (
+   640→                            <Smartphone className="w-3.5 h-3.5 text-sky-400" />
+   641→                          ) : (
+   642→                            <CreditCard className="w-3.5 h-3.5 text-amber-400" />
+   643→                          )}
+   644→                          <span className="text-xs text-slate-300">
+   645→                            {CARD_TYPE_LABELS[card.cardType] || card.cardType}
+   646→                          </span>
+   647→                        </div>
+   648→                      </TableCell>
+   649→                      <TableCell className="text-sm font-mono text-slate-300">
+   650→                        {card.cardNumber || '-'}
+   651→                      </TableCell>
+   652→                      {/* 상태 - 생생한 색상 배지 */}
+   653→                      <TableCell>
+   654→                        <Badge className={`text-xs ${STATUS_VIVID_COLORS[card.status] || 'bg-slate-600 text-slate-200'}`}>
+   655→                          {STATUS_LABELS[card.status] || card.status}
+   656→                        </Badge>
+   657→                      </TableCell>
+   658→                      <TableCell className="hidden lg:table-cell text-xs text-slate-400">
+   659→                        {formatDate(card.appliedAt)}
+   660→                      </TableCell>
+   661→                      <TableCell>
+   662→                        <div className="flex items-center justify-center gap-1">
+   663→                          {/* 상세 보기 */}
+   664→                          <Button
+   665→                            variant="ghost"
+   666→                            size="icon"
+   667→                            className="h-8 w-8 text-slate-400 hover:text-white hover:bg-slate-700"
+   668→                            onClick={() => openDetail(card)}
+   669→                          >
+   670→                            <Eye className="w-4 h-4" />
+   671→                          </Button>
+   672→
+   673→                          {/* 상태별 액션 */}
+   674→                          {card.status === 'pending' && (
+   675→                            <>
+   676→                              <Button
+   677→                                variant="ghost" size="icon"
+   678→                                className="h-8 w-8 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
+   679→                                onClick={() => handleApprove(card)} disabled={saving}
+   680→                              >
+   681→                                <CheckCircle2 className="w-4 h-4" />
+   682→                              </Button>
+   683→                              <Button
+   684→                                variant="ghost" size="icon"
+   685→                                className="h-8 w-8 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10"
+   686→                                onClick={() => openReject(card)} disabled={saving}
+   687→                              >
+   688→                                <XCircle className="w-4 h-4" />
+   689→                              </Button>
+   690→                            </>
+   691→                          )}
+   692→                          {(card.status === 'approved' || card.status === 'pending') && card.status !== 'issued' && (
+   693→                            <Button
+   694→                              variant="ghost" size="icon"
+   695→                              className="h-8 w-8 text-sky-400 hover:text-sky-300 hover:bg-sky-500/10"
+   696→                              onClick={() => handleIssue(card)} disabled={saving}
+   697→                              title="카드 발급"
+   698→                            >
+   699→                              <CreditCard className="w-4 h-4" />
+   700→                            </Button>
+   701→                          )}
+   702→                          {card.status !== 'issued' && (
+   703→                            <Button
+   704→                              variant="ghost" size="icon"
+   705→                              className="h-8 w-8 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10"
+   706→                              onClick={() => handleDelete(card)}
+   707→                            >
+   708→                              <Trash2 className="w-3.5 h-3.5" />
+   709→                            </Button>
+   710→                          )}
+   711→                        </div>
+   712→                      </TableCell>
+   713→                    </TableRow>
+   714→                  ))
+   715→                )}
+   716→              </TableBody>
+   717→            </Table>
+   718→          </div>
+   719→        </CardContent>
+   720→      </Card>
+   721→
+   722→      {/* ── 상세 정보 다이얼로그 (카드 비주얼 포함) ────────────────────── */}
+   723→      <Dialog open={detailDialogOpen} onOpenChange={setDetailDialogOpen}>
+   724→        <DialogContent className="sm:max-w-lg bg-slate-900 border-slate-700 text-white">
+   725→          <DialogHeader>
+   726→            <DialogTitle className="flex items-center gap-2 text-white">
+   727→              <CreditCard className="w-5 h-5 text-sky-400" />
+   728→              도서카드 신청 상세
+   729→            </DialogTitle>
+   730→            <DialogDescription className="text-slate-400">도서카드 발급 신청 상세 정보입니다.</DialogDescription>
+   731→          </DialogHeader>
+   732→          {selectedCard && (
+   733→            <div className="space-y-4 py-2">
+   734→              {/* 카드 비주얼 */}
+   735→              <div className="flex justify-center">
+   736→                <CardVisual card={selectedCard} />
+   737→              </div>
+   738→
+   739→              {/* 상세 정보 */}
+   740→              <div className="grid gap-3 text-sm">
+   741→                <div className="grid grid-cols-2 gap-3">
+   742→                  <div>
+   743→                    <span className="text-slate-400 text-xs">신청자</span>
+   744→                    <p className="font-medium text-white">{selectedCard.applicantName}</p>
+   745→                  </div>
+   746→                  <div>
+   747→                    <span className="text-slate-400 text-xs">생년월일</span>
+   748→                    <p className="font-medium text-white">{selectedCard.birthDate}</p>
+   749→                  </div>
+   750→                  <div>
+   751→                    <span className="text-slate-400 text-xs">전화번호</span>
+   752→                    <p className="font-medium text-white">{selectedCard.phone}</p>
+   753→                  </div>
+   754→                  <div>
+   755→                    <span className="text-slate-400 text-xs">주소</span>
+   756→                    <p className="font-medium text-white">{selectedCard.address || '-'}</p>
+   757→                  </div>
+   758→                </div>
+   759→                <div className="border-t border-slate-700 pt-3 grid grid-cols-2 gap-3">
+   760→                  <div>
+   761→                    <span className="text-slate-400 text-xs">카드유형</span>
+   762→                    <div className="flex items-center gap-1.5 mt-0.5">
+   763→                      {selectedCard.cardType === 'mobile' ? (
+   764→                        <Smartphone className="w-3.5 h-3.5 text-sky-400" />
+   765→                      ) : (
+   766→                        <CreditCard className="w-3.5 h-3.5 text-amber-400" />
+   767→                      )}
+   768→                      <p className="font-medium text-white">{CARD_TYPE_LABELS[selectedCard.cardType]}</p>
+   769→                    </div>
+   770→                  </div>
+   771→                  <div>
+   772→                    <span className="text-slate-400 text-xs">상태</span>
+   773→                    <Badge className={`text-xs mt-0.5 ${STATUS_VIVID_COLORS[selectedCard.status]}`}>
+   774→                      {STATUS_LABELS[selectedCard.status]}
+   775→                    </Badge>
+   776→                  </div>
+   777→                  <div>
+   778→                    <span className="text-slate-400 text-xs">카드번호</span>
+   779→                    <p className="font-mono font-medium text-white">{selectedCard.cardNumber || '미발급'}</p>
+   780→                  </div>
+   781→                  <div>
+   782→                    <span className="text-slate-400 text-xs">신청일</span>
+   783→                    <p className="font-medium text-white">{formatDateTime(selectedCard.appliedAt)}</p>
+   784→                  </div>
+   785→                  <div>
+   786→                    <span className="text-slate-400 text-xs">승인일</span>
+   787→                    <p className="font-medium text-white">{formatDateTime(selectedCard.approvedAt)}</p>
+   788→                  </div>
+   789→                  <div>
+   790→                    <span className="text-slate-400 text-xs">발급일</span>
+   791→                    <p className="font-medium text-white">{formatDateTime(selectedCard.issuedAt)}</p>
+   792→                  </div>
+   793→                </div>
+   794→              </div>
+   795→            </div>
+   796→          )}
+   797→          <DialogFooter>
+   798→            {selectedCard?.status === 'pending' && (
+   799→              <>
+   800→                <Button
+   801→                  variant="outline"
+   802→                  className="text-rose-400 border-rose-500/50 hover:bg-rose-500/10 hover:text-rose-300"
+   803→                  onClick={() => { setDetailDialogOpen(false); openReject(selectedCard); }}
+   804→                >
+   805→                  거부
+   806→                </Button>
+   807→                <Button
+   808→                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+   809→                  onClick={() => { setDetailDialogOpen(false); handleApprove(selectedCard); }} disabled={saving}
+   810→                >
+   811→                  승인
+   812→                </Button>
+   813→              </>
+   814→            )}
+   815→            {(selectedCard?.status === 'approved' || selectedCard?.status === 'pending') && selectedCard?.status !== 'issued' && (
+   816→              <Button
+   817→                className="bg-sky-600 hover:bg-sky-700 text-white"
+   818→                onClick={() => { setDetailDialogOpen(false); handleIssue(selectedCard); }} disabled={saving}
+   819→              >
+   820→                <CreditCard className="w-4 h-4 mr-1" />
+   821→                발급
+   822→              </Button>
+   823→            )}
+   824→            <Button
+   825→              variant="outline"
+   826→              className="border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white"
+   827→              onClick={() => setDetailDialogOpen(false)}
+   828→            >
+   829→              닫기
+   830→            </Button>
+   831→          </DialogFooter>
+   832→        </DialogContent>
+   833→      </Dialog>
+   834→
+   835→      {/* ── 거부 다이얼로그 ───────────────────────────────────────── */}
+   836→      <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+   837→        <DialogContent className="sm:max-w-md bg-slate-900 border-slate-700 text-white">
+   838→          <DialogHeader>
+   839→            <DialogTitle className="flex items-center gap-2 text-rose-400">
+   840→              <XCircle className="w-5 h-5" />
+   841→              도서카드 신청 거부
+   842→            </DialogTitle>
+   843→            <DialogDescription className="text-slate-400">
+   844→              &apos;{selectedCard?.applicantName}&apos;님의 도서카드 신청을 거부합니다.
+   845→            </DialogDescription>
+   846→          </DialogHeader>
+   847→          <div className="py-2">
+   848→            <Label className="text-slate-300">거부 사유 (선택)</Label>
+   849→            <Textarea
+   850→              value={rejectReason}
+   851→              onChange={(e) => setRejectReason(e.target.value)}
+   852→              placeholder="거부 사유를 입력하세요..."
+   853→              className="mt-1.5 bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:ring-rose-500 focus:border-rose-500"
+   854→              rows={3}
+   855→            />
+   856→          </div>
+   857→          <DialogFooter>
+   858→            <Button
+   859→              variant="outline"
+   860→              className="border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white"
+   861→              onClick={() => { setRejectDialogOpen(false); setRejectReason(''); }}
+   862→            >
+   863→              취소
+   864→            </Button>
+   865→            <Button
+   866→              className="bg-rose-600 hover:bg-rose-700 text-white"
+   867→              onClick={handleReject} disabled={saving}
+   868→            >
+   869→              {saving && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}
+   870→              거부
+   871→            </Button>
+   872→          </DialogFooter>
+   873→        </DialogContent>
+   874→      </Dialog>
+   875→
+   876→      {/* ── 직접 발급 다이얼로그 (카드 템플릿 프리뷰 포함) ──────────── */}
+   877→      <Dialog open={issueDialogOpen} onOpenChange={setIssueDialogOpen}>
+   878→        <DialogContent className="sm:max-w-2xl bg-slate-900 border-slate-700 text-white">
+   879→          <DialogHeader>
+   880→            <DialogTitle className="flex items-center gap-2 text-white">
+   881→              <UserPlus className="w-5 h-5 text-sky-400" />
+   882→              도서카드 직접 발급
+   883→            </DialogTitle>
+   884→            <DialogDescription className="text-slate-400">
+   885→              관리자가 직접 도서카드를 발급합니다. 이용자 계정도 함께 생성됩니다.
+   886→            </DialogDescription>
+   887→          </DialogHeader>
+   888→          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 py-2">
+   889→            {/* 좌측: 폼 */}
+   890→            <div className="grid gap-4">
+   891→              <div className="space-y-1.5">
+   892→                <Label className="text-slate-300">이름 *</Label>
+   893→                <Input
+   894→                  value={issueForm.applicantName}
+   895→                  onChange={(e) => setIssueForm((f) => ({ ...f, applicantName: e.target.value }))}
+   896→                  placeholder="홍길동"
+   897→                  className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:ring-sky-500 focus:border-sky-500"
+   898→                />
+   899→              </div>
+   900→              <div className="space-y-1.5">
+   901→                <Label className="text-slate-300">생년월일 (8자리) *</Label>
+   902→                <Input
+   903→                  value={issueForm.birthDate}
+   904→                  onChange={(e) => setIssueForm((f) => ({ ...f, birthDate: e.target.value.replace(/\D/g, '').slice(0, 8) }))}
+   905→                  placeholder="19900101"
+   906→                  maxLength={8}
+   907→                  className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:ring-sky-500 focus:border-sky-500"
+   908→                />
+   909→              </div>
+   910→              <div className="space-y-1.5">
+   911→                <Label className="text-slate-300">전화번호 *</Label>
+   912→                <Input
+   913→                  value={issueForm.phone}
+   914→                  onChange={(e) => setIssueForm((f) => ({ ...f, phone: e.target.value }))}
+   915→                  placeholder="010-1234-5678"
+   916→                  className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:ring-sky-500 focus:border-sky-500"
+   917→                />
+   918→              </div>
+   919→              <div className="space-y-1.5">
+   920→                <Label className="text-slate-300">주소 (선택)</Label>
+   921→                <Input
+   922→                  value={issueForm.address}
+   923→                  onChange={(e) => setIssueForm((f) => ({ ...f, address: e.target.value }))}
+   924→                  placeholder="서울시 강남구"
+   925→                  className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 focus:ring-sky-500 focus:border-sky-500"
+   926→                />
+   927→              </div>
+   928→              <div className="space-y-1.5">
+   929→                <Label className="text-slate-300">카드 유형</Label>
+   930→                <Select value={issueForm.cardType} onValueChange={(v) => setIssueForm((f) => ({ ...f, cardType: v }))}>
+   931→                  <SelectTrigger className="bg-slate-800 border-slate-600 text-white">
+   932→                    <SelectValue />
+   933→                  </SelectTrigger>
+   934→                  <SelectContent className="bg-slate-800 border-slate-600 text-white">
+   935→                    <SelectItem value="mobile">모바일 (자동 승인)</SelectItem>
+   936→                    <SelectItem value="physical">실물카드 (담당자 승인)</SelectItem>
+   937→                  </SelectContent>
+   938→                </Select>
+   939→              </div>
+   940→            </div>
+   941→
+   942→            {/* 우측: 카드 템플릿 프리뷰 */}
+   943→            <div className="flex flex-col items-center justify-center">
+   944→              <div className="relative w-full max-w-[300px] aspect-[17/10] rounded-xl overflow-hidden shadow-xl border border-slate-600">
+   945→                <Image
+   946→                  src="/images/admin/card-template.png"
+   947→                  alt="카드 템플릿"
+   948→                  fill
+   949→                  className="object-cover"
+   950→                  priority
+   951→                />
+   952→                {/* 오버레이: 실시간 입력 정보 */}
+   953→                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+   954→                <div className="absolute bottom-0 left-0 right-0 p-3">
+   955→                  <p className="text-xs text-white/60 font-medium">신청자</p>
+   956→                  <p className="text-sm font-bold text-white truncate">
+   957→                    {issueForm.applicantName || '이름 입력'}
+   958→                  </p>
+   959→                  <div className="flex items-center justify-between mt-1">
+   960→                    <p className="text-[10px] text-white/50 font-mono">
+   961→                      {issueForm.phone || '010-XXXX-XXXX'}
+   962→                    </p>
+   963→                    <Badge className="text-[9px] bg-white/20 text-white border-white/30 px-1.5">
+   964→                      {CARD_TYPE_LABELS[issueForm.cardType]}
+   965→                    </Badge>
+   966→                  </div>
+   967→                </div>
+   968→              </div>
+   969→              <p className="text-xs text-slate-500 mt-2 text-center">카드 템플릿 미리보기</p>
+   970→            </div>
+   971→          </div>
+   972→          <DialogFooter>
+   973→            <Button
+   974→              variant="outline"
+   975→              className="border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white"
+   976→              onClick={() => setIssueDialogOpen(false)} disabled={saving}
+   977→            >
+   978→              취소
+   979→            </Button>
+   980→            <Button
+   981→              className="bg-sky-600 hover:bg-sky-700 text-white"
+   982→              onClick={handleDirectIssue} disabled={saving}
+   983→            >
+   984→              {saving && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}
+   985→              <CreditCard className="w-4 h-4 mr-1" />
+   986→              발급
+   987→            </Button>
+   988→          </DialogFooter>
+   989→        </DialogContent>
+   990→      </Dialog>
+   991→    </div>
+   992→  );
+   993→}
+   994→

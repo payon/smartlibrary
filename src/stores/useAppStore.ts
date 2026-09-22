@@ -29,6 +29,7 @@ export interface SimUser {
   cardIssued: string;
   isActive: boolean;
   createdAt: string;
+  pin?: string;
 }
 
 /** 도서 정보 인터페이스 */

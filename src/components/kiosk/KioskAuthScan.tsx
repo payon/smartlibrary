@@ -3,9 +3,9 @@
  *
  * [기능]
  * - 회원증 RFID 스캔 안내 (CMS 관리)
- * - 2초 후 자동 인식 시뮬레이션
+ * - 2초 후 자동 인식 시뮬레이션 → DB에서 사용자 조회 → authenticatedUser 설정
  * - 인식 성공 메시지 표시 후 PIN 입력으로 이동
- * - 회원증 없이 이용하기 옵션 (데모용)
+ * - 회원증 없이 이용하기 옵션 (데모용) → PIN 입력으로 이동
  */
 
 'use client';
@@ -19,44 +19,65 @@ import type { SimUser } from '@/stores/useAppStore';
 import { CmsText } from '@/components/kiosk/CmsText';
 
 export default function KioskAuthScan() {
-  const { setScreen, prevScreen, kioskMode, setAuthenticatedUser } = useAppStore();
+  const { setScreen, prevScreen, setAuthenticatedUser } = useAppStore();
   const [status, setStatus] = useState<'scanning' | 'recognized' | 'skipped'>('scanning');
+
+  /** DB에서 데모 사용자를 조회하여 authenticatedUser에 설정 */
+  const fetchAndSetDemoUser = async (): Promise<boolean> => {
+    try {
+      // PIN 1234로 사용자 조회
+      const res = await fetch('/api/users', { headers: { 'X-PIN': '1234' } });
+      if (res.ok) {
+        const users: SimUser[] = await res.json();
+        if (users.length > 0) {
+          setAuthenticatedUser({ ...users[0], pin: '1234' });
+          return true;
+        }
+      }
+
+      // 다른 PIN으로 재시도 (0001~0010)
+      for (let i = 1; i <= 10; i++) {
+        const tryPin = String(i).padStart(4, '0');
+        const retryRes = await fetch('/api/users', { headers: { 'X-PIN': tryPin } });
+        if (retryRes.ok) {
+          const retryUsers: SimUser[] = await retryRes.json();
+          if (retryUsers.length > 0) {
+            setAuthenticatedUser({ ...retryUsers[0], pin: tryPin });
+            return true;
+          }
+        }
+      }
+    } catch {
+      // 네트워크 오류 - 데모 모드로 계속 진행
+    }
+    return false;
+  };
 
   /** 2초 후 자동 인식 시뮬레이션 */
   useEffect(() => {
     const timer = setTimeout(() => {
       setStatus('recognized');
     }, 2000);
-    const moveTimer = setTimeout(() => {
+    const moveTimer = setTimeout(async () => {
+      // 스캔 인식 후 DB에서 사용자 조회
+      await fetchAndSetDemoUser();
+      // PIN 화면으로 이동 (사용자가 있든 없든 PIN 화면에서 처리)
       setScreen('auth-pin');
     }, 3500);
     return () => {
       clearTimeout(timer);
       clearTimeout(moveTimer);
     };
-  }, [setScreen]);
+  }, [setScreen, setAuthenticatedUser]);
 
-  /** 회원증 없이 이용하기 (데모 모드) - DB에서 실제 데모 사용자 조회 */
+  /** 회원증 없이 이용하기 (데모 모드) → PIN 입력으로 이동 */
   const handleSkip = async () => {
     setStatus('skipped');
-    try {
-      const res = await fetch('/api/users', { headers: { 'X-PIN': '1234' } });
-      if (res.ok) {
-        const users: SimUser[] = await res.json();
-        if (users.length > 0) {
-          setAuthenticatedUser(users[0]);
-          toast.success(users[0].name + '님(데모) 환영합니다');
-          setTimeout(() => {
-            setScreen(kioskMode === 'loan' ? 'loan-select' : 'return-insert');
-          }, 500);
-          return;
-        }
-      }
-    } catch {
-      // 조회 실패
-    }
-    toast.error('데모 사용자를 찾을 수 없습니다');
-    setStatus('scanning');
+    // 데모 사용자를 찾아서 설정 (있으면 좋고, 없어도 PIN 화면에서 처리)
+    await fetchAndSetDemoUser();
+    setTimeout(() => {
+      setScreen('auth-pin');
+    }, 500);
   };
 
   return (

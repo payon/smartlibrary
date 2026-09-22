@@ -6,12 +6,25 @@
  * - 키오스크 설정 (자동 타임아웃, 유지보수 모드)
  * - 알림 설정
  * - DB 초기화
+ *
+ * [Enhanced]
+ * - 키오스크 다크 테마 (bg-slate-900 카드, bg-slate-800 입력)
+ * - 카테고리 카드: bg-slate-900 + white text + darker header areas
+ * - 카테고리 아이콘: BookOpen(loan), Monitor(kiosk), Bell(notification), Wrench(general)
+ * - 설정 필드: 다크 입력 (bg-slate-800), sky-blue 저장 버튼
+ * - Boolean 스위치: sky-blue color
+ * - 위험 구역 카드: bg-slate-900 + rose-500 accents
+ * - 섹션 헤더: sky-blue gradient underline accent
+ * - Skeletons: bg-slate-800
  */
 
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Save, Loader2, AlertTriangle, RotateCcw } from 'lucide-react';
+import {
+  Save, Loader2, AlertTriangle, RotateCcw,
+  BookOpen, Monitor, Bell, Wrench,
+} from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -40,6 +53,21 @@ interface KioskConfig {
   label: string;
   category: string;
 }
+
+/* Category icons mapping */
+const CATEGORY_ICONS: Record<string, React.ElementType> = {
+  loan: BookOpen,
+  kiosk: Monitor,
+  notification: Bell,
+  general: Wrench,
+};
+
+const CATEGORY_ICON_COLORS: Record<string, string> = {
+  loan: 'text-emerald-400',
+  kiosk: 'text-sky-400',
+  notification: 'text-amber-400',
+  general: 'text-slate-400',
+};
 
 export default function SettingsSection() {
   const [configs, setConfigs] = useState<KioskConfig[]>([]);
@@ -142,25 +170,25 @@ export default function SettingsSection() {
       return (
         <div className="flex items-center justify-between gap-4">
           <div className="flex-1">
-            <Label className="text-sm font-medium">{config.label}</Label>
+            <Label className="text-sm font-medium text-slate-200">{config.label}</Label>
             {isChanged && (
-              <Badge variant="default" className="text-xs ml-2">변경됨</Badge>
+              <Badge className="text-xs ml-2 bg-sky-500 text-white">변경됨</Badge>
             )}
           </div>
           <div className="flex items-center gap-3">
             <Switch
               checked={checked}
               onCheckedChange={(v) => handleValueChange(config.key, String(v))}
+              className="data-[state=checked]:bg-sky-500"
             />
-            <Button
-              size="sm"
-              variant="outline"
+            <button
               onClick={() => handleSave(config.key)}
               disabled={!isChanged || isSaving}
-              className="h-8"
+              className="h-8 px-3 flex items-center gap-1 rounded-lg bg-gradient-to-r from-sky-600 to-sky-700 text-white text-xs font-medium hover:from-sky-500 hover:to-sky-600 transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-            </Button>
+              저장
+            </button>
           </div>
         </div>
       );
@@ -170,25 +198,24 @@ export default function SettingsSection() {
     if (!isNaN(Number(config.value)) && config.value !== '' && config.value !== '0' && config.key.includes('timeout') || config.key.includes('period') || config.key.includes('max') || config.key.includes('multiplier') || config.key.includes('count')) {
       return (
         <div className="flex items-center gap-3">
-          <Label className="text-sm font-medium min-w-[140px]">{config.label}</Label>
+          <Label className="text-sm font-medium min-w-[140px] text-slate-200">{config.label}</Label>
           <Input
             type="number"
             value={currentValue}
             onChange={(e) => handleValueChange(config.key, e.target.value)}
-            className="h-9 w-28"
+            className="h-9 w-28 bg-slate-800 border-slate-700 text-white focus:ring-sky-500"
           />
           {isChanged && (
-            <Badge variant="default" className="text-xs">변경됨</Badge>
+            <Badge className="text-xs bg-sky-500 text-white">변경됨</Badge>
           )}
-          <Button
-            size="sm"
-            variant="outline"
+          <button
             onClick={() => handleSave(config.key)}
             disabled={!isChanged || isSaving}
-            className="h-8"
+            className="h-8 px-3 flex items-center gap-1 rounded-lg bg-gradient-to-r from-sky-600 to-sky-700 text-white text-xs font-medium hover:from-sky-500 hover:to-sky-600 transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-          </Button>
+            저장
+          </button>
         </div>
       );
     }
@@ -196,111 +223,128 @@ export default function SettingsSection() {
     // 기본 텍스트
     return (
       <div className="flex items-center gap-3">
-        <Label className="text-sm font-medium min-w-[140px]">{config.label}</Label>
+        <Label className="text-sm font-medium min-w-[140px] text-slate-200">{config.label}</Label>
         <Input
           value={currentValue}
           onChange={(e) => handleValueChange(config.key, e.target.value)}
-          className="h-9 flex-1"
+          className="h-9 flex-1 bg-slate-800 border-slate-700 text-white focus:ring-sky-500"
         />
         {isChanged && (
-          <Badge variant="default" className="text-xs">변경됨</Badge>
+          <Badge className="text-xs bg-sky-500 text-white">변경됨</Badge>
         )}
-        <Button
-          size="sm"
-          variant="outline"
+        <button
           onClick={() => handleSave(config.key)}
           disabled={!isChanged || isSaving}
-          className="h-8"
+          className="h-8 px-3 flex items-center gap-1 rounded-lg bg-gradient-to-r from-sky-600 to-sky-700 text-white text-xs font-medium hover:from-sky-500 hover:to-sky-600 transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-        </Button>
+          저장
+        </button>
       </div>
     );
   };
 
   return (
     <div className="space-y-6">
+      {/* ──────── Section Header with sky-blue gradient underline ──────── */}
+      <div className="flex items-center gap-3 mb-2">
+        <h2 className="text-xl font-bold text-white flex items-center gap-2">
+          시스템 설정
+          <span className="block w-16 h-0.5 bg-gradient-to-r from-sky-500 via-sky-400 to-transparent rounded-full" />
+        </h2>
+      </div>
+
       {loading ? (
         <div className="space-y-6">
           {Array.from({ length: 3 }).map((_, i) => (
-            <Card key={i}>
+            <Card key={i} className="bg-slate-900 border-slate-700">
               <CardHeader>
-                <Skeleton className="h-5 w-40" />
-                <Skeleton className="h-4 w-64" />
+                <Skeleton className="h-5 w-40 bg-slate-800" />
+                <Skeleton className="h-4 w-64 bg-slate-800" />
               </CardHeader>
               <CardContent className="space-y-4">
                 {Array.from({ length: 3 }).map((_, j) => (
-                  <Skeleton key={j} className="h-9 w-full" />
+                  <Skeleton key={j} className="h-9 w-full bg-slate-800" />
                 ))}
               </CardContent>
             </Card>
           ))}
         </div>
       ) : Object.keys(groupedConfigs).length === 0 ? (
-        <Card>
-          <CardContent className="p-8 text-center text-muted-foreground">
+        <Card className="bg-slate-900 border-slate-700">
+          <CardContent className="p-8 text-center text-slate-400">
             설정 항목이 없습니다. 시드 데이터를 먼저 실행해주세요.
           </CardContent>
         </Card>
       ) : (
-        Object.entries(groupedConfigs).map(([category, items]) => (
-          <Card key={category} className="shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg">
-                {categoryLabels[category] || category}
-              </CardTitle>
-              <CardDescription>
-                {categoryDescriptions[category] || ''}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {items.map((config) => (
-                <div key={config.key}>
-                  {renderConfigField(config)}
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        ))
+        Object.entries(groupedConfigs).map(([category, items]) => {
+          const IconComp = CATEGORY_ICONS[category] || Wrench;
+          const iconColor = CATEGORY_ICON_COLORS[category] || 'text-slate-400';
+          return (
+            <Card key={category} className="bg-slate-900 text-white border-slate-700 shadow-lg">
+              <CardHeader className="pb-3 bg-slate-800/40 rounded-t-lg border-b border-slate-700/50">
+                <CardTitle className="text-lg text-white flex items-center gap-2">
+                  <IconComp className={`w-5 h-5 ${iconColor}`} />
+                  {categoryLabels[category] || category}
+                </CardTitle>
+                <CardDescription className="text-slate-400">
+                  {categoryDescriptions[category] || ''}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 pt-4">
+                {items.map((config) => (
+                  <div key={config.key}>
+                    {renderConfigField(config)}
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          );
+        })
       )}
 
-      <Separator />
+      <Separator className="bg-slate-700" />
 
-      {/* 위험 구역 */}
-      <Card className="shadow-sm border-destructive/30">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg text-destructive flex items-center gap-2">
-            <AlertTriangle className="w-5 h-5" />
+      {/* ──────── 위험 구역 (Dark bg + rose-500 accents) ──────── */}
+      <Card className="bg-slate-900 text-white border-rose-500/30 shadow-lg">
+        <CardHeader className="pb-3 bg-slate-800/40 rounded-t-lg border-b border-rose-500/20">
+          <CardTitle className="text-lg text-rose-400 flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-rose-500" />
             위험 구역
           </CardTitle>
-          <CardDescription>
+          <CardDescription className="text-slate-400">
             주의: 이 작업은 되돌릴 수 없습니다.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-3 pt-4">
           <AlertDialog>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium">데이터베이스 초기화</p>
-                <p className="text-xs text-muted-foreground">모든 데이터를 삭제하고 기본 데이터로 재설정합니다.</p>
+                <p className="text-sm font-medium text-slate-200">데이터베이스 초기화</p>
+                <p className="text-xs text-slate-400">모든 데이터를 삭제하고 기본 데이터로 재설정합니다.</p>
               </div>
               <AlertDialogTrigger asChild>
-                <Button variant="destructive" size="sm" className="h-9">
+                <Button variant="destructive" size="sm" className="h-9 bg-rose-600 hover:bg-rose-500 text-white">
                   <RotateCcw className="w-4 h-4 mr-1.5" />
                   DB 초기화
                 </Button>
               </AlertDialogTrigger>
             </div>
-            <AlertDialogContent>
+            <AlertDialogContent className="bg-slate-900 border-slate-700 text-white">
               <AlertDialogHeader>
-                <AlertDialogTitle>정말 초기화하시겠습니까?</AlertDialogTitle>
-                <AlertDialogDescription>
+                <AlertDialogTitle className="text-white">정말 초기화하시겠습니까?</AlertDialogTitle>
+                <AlertDialogDescription className="text-slate-400">
                   모든 대출 기록, 사용자, 도서 데이터가 삭제되고 기본 시드 데이터로 복원됩니다. 이 작업은 되돌릴 수 없습니다.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel>취소</AlertDialogCancel>
-                <AlertDialogAction onClick={handleResetDB} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                <AlertDialogCancel className="border-slate-600 text-slate-300 hover:bg-slate-800 hover:text-white">
+                  취소
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={handleResetDB}
+                  className="bg-rose-600 text-white hover:bg-rose-500"
+                >
                   초기화
                 </AlertDialogAction>
               </AlertDialogFooter>

@@ -6,12 +6,17 @@
  * - 텍스트, 색상, 이미지, JSON 타입 지원
  * - 개별/일괄 저장
  * - 기본값 복원
+ * - 키오스크 스크린 프리뷰 패널
  */
 
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Save, RotateCcw, Loader2, ImageIcon, Type, Palette, FileJson } from 'lucide-react';
+import {
+  Save, RotateCcw, Loader2, ImageIcon, Type, Palette, FileJson,
+  Library, CreditCard, ScanLine, Lock, BookOpen, Monitor,
+  ArrowRight, Home,
+} from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -45,6 +50,125 @@ const SCREENS = [
   { value: 'return-complete', label: '반납 완료' },
   { value: 'global', label: '전역 설정' },
 ] as const;
+
+/** Screen preview mock content renderer */
+function ScreenPreview({ screen }: { screen: string }) {
+  const screenLabel = SCREENS.find((s) => s.value === screen)?.label || screen;
+
+  const renderContent = () => {
+    switch (screen) {
+      case 'idle':
+        return (
+          <div className="flex flex-col items-center justify-center h-full gap-3">
+            <div className="relative">
+              <div className="absolute inset-0 bg-sky-400/20 rounded-full blur-xl" />
+              <Library className="w-12 h-12 text-sky-400 relative z-10" />
+            </div>
+            <p className="text-sky-400 text-sm font-bold tracking-widest">SMART</p>
+            <p className="text-sky-400 text-sm font-bold tracking-widest">LIBRARY</p>
+            <p className="text-slate-500 text-[10px] mt-2">터치하여 시작</p>
+          </div>
+        );
+      case 'main-menu':
+        return (
+          <div className="flex flex-col items-center justify-center h-full gap-3 px-4">
+            <p className="text-sky-400 text-xs font-bold tracking-wider mb-2">메인 메뉴</p>
+            {[
+              { icon: CreditCard, label: '도서카드 발급', color: 'bg-sky-500' },
+              { icon: BookOpen, label: '도서 대출', color: 'bg-emerald-500' },
+              { icon: ArrowRight, label: '도서 반납', color: 'bg-amber-500' },
+            ].map((btn, i) => (
+              <div
+                key={i}
+                className={`w-full ${btn.color} rounded-lg py-2.5 px-3 flex items-center gap-2`}
+              >
+                <btn.icon className="w-4 h-4 text-white" />
+                <span className="text-white text-xs font-medium">{btn.label}</span>
+              </div>
+            ))}
+          </div>
+        );
+      case 'auth-scan':
+        return (
+          <div className="flex flex-col items-center justify-center h-full gap-3">
+            <div className="relative">
+              <div className="absolute inset-0 bg-sky-400/20 rounded-full blur-lg" />
+              <ScanLine className="w-12 h-12 text-sky-400 relative z-10" />
+            </div>
+            <p className="text-white text-sm font-medium">도서카드를</p>
+            <p className="text-white text-sm font-medium">스캔하세요</p>
+            <div className="w-20 h-1 bg-sky-500/30 rounded mt-2" />
+          </div>
+        );
+      case 'auth-pin':
+        return (
+          <div className="flex flex-col items-center justify-center h-full gap-3">
+            <Lock className="w-10 h-10 text-sky-400" />
+            <p className="text-white text-sm font-medium">PIN 번호 입력</p>
+            <div className="grid grid-cols-3 gap-1.5 mt-1">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, '', 0, '←'].map((k, i) => (
+                <div
+                  key={i}
+                  className="w-7 h-7 rounded bg-slate-700 flex items-center justify-center text-[10px] text-slate-300"
+                >
+                  {k}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      case 'loan-select':
+        return (
+          <div className="flex flex-col items-center justify-center h-full gap-3">
+            <BookOpen className="w-10 h-10 text-emerald-400" />
+            <p className="text-white text-sm font-medium">도서를 선택하세요</p>
+            <div className="w-full px-4 space-y-1.5 mt-1">
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="w-full h-6 bg-slate-700/60 rounded flex items-center px-2"
+                >
+                  <div className="w-3 h-3 bg-slate-600 rounded-sm mr-2" />
+                  <div className="w-16 h-1.5 bg-slate-600 rounded" />
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      default:
+        return (
+          <div className="flex flex-col items-center justify-center h-full gap-3">
+            <Monitor className="w-10 h-10 text-slate-500" />
+            <p className="text-slate-400 text-xs font-medium">{screenLabel}</p>
+            <p className="text-slate-600 text-[10px]">화면 미리보기</p>
+          </div>
+        );
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <p className="text-slate-400 text-xs font-medium">스크린 프리뷰</p>
+      <div
+        className="w-[200px] h-[320px] rounded-2xl overflow-hidden border-2 border-slate-700 shadow-lg"
+        style={{ background: '#0b1120' }}
+      >
+        {/* Top status bar mockup */}
+        <div className="h-6 bg-slate-800/80 flex items-center justify-between px-3">
+          <div className="flex items-center gap-1">
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            <span className="text-[8px] text-slate-400">온라인</span>
+          </div>
+          <span className="text-[8px] text-slate-500">12:00</span>
+        </div>
+        {/* Screen content */}
+        <div className="h-[calc(100%-24px)]">
+          {renderContent()}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function ContentSection() {
   const [activeScreen, setActiveScreen] = useState('idle');
@@ -173,18 +297,19 @@ export default function ContentSection() {
 
   const getTypeBadge = (type: string) => {
     const colors: Record<string, string> = {
-      text: 'bg-emerald-100 text-emerald-700',
-      image: 'bg-blue-100 text-blue-700',
-      color: 'bg-violet-100 text-violet-700',
-      json: 'bg-amber-100 text-amber-700',
-      number: 'bg-slate-100 text-slate-700',
+      text: 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30',
+      image: 'bg-sky-500/20 text-sky-400 border border-sky-500/30',
+      color: 'bg-violet-500/20 text-violet-400 border border-violet-500/30',
+      json: 'bg-amber-500/20 text-amber-400 border border-amber-500/30',
+      number: 'bg-slate-500/20 text-slate-400 border border-slate-500/30',
     };
-    return colors[type] || 'bg-slate-100 text-slate-700';
+    return colors[type] || 'bg-slate-500/20 text-slate-400 border border-slate-500/30';
   };
 
   const renderField = (item: ContentItem) => {
     const currentValue = editedValues[item.key] ?? item.value;
     const isChanged = currentValue !== item.value;
+    const inputBase = 'bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 focus-visible:ring-sky-500';
 
     switch (item.type) {
       case 'color':
@@ -194,12 +319,12 @@ export default function ContentSection() {
               type="color"
               value={currentValue || '#000000'}
               onChange={(e) => handleValueChange(item.key, e.target.value)}
-              className="w-12 h-12 rounded-lg border-2 cursor-pointer shrink-0"
+              className="w-12 h-12 rounded-lg border-2 border-slate-700 cursor-pointer shrink-0"
             />
             <Input
               value={currentValue}
               onChange={(e) => handleValueChange(item.key, e.target.value)}
-              className="flex-1 h-12"
+              className={`flex-1 h-12 ${inputBase}`}
               placeholder="#000000"
             />
           </div>
@@ -210,11 +335,11 @@ export default function ContentSection() {
             <Input
               value={currentValue}
               onChange={(e) => handleValueChange(item.key, e.target.value)}
-              className="h-12"
+              className={`h-12 ${inputBase}`}
               placeholder="이미지 URL 입력"
             />
             {currentValue && (
-              <div className="w-32 h-24 rounded-lg overflow-hidden border bg-muted">
+              <div className="w-32 h-24 rounded-lg overflow-hidden border border-slate-700 bg-slate-800">
                 <img
                   src={currentValue}
                   alt="콘텐츠 이미지 미리보기"
@@ -232,7 +357,7 @@ export default function ContentSection() {
           <Textarea
             value={currentValue}
             onChange={(e) => handleValueChange(item.key, e.target.value)}
-            className="min-h-[120px] font-mono text-sm"
+            className={`min-h-[120px] font-mono text-sm ${inputBase}`}
             placeholder="JSON 형식으로 입력"
           />
         );
@@ -242,7 +367,7 @@ export default function ContentSection() {
             type="number"
             value={currentValue}
             onChange={(e) => handleValueChange(item.key, e.target.value)}
-            className="h-12"
+            className={`h-12 ${inputBase}`}
           />
         );
       default:
@@ -250,7 +375,7 @@ export default function ContentSection() {
           <Input
             value={currentValue}
             onChange={(e) => handleValueChange(item.key, e.target.value)}
-            className="h-12"
+            className={`h-12 ${inputBase}`}
           />
         );
     }
@@ -262,50 +387,52 @@ export default function ContentSection() {
 
   return (
     <div className="space-y-4">
+      {/* Section Header with sky-blue gradient underline */}
+      <div className="relative">
+        <h2 className="text-xl font-bold text-white">콘텐츠 관리</h2>
+        <div className="absolute -bottom-1 left-0 h-0.5 w-32 bg-gradient-to-r from-sky-500 via-sky-400 to-transparent" />
+      </div>
+
       {/* 상단 액션 바 */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2">
           {changedCount > 0 && (
-            <Badge variant="secondary" className="text-sm">
+            <Badge className="text-sm bg-sky-500/20 text-sky-400 border border-sky-500/30">
               {changedCount}개 변경됨
             </Badge>
           )}
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
+          <button
             onClick={handleReset}
-            className="h-9"
+            className="h-9 px-3 text-sm rounded-lg bg-gradient-to-r from-slate-600 to-slate-700 text-slate-200 hover:from-slate-500 hover:to-slate-600 transition-all flex items-center gap-1.5 border border-slate-500/30"
           >
-            <RotateCcw className="w-4 h-4 mr-1.5" />
+            <RotateCcw className="w-4 h-4" />
             기본값 복원
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
+          </button>
+          <button
             onClick={handleBulkSave}
             disabled={bulkSaving || changedCount === 0}
-            className="h-9"
+            className="h-9 px-3 text-sm rounded-lg bg-gradient-to-r from-sky-500 to-sky-600 text-white hover:from-sky-400 hover:to-sky-500 transition-all flex items-center gap-1.5 shadow-lg shadow-sky-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {bulkSaving ? (
-              <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+              <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
-              <Save className="w-4 h-4 mr-1.5" />
+              <Save className="w-4 h-4" />
             )}
             일괄 저장
-          </Button>
+          </button>
         </div>
       </div>
 
       {/* 화면 탭 */}
       <Tabs value={activeScreen} onValueChange={setActiveScreen}>
-        <TabsList className="flex flex-wrap h-auto gap-1 bg-transparent p-0">
+        <TabsList className="flex flex-wrap h-auto gap-1 bg-slate-900 p-1.5 border border-slate-700 rounded-xl">
           {SCREENS.map((screen) => (
             <TabsTrigger
               key={screen.value}
               value={screen.value}
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-3 py-1.5 text-sm rounded-lg border border-border"
+              className="data-[state=active]:bg-sky-500 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=active]:shadow-sky-500/20 px-3 py-1.5 text-sm rounded-lg text-slate-400 hover:text-slate-200 transition-colors"
             >
               {screen.label}
             </TabsTrigger>
@@ -314,70 +441,87 @@ export default function ContentSection() {
 
         {SCREENS.map((screen) => (
           <TabsContent key={screen.value} value={screen.value} className="mt-4">
-            {loading ? (
-              <div className="space-y-4">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <Card key={i}>
-                    <CardContent className="p-4">
-                      <Skeleton className="h-10 w-full" />
+            <div className="flex gap-6 items-start">
+              {/* Editor area */}
+              <div className="flex-1 min-w-0">
+                {loading ? (
+                  <div className="space-y-4">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <Card key={i} className="bg-slate-900 border-slate-700">
+                        <CardContent className="p-4">
+                          <Skeleton className="h-10 w-full bg-slate-800" />
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                ) : items.length === 0 ? (
+                  <Card className="bg-slate-900 border-slate-700">
+                    <CardContent className="p-8 text-center">
+                      <p className="text-slate-400">해당 화면에 편집 가능한 콘텐츠가 없습니다.</p>
                     </CardContent>
                   </Card>
-                ))}
-              </div>
-            ) : items.length === 0 ? (
-              <Card>
-                <CardContent className="p-8 text-center">
-                  <p className="text-muted-foreground">해당 화면에 편집 가능한 콘텐츠가 없습니다.</p>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="space-y-3">
-                {items.map((item) => {
-                  const isChanged = (editedValues[item.key] ?? item.value) !== item.value;
-                  const isSaving = saving.has(item.key);
+                ) : (
+                  <div className="space-y-3">
+                    {items.map((item) => {
+                      const isChanged = (editedValues[item.key] ?? item.value) !== item.value;
+                      const isSaving = saving.has(item.key);
 
-                  return (
-                    <Card key={item.id} className={`shadow-sm ${isChanged ? 'ring-2 ring-primary/30' : ''}`}>
-                      <CardContent className="p-4">
-                        <div className="flex items-start gap-4">
-                          <div className="flex-1 space-y-2">
-                            <div className="flex items-center gap-2">
-                              {getTypeIcon(item.type)}
-                              <Label className="text-sm font-medium">{item.label}</Label>
-                              <Badge variant="secondary" className={`text-xs px-1.5 py-0 ${getTypeBadge(item.type)}`}>
-                                {item.type}
-                              </Badge>
-                              <span className="text-xs text-muted-foreground font-mono">
-                                {item.key}
-                              </span>
-                              {isChanged && (
-                                <Badge variant="default" className="text-xs px-1.5 py-0">
-                                  변경됨
-                                </Badge>
-                              )}
+                      return (
+                        <Card
+                          key={item.id}
+                          className={`bg-slate-900 border-slate-700 text-white shadow-sm ${isChanged ? 'ring-2 ring-sky-500/40' : ''}`}
+                        >
+                          <CardContent className="p-4">
+                            <div className="flex items-start gap-4">
+                              <div className="flex-1 space-y-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sky-400">{getTypeIcon(item.type)}</span>
+                                  <Label className="text-sm font-medium text-white">{item.label}</Label>
+                                  <span className={`text-xs px-1.5 py-0.5 rounded ${getTypeBadge(item.type)}`}>
+                                    {item.type}
+                                  </span>
+                                  <span className="text-xs text-slate-500 font-mono">
+                                    {item.key}
+                                  </span>
+                                  {isChanged && (
+                                    <Badge className="text-xs px-1.5 py-0 bg-sky-500/20 text-sky-400 border border-sky-500/30">
+                                      변경됨
+                                    </Badge>
+                                  )}
+                                </div>
+                                {renderField(item)}
+                              </div>
+                              <Button
+                                size="sm"
+                                onClick={() => handleSave(item.key)}
+                                disabled={!isChanged || isSaving}
+                                className="h-9 shrink-0 mt-6 bg-sky-600 hover:bg-sky-500 text-white disabled:opacity-40"
+                              >
+                                {isSaving ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Save className="w-4 h-4" />
+                                )}
+                              </Button>
                             </div>
-                            {renderField(item)}
-                          </div>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleSave(item.key)}
-                            disabled={!isChanged || isSaving}
-                            className="h-9 shrink-0 mt-6"
-                          >
-                            {isSaving ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Save className="w-4 h-4" />
-                            )}
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-            )}
+
+              {/* Screen Preview Panel - visible on lg screens, above editor on mobile */}
+              <div className="hidden lg:block shrink-0 sticky top-4">
+                <ScreenPreview screen={screen.value} />
+              </div>
+            </div>
+
+            {/* Mobile preview - shown above editor on smaller screens */}
+            <div className="lg:hidden mt-4 flex justify-center">
+              <ScreenPreview screen={screen.value} />
+            </div>
           </TabsContent>
         ))}
       </Tabs>

@@ -16,9 +16,9 @@
 'use client';
 
 import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
-import { ArrowLeft, User, CalendarDays, Phone, MapPin, CreditCard, Send } from 'lucide-react';
+import { ArrowLeft, User, CalendarDays, Phone, MapPin, CreditCard, Send, AlertCircle } from 'lucide-react';
 import { CmsText } from '@/components/kiosk/CmsText';
 
 /** 폼 에러 타입 */
@@ -37,6 +37,7 @@ export default function KioskCardForm() {
   const [address, setAddress] = useState(cardApplication?.address ?? '');
   const [errors, setErrors] = useState<FormErrors>({});
   const [submitting, setSubmitting] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   const cardType = cardApplication?.cardType ?? 'mobile';
   const isMobile = cardType === 'mobile';
@@ -88,6 +89,8 @@ export default function KioskCardForm() {
     // 스토어에 저장
     setCardApplication(applicationData);
 
+    setApiError(null);
+
     try {
       // API 호출
       const res = await fetch('/api/card-application', {
@@ -114,21 +117,23 @@ export default function KioskCardForm() {
             userId: null,
           });
         }
+
+        // 화면 전환: 모바일은 완료, 실물은 대기
+        if (isMobile) {
+          setScreen('card-complete');
+        } else {
+          setScreen('card-pending');
+        }
       } else {
         const data = await res.json().catch(() => ({}));
         console.error('카드 신청 오류:', data);
+        setApiError(data.error || '카드 신청 처리 중 오류가 발생했습니다');
         setCardResult(null);
       }
     } catch (err) {
       console.error('카드 신청 네트워크 오류:', err);
+      setApiError('네트워크 오류가 발생했습니다. 다시 시도해주세요.');
       setCardResult(null);
-    }
-
-    // 화면 전환: 모바일은 완료, 실물은 대기
-    if (isMobile) {
-      setScreen('card-complete');
-    } else {
-      setScreen('card-pending');
     }
 
     setSubmitting(false);
@@ -309,6 +314,30 @@ export default function KioskCardForm() {
           />
         </motion.div>
       </main>
+
+      {/* API 오류 메시지 */}
+      <AnimatePresence>
+        {apiError && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            transition={{ duration: 0.3 }}
+            className="px-8 pb-2"
+          >
+            <div
+              className="rounded-xl p-4 flex items-center gap-3"
+              style={{
+                background: 'rgba(239, 68, 68, 0.08)',
+                border: '1px solid rgba(239, 68, 68, 0.15)',
+              }}
+            >
+              <AlertCircle className="w-5 h-5 text-red-400 shrink-0" />
+              <p className="text-sm text-red-300">{apiError}</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* 제출 버튼 */}
       <footer className="pb-8 px-8 pt-4">

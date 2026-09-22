@@ -1,0 +1,663 @@
+     1→/**
+     2→ * 도서카드 발급 관리 섹션
+     3→ *
+     4→ * [역할]
+     5→ * - 도서카드 발급 신청 목록 조회 (상태별 필터)
+     6→ * - 승인/거부/발급/취소 액션
+     7→ * - 관리자 직접 발급
+     8→ * - 신청 상세 정보 다이얼로그
+     9→ * - 발급 통계 대시보드
+    10→ */
+    11→
+    12→'use client';
+    13→
+    14→import { useEffect, useState, useCallback } from 'react';
+    15→import {
+    16→  CreditCard, CheckCircle2, XCircle, Clock, Search, Loader2,
+    17→  Plus, Eye, Trash2, CardIcon, UserPlus, AlertCircle
+    18→} from 'lucide-react';
+    19→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+    20→import { Button } from '@/components/ui/button';
+    21→import { Input } from '@/components/ui/input';
+    22→import { Label } from '@/components/ui/label';
+    23→import { Badge } from '@/components/ui/badge';
+    24→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+    25→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+    26→import { Textarea } from '@/components/ui/textarea';
+    27→import {
+    28→  Table,
+    29→  TableBody,
+    30→  TableCell,
+    31→  TableHead,
+    32→  TableHeader,
+    33→  TableRow,
+    34→} from '@/components/ui/table';
+    35→import {
+    36→  Dialog,
+    37→  DialogContent,
+    38→  DialogDescription,
+    39→  DialogFooter,
+    40→  DialogHeader,
+    41→  DialogTitle,
+    42→} from '@/components/ui/dialog';
+    43→import { Skeleton } from '@/components/ui/skeleton';
+    44→import { toast } from 'sonner';
+    45→
+    46→// ============================================================================
+    47→// 타입 정의
+    48→// ============================================================================
+    49→
+    50→interface LibraryCard {
+    51→  id: string;
+    52→  applicantName: string;
+    53→  birthDate: string;
+    54→  phone: string;
+    55→  address: string | null;
+    56→  cardType: string;
+    57→  cardNumber: string | null;
+    58→  status: string;
+    59→  appliedAt: string;
+    60→  approvedAt: string | null;
+    61→  approvedBy: string | null;
+    62→  issuedAt: string | null;
+    63→  userId: string | null;
+    64→  createdAt: string;
+    65→  updatedAt: string;
+    66→}
+    67→
+    68→interface CardStats {
+    69→  total: number;
+    70→  pending: number;
+    71→  approved: number;
+    72→  issued: number;
+    73→  rejected: number;
+    74→}
+    75→
+    76→// ============================================================================
+    77→// 상태 매핑
+    78→// ============================================================================
+    79→
+    80→const STATUS_LABELS: Record<string, string> = {
+    81→  pending: '대기',
+    82→  approved: '승인',
+    83→  issued: '발급완료',
+    84→  rejected: '거부',
+    85→};
+    86→
+    87→const STATUS_COLORS: Record<string, string> = {
+    88→  pending: 'bg-amber-100 text-amber-700',
+    89→  approved: 'bg-sky-100 text-sky-700',
+    90→  issued: 'bg-emerald-100 text-emerald-700',
+    91→  rejected: 'bg-rose-100 text-rose-700',
+    92→};
+    93→
+    94→const CARD_TYPE_LABELS: Record<string, string> = {
+    95→  mobile: '모바일',
+    96→  physical: '실물카드',
+    97→};
+    98→
+    99→// ============================================================================
+   100→// 메인 컴포넌트
+   101→// ============================================================================
+   102→
+   103→export default function CardsSection() {
+   104→  // 상태
+   105→  const [cards, setCards] = useState<LibraryCard[]>([]);
+   106→  const [stats, setStats] = useState<CardStats>({ total: 0, pending: 0, approved: 0, issued: 0, rejected: 0 });
+   107→  const [loading, setLoading] = useState(true);
+   108→  const [search, setSearch] = useState('');
+   109→  const [statusFilter, setStatusFilter] = useState<string>('all');
+   110→  const [cardTypeFilter, setCardTypeFilter] = useState<string>('all');
+   111→
+   112→  // 다이얼로그
+   113→  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
+   114→  const [issueDialogOpen, setIssueDialogOpen] = useState(false);
+   115→  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+   116→  const [selectedCard, setSelectedCard] = useState<LibraryCard | null>(null);
+   117→  const [rejectReason, setRejectReason] = useState('');
+   118→  const [saving, setSaving] = useState(false);
+   119→
+   120→  // 직접 발급 폼
+   121→  const [issueForm, setIssueForm] = useState({
+   122→    applicantName: '',
+   123→    birthDate: '',
+   124→    phone: '',
+   125→    address: '',
+   126→    cardType: 'mobile',
+   127→  });
+   128→
+   129→  // ==========================================================================
+   130→  // 데이터 로드
+   131→  // ==========================================================================
+   132→
+   133→  const fetchCards = useCallback(async (searchVal?: string, statusVal?: string, cardTypeVal?: string) => {
+   134→    try {
+   135→      setLoading(true);
+   136→      const params = new URLSearchParams();
+   137→      if (searchVal) params.set('search', searchVal);
+   138→      if (statusVal && statusVal !== 'all') params.set('status', statusVal);
+   139→      if (cardTypeVal && cardTypeVal !== 'all') params.set('cardType', cardTypeVal);
+   140→      const res = await fetch(`/api/admin/cards?${params.toString()}`);
+   141→      if (!res.ok) throw new Error();
+   142→      const json = await res.json();
+   143→      setCards(json.cards || []);
+   144→      if (json.stats) setStats(json.stats);
+   145→    } catch {
+   146→      toast.error('도서카드 목록을 불러오는데 실패했습니다.');
+   147→    } finally {
+   148→      setLoading(false);
+   149→    }
+   150→  }, []);
+   151→
+   152→  useEffect(() => {
+   153→    fetchCards();
+   154→  }, [fetchCards]);
+   155→
+   156→  // ==========================================================================
+   157→  // 액션 핸들러
+   158→  // ==========================================================================
+   159→
+   160→  const handleCardAction = async (cardId: string, action: string, extra?: Record<string, unknown>) => {
+   161→    setSaving(true);
+   162→    try {
+   163→      const res = await fetch(`/api/admin/cards/${cardId}`, {
+   164→        method: 'PUT',
+   165→        headers: { 'Content-Type': 'application/json' },
+   166→        body: JSON.stringify({ action, ...extra }),
+   167→      });
+   168→      if (!res.ok) {
+   169→        const data = await res.json();
+   170→        throw new Error(data.error || '작업 실패');
+   171→      }
+   172→      const data = await res.json();
+   173→      toast.success(data.message || '작업이 완료되었습니다.');
+   174→      await fetchCards(search, statusFilter, cardTypeFilter);
+   175→    } catch (err) {
+   176→      toast.error(err instanceof Error ? err.message : '작업에 실패했습니다.');
+   177→    } finally {
+   178→      setSaving(false);
+   179→    }
+   180→  };
+   181→
+   182→  const handleApprove = (card: LibraryCard) => handleCardAction(card.id, 'approve');
+   183→  const handleIssue = (card: LibraryCard) => handleCardAction(card.id, 'issue');
+   184→
+   185→  const handleReject = async () => {
+   186→    if (!selectedCard) return;
+   187→    await handleCardAction(selectedCard.id, 'reject', { reason: rejectReason });
+   188→    setRejectDialogOpen(false);
+   189→    setRejectReason('');
+   190→    setSelectedCard(null);
+   191→  };
+   192→
+   193→  const handleDelete = async (card: LibraryCard) => {
+   194→    if (!confirm(`'${card.applicantName}'님의 도서카드 신청을 삭제하시겠습니까?`)) return;
+   195→    try {
+   196→      const res = await fetch(`/api/admin/cards/${card.id}`, { method: 'DELETE' });
+   197→      if (!res.ok) throw new Error();
+   198→      toast.success('도서카드 신청이 삭제되었습니다.');
+   199→      await fetchCards(search, statusFilter, cardTypeFilter);
+   200→    } catch {
+   201→      toast.error('삭제에 실패했습니다.');
+   202→    }
+   203→  };
+   204→
+   205→  const handleDirectIssue = async () => {
+   206→    const { applicantName, birthDate, phone } = issueForm;
+   207→    if (!applicantName || !birthDate || !phone) {
+   208→      toast.error('이름, 생년월일, 전화번호는 필수입니다.');
+   209→      return;
+   210→    }
+   211→    if (birthDate.length !== 8) {
+   212→      toast.error('생년월일은 8자리로 입력하세요.');
+   213→      return;
+   214→    }
+   215→    setSaving(true);
+   216→    try {
+   217→      const res = await fetch('/api/admin/cards', {
+   218→        method: 'POST',
+   219→        headers: { 'Content-Type': 'application/json' },
+   220→        body: JSON.stringify(issueForm),
+   221→      });
+   222→      if (!res.ok) {
+   223→        const data = await res.json();
+   224→        throw new Error(data.error || '발급 실패');
+   225→      }
+   226→      const data = await res.json();
+   227→      toast.success(`도서카드가 발급되었습니다. (카드번호: ${data.card?.cardNumber})`);
+   228→      setIssueDialogOpen(false);
+   229→      setIssueForm({ applicantName: '', birthDate: '', phone: '', address: '', cardType: 'mobile' });
+   230→      await fetchCards(search, statusFilter, cardTypeFilter);
+   231→    } catch (err) {
+   232→      toast.error(err instanceof Error ? err.message : '발급에 실패했습니다.');
+   233→    } finally {
+   234→      setSaving(false);
+   235→    }
+   236→  };
+   237→
+   238→  const openDetail = (card: LibraryCard) => {
+   239→    setSelectedCard(card);
+   240→    setDetailDialogOpen(true);
+   241→  };
+   242→
+   243→  const openReject = (card: LibraryCard) => {
+   244→    setSelectedCard(card);
+   245→    setRejectDialogOpen(true);
+   246→  };
+   247→
+   248→  // ==========================================================================
+   249→  // 렌더
+   250→  // ==========================================================================
+   251→
+   252→  const formatDate = (d: string | null) =>
+   253→    d ? new Date(d).toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }) : '-';
+   254→
+   255→  const formatDateTime = (d: string | null) =>
+   256→    d ? new Date(d).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-';
+   257→
+   258→  return (
+   259→    <div className="space-y-4">
+   260→      {/* ── 통계 카드 ──────────────────────────────────────────────── */}
+   261→      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+   262→        <Card className="shadow-sm">
+   263→          <CardContent className="p-3 text-center">
+   264→            <div className="text-xs text-muted-foreground mb-1">전체</div>
+   265→            <div className="text-xl font-bold">{stats.total}</div>
+   266→          </CardContent>
+   267→        </Card>
+   268→        <Card className="shadow-sm border-amber-200">
+   269→          <CardContent className="p-3 text-center">
+   270→            <div className="text-xs text-amber-600 mb-1 flex items-center justify-center gap-1">
+   271→              <Clock className="w-3 h-3" /> 대기
+   272→            </div>
+   273→            <div className="text-xl font-bold text-amber-700">{stats.pending}</div>
+   274→          </CardContent>
+   275→        </Card>
+   276→        <Card className="shadow-sm border-sky-200">
+   277→          <CardContent className="p-3 text-center">
+   278→            <div className="text-xs text-sky-600 mb-1 flex items-center justify-center gap-1">
+   279→              <CheckCircle2 className="w-3 h-3" /> 승인
+   280→            </div>
+   281→            <div className="text-xl font-bold text-sky-700">{stats.approved}</div>
+   282→          </CardContent>
+   283→        </Card>
+   284→        <Card className="shadow-sm border-emerald-200">
+   285→          <CardContent className="p-3 text-center">
+   286→            <div className="text-xs text-emerald-600 mb-1 flex items-center justify-center gap-1">
+   287→              <CreditCard className="w-3 h-3" /> 발급완료
+   288→            </div>
+   289→            <div className="text-xl font-bold text-emerald-700">{stats.issued}</div>
+   290→          </CardContent>
+   291→        </Card>
+   292→        <Card className="shadow-sm border-rose-200 col-span-2 sm:col-span-1">
+   293→          <CardContent className="p-3 text-center">
+   294→            <div className="text-xs text-rose-600 mb-1 flex items-center justify-center gap-1">
+   295→              <XCircle className="w-3 h-3" /> 거부
+   296→            </div>
+   297→            <div className="text-xl font-bold text-rose-700">{stats.rejected}</div>
+   298→          </CardContent>
+   299→        </Card>
+   300→      </div>
+   301→
+   302→      {/* ── 필터 & 액션 바 ────────────────────────────────────────── */}
+   303→      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+   304→        <div className="relative flex-1 max-w-sm">
+   305→          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+   306→          <Input
+   307→            placeholder="이름, 전화번호, 카드번호 검색..."
+   308→            value={search}
+   309→            onChange={(e) => setSearch(e.target.value)}
+   310→            onBlur={() => fetchCards(search, statusFilter, cardTypeFilter)}
+   311→            onKeyDown={(e) => e.key === 'Enter' && fetchCards(search, statusFilter, cardTypeFilter)}
+   312→            className="pl-9 h-10"
+   313→          />
+   314→        </div>
+   315→        <div className="flex items-center gap-2">
+   316→          <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); fetchCards(search, v, cardTypeFilter); }}>
+   317→            <SelectTrigger className="h-10 w-28">
+   318→              <SelectValue placeholder="상태" />
+   319→            </SelectTrigger>
+   320→            <SelectContent>
+   321→              <SelectItem value="all">전체 상태</SelectItem>
+   322→              <SelectItem value="pending">대기</SelectItem>
+   323→              <SelectItem value="approved">승인</SelectItem>
+   324→              <SelectItem value="issued">발급완료</SelectItem>
+   325→              <SelectItem value="rejected">거부</SelectItem>
+   326→            </SelectContent>
+   327→          </Select>
+   328→          <Select value={cardTypeFilter} onValueChange={(v) => { setCardTypeFilter(v); fetchCards(search, statusFilter, v); }}>
+   329→            <SelectTrigger className="h-10 w-28">
+   330→              <SelectValue placeholder="유형" />
+   331→            </SelectTrigger>
+   332→            <SelectContent>
+   333→              <SelectItem value="all">전체 유형</SelectItem>
+   334→              <SelectItem value="mobile">모바일</SelectItem>
+   335→              <SelectItem value="physical">실물카드</SelectItem>
+   336→            </SelectContent>
+   337→          </Select>
+   338→        </div>
+   339→        <div className="flex items-center gap-2 ml-auto">
+   340→          {stats.pending > 0 && (
+   341→            <Button
+   342→              variant="outline"
+   343→              size="sm"
+   344→              className="h-9 text-amber-700 border-amber-300 hover:bg-amber-50"
+   345→              onClick={() => { setStatusFilter('pending'); fetchCards(search, 'pending', cardTypeFilter); }}
+   346→            >
+   347→              <AlertCircle className="w-4 h-4 mr-1" />
+   348→              대기 {stats.pending}건
+   349→            </Button>
+   350→          )}
+   351→          <Button onClick={() => setIssueDialogOpen(true)} className="h-10">
+   352→            <Plus className="w-4 h-4 mr-1.5" />
+   353→            직접 발급
+   354→          </Button>
+   355→        </div>
+   356→      </div>
+   357→
+   358→      {/* ── 도서카드 목록 테이블 ───────────────────────────────────── */}
+   359→      <Card className="shadow-sm">
+   360→        <CardContent className="p-0">
+   361→          <div className="overflow-x-auto">
+   362→            <Table>
+   363→              <TableHeader>
+   364→                <TableRow>
+   365→                  <TableHead>신청자</TableHead>
+   366→                  <TableHead className="hidden md:table-cell">전화번호</TableHead>
+   367→                  <TableHead>카드유형</TableHead>
+   368→                  <TableHead>카드번호</TableHead>
+   369→                  <TableHead>상태</TableHead>
+   370→                  <TableHead className="hidden lg:table-cell">신청일</TableHead>
+   371→                  <TableHead className="text-center">관리</TableHead>
+   372→                </TableRow>
+   373→              </TableHeader>
+   374→              <TableBody>
+   375→                {loading ? (
+   376→                  Array.from({ length: 5 }).map((_, i) => (
+   377→                    <TableRow key={i}>
+   378→                      <TableCell colSpan={7}><Skeleton className="h-8 w-full" /></TableCell>
+   379→                    </TableRow>
+   380→                  ))
+   381→                ) : cards.length === 0 ? (
+   382→                  <TableRow>
+   383→                    <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+   384→                      <CreditCard className="w-8 h-8 mx-auto mb-2 opacity-40" />
+   385→                      도서카드 발급 신청이 없습니다.
+   386→                    </TableCell>
+   387→                  </TableRow>
+   388→                ) : (
+   389→                  cards.map((card) => (
+   390→                    <TableRow key={card.id} className="group">
+   391→                      <TableCell className="font-medium text-sm">{card.applicantName}</TableCell>
+   392→                      <TableCell className="hidden md:table-cell text-sm">{card.phone}</TableCell>
+   393→                      <TableCell>
+   394→                        <Badge variant="outline" className="text-xs">
+   395→                          {CARD_TYPE_LABELS[card.cardType] || card.cardType}
+   396→                        </Badge>
+   397→                      </TableCell>
+   398→                      <TableCell className="text-sm font-mono">
+   399→                        {card.cardNumber || '-'}
+   400→                      </TableCell>
+   401→                      <TableCell>
+   402→                        <Badge className={`text-xs ${STATUS_COLORS[card.status] || ''}`}>
+   403→                          {STATUS_LABELS[card.status] || card.status}
+   404→                        </Badge>
+   405→                      </TableCell>
+   406→                      <TableCell className="hidden lg:table-cell text-xs text-muted-foreground">
+   407→                        {formatDate(card.appliedAt)}
+   408→                      </TableCell>
+   409→                      <TableCell>
+   410→                        <div className="flex items-center justify-center gap-1">
+   411→                          {/* 상세 보기 */}
+   412→                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openDetail(card)}>
+   413→                            <Eye className="w-4 h-4" />
+   414→                          </Button>
+   415→
+   416→                          {/* 상태별 액션 */}
+   417→                          {card.status === 'pending' && (
+   418→                            <>
+   419→                              <Button
+   420→                                variant="ghost" size="icon" className="h-8 w-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+   421→                                onClick={() => handleApprove(card)} disabled={saving}
+   422→                              >
+   423→                                <CheckCircle2 className="w-4 h-4" />
+   424→                              </Button>
+   425→                              <Button
+   426→                                variant="ghost" size="icon" className="h-8 w-8 text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+   427→                                onClick={() => openReject(card)} disabled={saving}
+   428→                              >
+   429→                                <XCircle className="w-4 h-4" />
+   430→                              </Button>
+   431→                            </>
+   432→                          )}
+   433→                          {(card.status === 'approved' || card.status === 'pending') && card.status !== 'issued' && (
+   434→                            <Button
+   435→                              variant="ghost" size="icon" className="h-8 w-8 text-sky-600 hover:text-sky-700 hover:bg-sky-50"
+   436→                              onClick={() => handleIssue(card)} disabled={saving}
+   437→                              title="카드 발급"
+   438→                            >
+   439→                              <CreditCard className="w-4 h-4" />
+   440→                            </Button>
+   441→                          )}
+   442→                          {card.status !== 'issued' && (
+   443→                            <Button
+   444→                              variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-rose-600"
+   445→                              onClick={() => handleDelete(card)}
+   446→                            >
+   447→                              <Trash2 className="w-3.5 h-3.5" />
+   448→                            </Button>
+   449→                          )}
+   450→                        </div>
+   451→                      </TableCell>
+   452→                    </TableRow>
+   453→                  ))
+   454→                )}
+   455→              </TableBody>
+   456→            </Table>
+   457→          </div>
+   458→        </CardContent>
+   459→      </Card>
+   460→
+   461→      {/* ── 상세 정보 다이얼로그 ──────────────────────────────────── */}
+   462→      <Dialog open={detailDialogOpen} onOpenChange={setDetailDialogOpen}>
+   463→        <DialogContent className="sm:max-w-lg">
+   464→          <DialogHeader>
+   465→            <DialogTitle className="flex items-center gap-2">
+   466→              <CreditCard className="w-5 h-5" />
+   467→              도서카드 신청 상세
+   468→            </DialogTitle>
+   469→            <DialogDescription>도서카드 발급 신청 상세 정보입니다.</DialogDescription>
+   470→          </DialogHeader>
+   471→          {selectedCard && (
+   472→            <div className="grid gap-3 py-2 text-sm">
+   473→              <div className="grid grid-cols-2 gap-3">
+   474→                <div>
+   475→                  <span className="text-muted-foreground">신청자</span>
+   476→                  <p className="font-medium">{selectedCard.applicantName}</p>
+   477→                </div>
+   478→                <div>
+   479→                  <span className="text-muted-foreground">생년월일</span>
+   480→                  <p className="font-medium">{selectedCard.birthDate}</p>
+   481→                </div>
+   482→                <div>
+   483→                  <span className="text-muted-foreground">전화번호</span>
+   484→                  <p className="font-medium">{selectedCard.phone}</p>
+   485→                </div>
+   486→                <div>
+   487→                  <span className="text-muted-foreground">주소</span>
+   488→                  <p className="font-medium">{selectedCard.address || '-'}</p>
+   489→                </div>
+   490→              </div>
+   491→              <div className="border-t pt-3 grid grid-cols-2 gap-3">
+   492→                <div>
+   493→                  <span className="text-muted-foreground">카드유형</span>
+   494→                  <p className="font-medium">{CARD_TYPE_LABELS[selectedCard.cardType]}</p>
+   495→                </div>
+   496→                <div>
+   497→                  <span className="text-muted-foreground">상태</span>
+   498→                  <Badge className={`text-xs ${STATUS_COLORS[selectedCard.status]}`}>
+   499→                    {STATUS_LABELS[selectedCard.status]}
+   500→                  </Badge>
+   501→                </div>
+   502→                <div>
+   503→                  <span className="text-muted-foreground">카드번호</span>
+   504→                  <p className="font-mono font-medium">{selectedCard.cardNumber || '미발급'}</p>
+   505→                </div>
+   506→                <div>
+   507→                  <span className="text-muted-foreground">신청일</span>
+   508→                  <p className="font-medium">{formatDateTime(selectedCard.appliedAt)}</p>
+   509→                </div>
+   510→                <div>
+   511→                  <span className="text-muted-foreground">승인일</span>
+   512→                  <p className="font-medium">{formatDateTime(selectedCard.approvedAt)}</p>
+   513→                </div>
+   514→                <div>
+   515→                  <span className="text-muted-foreground">발급일</span>
+   516→                  <p className="font-medium">{formatDateTime(selectedCard.issuedAt)}</p>
+   517→                </div>
+   518→              </div>
+   519→            </div>
+   520→          )}
+   521→          <DialogFooter>
+   522→            {selectedCard?.status === 'pending' && (
+   523→              <>
+   524→                <Button
+   525→                  variant="outline" className="text-rose-600 border-rose-300 hover:bg-rose-50"
+   526→                  onClick={() => { setDetailDialogOpen(false); openReject(selectedCard); }}
+   527→                >
+   528→                  거부
+   529→                </Button>
+   530→                <Button
+   531→                  className="bg-emerald-600 hover:bg-emerald-700"
+   532→                  onClick={() => { setDetailDialogOpen(false); handleApprove(selectedCard); }} disabled={saving}
+   533→                >
+   534→                  승인
+   535→                </Button>
+   536→              </>
+   537→            )}
+   538→            {(selectedCard?.status === 'approved' || selectedCard?.status === 'pending') && selectedCard?.status !== 'issued' && (
+   539→              <Button
+   540→                className="bg-sky-600 hover:bg-sky-700"
+   541→                onClick={() => { setDetailDialogOpen(false); handleIssue(selectedCard); }} disabled={saving}
+   542→              >
+   543→                <CreditCard className="w-4 h-4 mr-1" />
+   544→                발급
+   545→              </Button>
+   546→            )}
+   547→            <Button variant="outline" onClick={() => setDetailDialogOpen(false)}>닫기</Button>
+   548→          </DialogFooter>
+   549→        </DialogContent>
+   550→      </Dialog>
+   551→
+   552→      {/* ── 거부 다이얼로그 ───────────────────────────────────────── */}
+   553→      <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+   554→        <DialogContent className="sm:max-w-md">
+   555→          <DialogHeader>
+   556→            <DialogTitle className="flex items-center gap-2 text-rose-600">
+   557→              <XCircle className="w-5 h-5" />
+   558→              도서카드 신청 거부
+   559→            </DialogTitle>
+   560→            <DialogDescription>
+   561→              '{selectedCard?.applicantName}'님의 도서카드 신청을 거부합니다.
+   562→            </DialogDescription>
+   563→          </DialogHeader>
+   564→          <div className="py-2">
+   565→            <Label>거부 사유 (선택)</Label>
+   566→            <Textarea
+   567→              value={rejectReason}
+   568→              onChange={(e) => setRejectReason(e.target.value)}
+   569→              placeholder="거부 사유를 입력하세요..."
+   570→              className="mt-1.5"
+   571→              rows={3}
+   572→            />
+   573→          </div>
+   574→          <DialogFooter>
+   575→            <Button variant="outline" onClick={() => { setRejectDialogOpen(false); setRejectReason(''); }}>
+   576→              취소
+   577→            </Button>
+   578→            <Button
+   579→              variant="destructive"
+   580→              onClick={handleReject} disabled={saving}
+   581→            >
+   582→              {saving && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}
+   583→              거부
+   584→            </Button>
+   585→          </DialogFooter>
+   586→        </DialogContent>
+   587→      </Dialog>
+   588→
+   589→      {/* ── 직접 발급 다이얼로그 ───────────────────────────────────── */}
+   590→      <Dialog open={issueDialogOpen} onOpenChange={setIssueDialogOpen}>
+   591→        <DialogContent className="sm:max-w-md">
+   592→          <DialogHeader>
+   593→            <DialogTitle className="flex items-center gap-2">
+   594→              <UserPlus className="w-5 h-5" />
+   595→              도서카드 직접 발급
+   596→            </DialogTitle>
+   597→            <DialogDescription>
+   598→              관리자가 직접 도서카드를 발급합니다. 이용자 계정도 함께 생성됩니다.
+   599→            </DialogDescription>
+   600→          </DialogHeader>
+   601→          <div className="grid gap-4 py-2">
+   602→            <div className="space-y-1.5">
+   603→              <Label>이름 *</Label>
+   604→              <Input
+   605→                value={issueForm.applicantName}
+   606→                onChange={(e) => setIssueForm((f) => ({ ...f, applicantName: e.target.value }))}
+   607→                placeholder="홍길동"
+   608→              />
+   609→            </div>
+   610→            <div className="space-y-1.5">
+   611→              <Label>생년월일 (8자리) *</Label>
+   612→              <Input
+   613→                value={issueForm.birthDate}
+   614→                onChange={(e) => setIssueForm((f) => ({ ...f, birthDate: e.target.value.replace(/\D/g, '').slice(0, 8) }))}
+   615→                placeholder="19900101"
+   616→                maxLength={8}
+   617→              />
+   618→            </div>
+   619→            <div className="space-y-1.5">
+   620→              <Label>전화번호 *</Label>
+   621→              <Input
+   622→                value={issueForm.phone}
+   623→                onChange={(e) => setIssueForm((f) => ({ ...f, phone: e.target.value }))}
+   624→                placeholder="010-1234-5678"
+   625→              />
+   626→            </div>
+   627→            <div className="space-y-1.5">
+   628→              <Label>주소 (선택)</Label>
+   629→              <Input
+   630→                value={issueForm.address}
+   631→                onChange={(e) => setIssueForm((f) => ({ ...f, address: e.target.value }))}
+   632→                placeholder="서울시 강남구"
+   633→              />
+   634→            </div>
+   635→            <div className="space-y-1.5">
+   636→              <Label>카드 유형</Label>
+   637→              <Select value={issueForm.cardType} onValueChange={(v) => setIssueForm((f) => ({ ...f, cardType: v }))}>
+   638→                <SelectTrigger>
+   639→                  <SelectValue />
+   640→                </SelectTrigger>
+   641→                <SelectContent>
+   642→                  <SelectItem value="mobile">모바일 (자동 승인)</SelectItem>
+   643→                  <SelectItem value="physical">실물카드 (담당자 승인)</SelectItem>
+   644→                </SelectContent>
+   645→              </Select>
+   646→            </div>
+   647→          </div>
+   648→          <DialogFooter>
+   649→            <Button variant="outline" onClick={() => setIssueDialogOpen(false)} disabled={saving}>
+   650→              취소
+   651→            </Button>
+   652→            <Button onClick={handleDirectIssue} disabled={saving}>
+   653→              {saving && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}
+   654→              <CreditCard className="w-4 h-4 mr-1" />
+   655→              발급
+   656→            </Button>
+   657→          </DialogFooter>
+   658→        </DialogContent>
+   659→      </Dialog>
+   660→    </div>
+   661→  );
+   662→}
+   663→

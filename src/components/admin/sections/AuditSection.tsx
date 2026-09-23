@@ -36,6 +36,7 @@ import {
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
+import Image from 'next/image';
 
 interface AuditLog {
   id: string;
@@ -110,6 +111,10 @@ export default function AuditSection() {
   const [page, setPage] = useState(1);
   const [actionFilter, setActionFilter] = useState('all');
   const [entityFilter, setEntityFilter] = useState('all');
+
+  /** Ensure Select value is never empty; default to 'all' */
+  const safeActionFilter = actionFilter || 'all';
+  const safeEntityFilter = entityFilter || 'all';
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const pageSize = 20;
@@ -120,8 +125,8 @@ export default function AuditSection() {
       const params = new URLSearchParams();
       params.set('page', String(page));
       params.set('pageSize', String(pageSize));
-      if (actionFilter && actionFilter !== 'all') params.set('action', actionFilter);
-      if (entityFilter && entityFilter !== 'all') params.set('entity', entityFilter);
+      if (safeActionFilter && safeActionFilter !== 'all') params.set('action', safeActionFilter);
+      if (safeEntityFilter && safeEntityFilter !== 'all') params.set('entity', safeEntityFilter);
       if (fromDate) params.set('from', fromDate);
       if (toDate) params.set('to', toDate);
 
@@ -135,7 +140,7 @@ export default function AuditSection() {
     } finally {
       setLoading(false);
     }
-  }, [page, actionFilter, entityFilter, fromDate, toDate]);
+  }, [page, safeActionFilter, safeEntityFilter, fromDate, toDate]);
 
   useEffect(() => {
     fetchLogs();
@@ -162,6 +167,15 @@ export default function AuditSection() {
     <div className="space-y-4">
       {/* ──────── Section Header with sky-blue gradient underline ──────── */}
       <div className="flex items-center gap-3 mb-2">
+        <div className="shrink-0 w-8 h-8 rounded-lg overflow-hidden border border-slate-700/50 bg-slate-800">
+          <Image
+            src="/images/admin/kiosk-device.png"
+            alt="키오스크 단말기"
+            width={32}
+            height={32}
+            className="w-full h-full object-contain"
+          />
+        </div>
         <h2 className="text-xl font-bold text-white flex items-center gap-2">
           감사 로그
           <span className="block w-16 h-0.5 bg-gradient-to-r from-sky-500 via-sky-400 to-transparent rounded-full" />
@@ -174,7 +188,7 @@ export default function AuditSection() {
           <div className="flex items-end gap-3 flex-wrap">
             <div className="space-y-1.5 min-w-[120px]">
               <label className="text-xs font-medium text-slate-400">액션</label>
-              <Select value={actionFilter} onValueChange={setActionFilter}>
+              <Select value={safeActionFilter} onValueChange={(v) => { setActionFilter(v || 'all'); setPage(1); }}>
                 <SelectTrigger className="h-9 bg-slate-800 border-slate-700 text-slate-200 focus:ring-sky-500">
                   <SelectValue placeholder="전체" />
                 </SelectTrigger>
@@ -189,7 +203,7 @@ export default function AuditSection() {
             </div>
             <div className="space-y-1.5 min-w-[120px]">
               <label className="text-xs font-medium text-slate-400">엔티티</label>
-              <Select value={entityFilter} onValueChange={setEntityFilter}>
+              <Select value={safeEntityFilter} onValueChange={(v) => { setEntityFilter(v || 'all'); setPage(1); }}>
                 <SelectTrigger className="h-9 bg-slate-800 border-slate-700 text-slate-200 focus:ring-sky-500">
                   <SelectValue placeholder="전체" />
                 </SelectTrigger>

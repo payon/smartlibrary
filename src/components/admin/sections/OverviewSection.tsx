@@ -149,6 +149,24 @@ export default function OverviewSection() {
 
   return (
     <div className="space-y-6">
+      {/* ──────── Hero Banner ──────── */}
+      <div className="relative w-full h-[100px] rounded-xl overflow-hidden border border-slate-700 mb-6">
+        <Image
+          src="/images/admin/overview-hero.png"
+          alt="오버뷰 배너"
+          fill
+          className="object-cover"
+          priority
+        />
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-900/90 via-slate-900/60 to-transparent" />
+        <div className="absolute inset-0 flex items-center px-6">
+          <div>
+            <p className="text-lg font-bold text-white">키오스크 관리 대시보드</p>
+            <p className="text-sm text-slate-300">실시간 기기 상태 및 이용 현황을 모니터링합니다</p>
+          </div>
+        </div>
+      </div>
+
       {/* ───────── KPI 카드 (그라디언트) ───────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {kpiCards.map((kpi) => (
@@ -374,6 +392,15 @@ export default function OverviewSection() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 p-4">
+            {/* Loan process decorative illustration */}
+            <div className="relative w-full h-[60px] rounded-lg overflow-hidden mb-2 border border-slate-700/50">
+              <Image
+                src="/images/admin/loan-process.png"
+                alt="대출 프로세스"
+                fill
+                className="object-cover opacity-40"
+              />
+            </div>
             <button
               className="w-full h-12 flex items-center justify-start text-base font-medium rounded-xl bg-gradient-to-r from-sky-600 to-sky-700 text-white hover:from-sky-500 hover:to-sky-600 transition-all shadow-md hover:shadow-lg hover:scale-[1.01] active:scale-[0.99]"
               onClick={handleResetKiosk}
@@ -409,7 +436,7 @@ export default function OverviewSection() {
       </div>
 
       {/* ───────── 오늘의 현황 요약 바 ───────── */}
-      <Card className="bg-slate-900 text-white border-slate-700 shadow-lg overflow-hidden">
+      <Card className="bg-slate-900 text-white border-slate-700 shadow-lg overflow-hidden border-l-4 border-l-sky-500">
         <CardHeader className="pb-3 border-b border-slate-700/50">
           <CardTitle className="text-lg text-white flex items-center gap-2">
             오늘의 현황

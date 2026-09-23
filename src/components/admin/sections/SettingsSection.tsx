@@ -45,6 +45,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
+import Image from 'next/image';
 
 interface KioskConfig {
   id: string;
@@ -246,6 +247,24 @@ export default function SettingsSection() {
 
   return (
     <div className="space-y-6">
+      {/* ──────── Hero Banner ──────── */}
+      <div className="relative w-full h-[100px] rounded-xl overflow-hidden border border-slate-700 mb-2">
+        <Image
+          src="/images/admin/settings-hero.png"
+          alt="설정 배너"
+          fill
+          className="object-cover"
+          priority
+        />
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-900/90 via-slate-900/60 to-transparent" />
+        <div className="absolute inset-0 flex items-center px-6">
+          <div>
+            <p className="text-lg font-bold text-white">시스템 환경 설정</p>
+            <p className="text-sm text-slate-300">대출 규칙, 키오스크, 알림 등을 설정합니다</p>
+          </div>
+        </div>
+      </div>
+
       {/* ──────── Section Header with sky-blue gradient underline ──────── */}
       <div className="flex items-center gap-3 mb-2">
         <h2 className="text-xl font-bold text-white flex items-center gap-2">

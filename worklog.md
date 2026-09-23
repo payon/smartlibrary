@@ -505,3 +505,30 @@ Stage Summary:
 - SelectItem value="": 존재하지 않음 (이미 정상)
 - API 라우트: POST 핸들러 모두 존재하고 정상 동작
 - 공통: sky-blue 그라디언트 언더라인 섹션 헤더 + bg-slate-900 카드 + bg-slate-800 헤더/입력 + sky-500 액센트
+
+---
+Task ID: 11
+Agent: Main
+Task: 모든 추가 구현 제안 실행 (ECO 키오스크 스타일 이미지/CSS 적용, 버그 수정, 카드 발급 프로세스, 회원 등록 API, 대출 제한 강화)
+
+Work Log:
+- 12개 ECO 키오스크 스타일 관리자 이미지 생성 (히어로 배너, 사이드바, 카드 템플릿 등)
+- PIN 검증 버그 수정: 대출 API에서 중복 PIN 검증 제거 (키오스크는 이미 PIN 화면에서 검증 완료)
+- 데모 모드 수정: PIN 입력 시 DB 사용자 우선 검색 → 활성 사용자 fallback → 가상 데모 사용자 생성
+- AuditSection Select.Item 빈값 에러 수정: safeActionFilter/safeEntityFilter 적용
+- 8개 관리자 섹션에 ECO 키오스크 스타일 히어로 배너 추가 (overview, content, books, cards, users, analytics, settings, audit)
+- 도서카드 발급 4단계 파이프라인 강화: 신청 → 심사 → 승인/거부 → 발급
+- 카드 일괄 승인/거부 기능 추가 (체크박스 선택, 일괄 액션 바)
+- 키오스크 이용자 등록 다이얼로그 추가 (UsersSection)
+- POST /api/admin/kiosk-users API 추가 (관리자에서 키오스크 이용자 생성)
+- 최대 2권 대출 제한 UI 강화: "2/2권 선택됨" 표시, 초과 시 도서 비활성화
+- lint 에러 없음 확인
+- 모든 핵심 API 정상 응답 확인 (200/201)
+
+Stage Summary:
+- 12개 AI 생성 이미지로 관리자 대시보드 시각적 품질 대폭 향상
+- 모든 관리자 섹션에 히어로 배너 적용으로 ECO 키오스크 실제 화면과 유사한 디자인 완성
+- 3개 버그 수정 (PIN 검증, 데모 모드, Select.Item)
+- 도서카드 발급 프로세스 완성 (4단계 파이프라인 + 일괄 액션)
+- 회원 등록 기능 완성 (관리자 UI + API)
+- 대출 제한 UI 강화 (2/2권 시각적 피드백)

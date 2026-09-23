@@ -82,14 +82,23 @@ export default function KioskLoanSelect() {
         <h1 className="text-xl font-bold text-slate-800">
           <CmsText contentKey="loanselect.title" fallback="도서를 선택해주세요" />
         </h1>
-        <p className="text-slate-500 text-sm mt-1">
-          최대 {MAX_LOAN_COUNT}권까지 대출할 수 있습니다
-          {selectedBooks.length > 0 && (
-            <span className="text-sky-600 font-semibold ml-1">
-              ({selectedBooks.length}권 선택됨)
-            </span>
-          )}
-        </p>
+        <div className="flex items-center justify-between mt-1">
+          <p className="text-slate-500 text-sm">
+            최대 {MAX_LOAN_COUNT}권까지 대출할 수 있습니다
+          </p>
+          <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold ${
+            selectedBooks.length >= MAX_LOAN_COUNT
+              ? 'bg-amber-100 text-amber-700'
+              : selectedBooks.length > 0
+                ? 'bg-sky-100 text-sky-700'
+                : 'bg-slate-100 text-slate-500'
+          }`}>
+            <span>{selectedBooks.length}/{MAX_LOAN_COUNT}권 선택됨</span>
+            {selectedBooks.length >= MAX_LOAN_COUNT && (
+              <span className="text-amber-500 text-xs">(최대)</span>
+            )}
+          </div>
+        </div>
       </header>
 
       {/* 검색 바 */}
@@ -163,12 +172,13 @@ export default function KioskLoanSelect() {
           <div className="grid grid-cols-2 gap-3">
             {filteredBooks.map((book) => {
               const isSelected = selectedBooks.some((b) => b.id === book.id);
+              const isAtLimit = !isSelected && selectedBooks.length >= MAX_LOAN_COUNT;
               return (
                 <motion.div
                   key={book.id}
                   layout
-                  className={`relative bg-white rounded-xl overflow-hidden border-2 transition-colors ${
-                    isSelected ? 'border-sky-500 shadow-md' : 'border-slate-100'
+                  className={`relative bg-white rounded-xl overflow-hidden border-2 transition-all ${
+                    isSelected ? 'border-sky-500 shadow-md' : isAtLimit ? 'border-slate-200 opacity-50' : 'border-slate-100'
                   }`}
                 >
                   {/* 도서 표지 */}
@@ -177,7 +187,7 @@ export default function KioskLoanSelect() {
                       <img
                         src={book.coverUrl}
                         alt={book.title}
-                        className="w-full h-full object-cover"
+                        className={`w-full h-full object-cover ${isAtLimit ? 'grayscale' : ''}`}
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-slate-300">
@@ -194,25 +204,36 @@ export default function KioskLoanSelect() {
                         <Check className="w-4 h-4 text-white" />
                       </motion.div>
                     )}
+                    {/* 한도 초과 오버레이 */}
+                    {isAtLimit && (
+                      <div className="absolute inset-0 bg-white/40 flex items-center justify-center">
+                        <span className="text-xs font-semibold text-slate-400 bg-white/80 px-2 py-1 rounded">
+                          선택 불가
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   {/* 도서 정보 */}
                   <div className="p-2.5">
-                    <p className="text-xs font-semibold text-slate-800 line-clamp-1">
+                    <p className={`text-xs font-semibold line-clamp-1 ${isAtLimit ? 'text-slate-400' : 'text-slate-800'}`}>
                       {book.title}
                     </p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">
+                    <p className={`text-[10px] mt-0.5 ${isAtLimit ? 'text-slate-300' : 'text-slate-400'}`}>
                       {book.author}
                     </p>
                     <button
                       onClick={() => toggleBook(book)}
-                      className={`mt-2 w-full py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                      disabled={isAtLimit}
+                      className={`mt-2 w-full py-1.5 rounded-lg text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                         isSelected
                           ? 'bg-red-50 text-red-600'
-                          : 'bg-sky-50 text-sky-600'
+                          : isAtLimit
+                            ? 'bg-slate-50 text-slate-300'
+                            : 'bg-sky-50 text-sky-600'
                       }`}
                     >
-                      {isSelected ? '선택 취소' : '선택'}
+                      {isSelected ? '선택 취소' : isAtLimit ? '선택 불가' : '선택'}
                     </button>
                   </div>
                 </motion.div>

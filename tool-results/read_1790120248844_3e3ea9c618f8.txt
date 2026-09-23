@@ -1,0 +1,673 @@
+     1→     1→/**
+     2→     2→ * 도서 관리 섹션
+     3→     3→ *
+     4→     4→ * [역할]
+     5→     5→ * - 도서 목록 테이블/그리드 뷰 (표지, 제목, 저자, 카테고리, 재고, 대출가능)
+     6→     6→ * - 검색 및 카테고리 필터
+     7→     7→ * - 도서 추가/수정/삭제 다이얼로그
+     8→     8→ * - 키오스크 다크 테마 + 그리드/카드 뷰
+     9→     9→ */
+    10→    10→
+    11→    11→'use client';
+    12→    12→
+    13→    13→import { useEffect, useState, useCallback } from 'react';
+    14→    14→import { Plus, Pencil, Trash2, Search, Loader2, BookOpen, LayoutGrid, List } from 'lucide-react';
+    15→    15→import Image from 'next/image';
+    16→    16→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+    17→    17→import { Button } from '@/components/ui/button';
+    18→    18→import { Input } from '@/components/ui/input';
+    19→    19→import { Label } from '@/components/ui/label';
+    20→    20→import { Badge } from '@/components/ui/badge';
+    21→    21→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+    22→    22→import {
+    23→    23→  Table,
+    24→    24→  TableBody,
+    25→    25→  TableCell,
+    26→    26→  TableHead,
+    27→    27→  TableHeader,
+    28→    28→  TableRow,
+    29→    29→} from '@/components/ui/table';
+    30→    30→import {
+    31→    31→  Dialog,
+    32→    32→  DialogContent,
+    33→    33→  DialogDescription,
+    34→    34→  DialogFooter,
+    35→    35→  DialogHeader,
+    36→    36→  DialogTitle,
+    37→    37→} from '@/components/ui/dialog';
+    38→    38→import {
+    39→    39→  AlertDialog,
+    40→    40→  AlertDialogAction,
+    41→    41→  AlertDialogCancel,
+    42→    42→  AlertDialogContent,
+    43→    43→  AlertDialogDescription,
+    44→    44→  AlertDialogFooter,
+    45→    45→  AlertDialogHeader,
+    46→    46→  AlertDialogTitle,
+    47→    47→} from '@/components/ui/alert-dialog';
+    48→    48→import { Skeleton } from '@/components/ui/skeleton';
+    49→    49→import { toast } from 'sonner';
+    50→    50→
+    51→    51→interface Book {
+    52→    52→  id: string;
+    53→    53→  isbn: string;
+    54→    54→  title: string;
+    55→    55→  author: string;
+    56→    56→  publisher: string | null;
+    57→    57→  publishYear: number | null;
+    58→    58→  category: string | null;
+    59→    59→  coverUrl: string | null;
+    60→    60→  totalCopies: number;
+    61→    61→  availableCopies: number;
+    62→    62→  shelfLocation: string | null;
+    63→    63→  _count?: { loans: number };
+    64→    64→}
+    65→    65→
+    66→    66→const CATEGORIES = ['전체', '소설', '인문', '과학', '역사', '시'];
+    67→    67→
+    68→    68→/** Category badge colors using kiosk accent palette */
+    69→    69→const CATEGORY_COLORS: Record<string, string> = {
+    70→    70→  소설: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+    71→    71→  인문: 'bg-sky-500/20 text-sky-400 border-sky-500/30',
+    72→    72→  과학: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+    73→    73→  역사: 'bg-violet-500/20 text-violet-400 border-violet-500/30',
+    74→    74→  시: 'bg-rose-500/20 text-rose-400 border-rose-500/30',
+    75→    75→};
+    76→    76→
+    77→    77→const getCategoryBadgeClass = (category: string | null) => {
+    78→    78→  if (!category) return 'bg-slate-500/20 text-slate-400 border-slate-500/30';
+    79→    79→  return CATEGORY_COLORS[category] || 'bg-slate-500/20 text-slate-400 border-slate-500/30';
+    80→    80→};
+    81→    81→
+    82→    82→const emptyBook: Omit<Book, 'id' | '_count'> = {
+    83→    83→  isbn: '',
+    84→    84→  title: '',
+    85→    85→  author: '',
+    86→    86→  publisher: '',
+    87→    87→  publishYear: null,
+    88→    88→  category: '',
+    89→    89→  coverUrl: '',
+    90→    90→  totalCopies: 3,
+    91→    91→  availableCopies: 3,
+    92→    92→  shelfLocation: '',
+    93→    93→};
+    94→    94→
+    95→    95→/** Book cover component with fallback */
+    96→    96→function BookCover({
+    97→    97→  coverUrl,
+    98→    98→  title,
+    99→    99→  size = 'table',
+   100→   100→}: {
+   101→   101→  coverUrl: string | null;
+   102→   102→  title: string;
+   103→   103→  size?: 'table' | 'grid';
+   104→   104→}) {
+   105→   105→  if (size === 'grid') {
+   106→   106→    if (coverUrl) {
+   107→   107→      return (
+   108→   108→        <div className="w-full aspect-[3/4] overflow-hidden bg-slate-800">
+   109→   109→          <img src={coverUrl} alt={title} className="w-full h-full object-cover" />
+   110→   110→        </div>
+   111→   111→      );
+   112→   112→    }
+   113→   113→    return (
+   114→   114→      <div className="w-full aspect-[3/4] bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center">
+   115→   115→        <BookOpen className="w-8 h-8 text-slate-600" />
+   116→   116→      </div>
+   117→   117→    );
+   118→   118→  }
+   119→   119→
+   120→   120→  // table size
+   121→   121→  if (coverUrl) {
+   122→   122→    return (
+   123→   123→      <div className="w-12 h-16 rounded overflow-hidden bg-slate-800">
+   124→   124→        <img src={coverUrl} alt={title} className="w-full h-full object-cover" />
+   125→   125→      </div>
+   126→   126→    );
+   127→   127→  }
+   128→   128→  return (
+   129→   129→    <div className="w-12 h-16 rounded bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center">
+   130→   130→      <BookOpen className="w-5 h-5 text-slate-600" />
+   131→   131→    </div>
+   132→   132→  );
+   133→   133→}
+   134→   134→
+   135→   135→export default function BooksSection() {
+   136→   136→  const [books, setBooks] = useState<Book[]>([]);
+   137→   137→  const [loading, setLoading] = useState(true);
+   138→   138→  const [search, setSearch] = useState('');
+   139→   139→  const [category, setCategory] = useState('전체');
+   140→   140→  const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
+   141→   141→  const [editDialogOpen, setEditDialogOpen] = useState(false);
+   142→   142→  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+   143→   143→  const [selectedBook, setSelectedBook] = useState<Book | null>(null);
+   144→   144→  const [form, setForm] = useState(emptyBook);
+   145→   145→  const [isAdding, setIsAdding] = useState(false);
+   146→   146→  const [saving, setSaving] = useState(false);
+   147→   147→
+   148→   148→  const fetchBooks = useCallback(async () => {
+   149→   149→    try {
+   150→   150→      setLoading(true);
+   151→   151→      const params = new URLSearchParams();
+   152→   152→      if (search) params.set('search', search);
+   153→   153→      if (category && category !== '전체') params.set('category', category);
+   154→   154→      const res = await fetch(`/api/admin/books?${params.toString()}`);
+   155→   155→      if (!res.ok) throw new Error();
+   156→   156→      const json = await res.json();
+   157→   157→      setBooks(json.books || []);
+   158→   158→    } catch {
+   159→   159→      toast.error('도서 목록을 불러오는데 실패했습니다.');
+   160→   160→    } finally {
+   161→   161→      setLoading(false);
+   162→   162→    }
+   163→   163→  }, [search, category]);
+   164→   164→
+   165→   165→  useEffect(() => {
+   166→   166→    fetchBooks();
+   167→   167→  }, [fetchBooks]);
+   168→   168→
+   169→   169→  const handleAdd = () => {
+   170→   170→    setIsAdding(true);
+   171→   171→    setForm(emptyBook);
+   172→   172→    setSelectedBook(null);
+   173→   173→    setEditDialogOpen(true);
+   174→   174→  };
+   175→   175→
+   176→   176→  const handleEdit = (book: Book) => {
+   177→   177→    setIsAdding(false);
+   178→   178→    setSelectedBook(book);
+   179→   179→    setForm({
+   180→   180→      isbn: book.isbn,
+   181→   181→      title: book.title,
+   182→   182→      author: book.author,
+   183→   183→      publisher: book.publisher || '',
+   184→   184→      publishYear: book.publishYear,
+   185→   185→      category: book.category || '',
+   186→   186→      coverUrl: book.coverUrl || '',
+   187→   187→      totalCopies: book.totalCopies,
+   188→   188→      availableCopies: book.availableCopies,
+   189→   189→      shelfLocation: book.shelfLocation || '',
+   190→   190→    });
+   191→   191→    setEditDialogOpen(true);
+   192→   192→  };
+   193→   193→
+   194→   194→  const handleDelete = (book: Book) => {
+   195→   195→    setSelectedBook(book);
+   196→   196→    setDeleteDialogOpen(true);
+   197→   197→  };
+   198→   198→
+   199→   199→  const handleSave = async () => {
+   200→   200→    if (!form.isbn || !form.title || !form.author) {
+   201→   201→      toast.error('ISBN, 제목, 저자는 필수입니다.');
+   202→   202→      return;
+   203→   203→    }
+   204→   204→
+   205→   205→    setSaving(true);
+   206→   206→    try {
+   207→   207→      if (isAdding) {
+   208→   208→        const res = await fetch('/api/admin/books', {
+   209→   209→          method: 'POST',
+   210→   210→          headers: { 'Content-Type': 'application/json' },
+   211→   211→          body: JSON.stringify(form),
+   212→   212→        });
+   213→   213→        if (!res.ok) {
+   214→   214→          const data = await res.json();
+   215→   215→          throw new Error(data.error || '등록 실패');
+   216→   216→        }
+   217→   217→        toast.success('도서가 등록되었습니다.');
+   218→   218→      } else if (selectedBook) {
+   219→   219→        const res = await fetch(`/api/admin/books/${selectedBook.id}`, {
+   220→   220→          method: 'PUT',
+   221→   221→          headers: { 'Content-Type': 'application/json' },
+   222→   222→          body: JSON.stringify(form),
+   223→   223→        });
+   224→   224→        if (!res.ok) {
+   225→   225→          const data = await res.json();
+   226→   226→          throw new Error(data.error || '수정 실패');
+   227→   227→        }
+   228→   228→        toast.success('도서가 수정되었습니다.');
+   229→   229→      }
+   230→   230→      setEditDialogOpen(false);
+   231→   231→      await fetchBooks();
+   232→   232→    } catch (err) {
+   233→   233→      toast.error(err instanceof Error ? err.message : '저장에 실패했습니다.');
+   234→   234→    } finally {
+   235→   235→      setSaving(false);
+   236→   236→    }
+   237→   237→  };
+   238→   238→
+   239→   239→  const handleConfirmDelete = async () => {
+   240→   240→    if (!selectedBook) return;
+   241→   241→    try {
+   242→   242→      const res = await fetch(`/api/admin/books/${selectedBook.id}`, {
+   243→   243→        method: 'DELETE',
+   244→   244→      });
+   245→   245→      if (!res.ok) {
+   246→   246→        const data = await res.json();
+   247→   247→        throw new Error(data.error || '삭제 실패');
+   248→   248→      }
+   249→   249→      toast.success('도서가 삭제되었습니다.');
+   250→   250→      setDeleteDialogOpen(false);
+   251→   251→      await fetchBooks();
+   252→   252→    } catch (err) {
+   253→   253→      toast.error(err instanceof Error ? err.message : '삭제에 실패했습니다.');
+   254→   254→    }
+   255→   255→  };
+   256→   256→
+   257→   257→  const inputBase = 'bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 focus-visible:ring-sky-500';
+   258→   258→
+   259→   259→  return (
+   260→   260→    <div className="space-y-4">
+   261→   261→      {/* Section Header with hero banner + gradient underline */}
+   262→   262→      <div className="relative overflow-hidden rounded-xl h-[120px]">
+   263→   263→        <Image
+   264→   264→          src="/images/admin/books-hero.png"
+   265→   265→          alt="도서 관리"
+   266→   266→          fill
+   267→   267→          className="object-cover"
+   268→   268→        />
+   269→   269→        <div className="absolute inset-0 bg-gradient-to-r from-slate-900/90 via-slate-900/70 to-slate-900/40" />
+   270→   270→        <div className="absolute inset-0 flex items-center px-6">
+   271→   271→          <div>
+   272→   272→            <h2 className="text-2xl font-bold text-white">도서 관리</h2>
+   273→   273→            <div className="mt-1 h-0.5 w-24 bg-gradient-to-r from-sky-500 via-sky-400 to-transparent" />
+   274→   274→            <p className="text-slate-400 text-sm mt-2">도서 등록, 수정, 재고 관리</p>
+   275→   275→          </div>
+   276→   276→        </div>
+   277→   277→      </div>
+   278→   278→
+   279→   279→      {/* 상단 바: 검색 + 필터 + 뷰 토글 + 추가 */}
+   280→   280→      <div className="flex items-center gap-3 flex-wrap">
+   281→   281→        <div className="relative flex-1 min-w-[200px]">
+   282→   282→          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+   283→   283→          <Input
+   284→   284→            placeholder="제목, 저자, ISBN 검색..."
+   285→   285→            value={search}
+   286→   286→            onChange={(e) => setSearch(e.target.value)}
+   287→   287→            className={`pl-9 h-10 ${inputBase}`}
+   288→   288→          />
+   289→   289→        </div>
+   290→   290→        <Select value={category} onValueChange={setCategory}>
+   291→   291→          <SelectTrigger className={`w-[140px] h-10 ${inputBase}`}>
+   292→   292→            <SelectValue placeholder="카테고리" />
+   293→   293→          </SelectTrigger>
+   294→   294→          <SelectContent className="bg-slate-900 border-slate-700">
+   295→   295→            {CATEGORIES.map((cat) => (
+   296→   296→              <SelectItem key={cat} value={cat} className="text-white focus:bg-slate-800 focus:text-white">
+   297→   297→                {cat}
+   298→   298→              </SelectItem>
+   299→   299→            ))}
+   300→   300→          </SelectContent>
+   301→   301→        </Select>
+   302→   302→        {/* View toggle */}
+   303→   303→        <div className="flex items-center bg-slate-900 border border-slate-700 rounded-lg overflow-hidden">
+   304→   304→          <button
+   305→   305→            onClick={() => setViewMode('table')}
+   306→   306→            className={`h-10 w-10 flex items-center justify-center transition-colors ${
+   307→   307→              viewMode === 'table'
+   308→   308→                ? 'bg-sky-500 text-white'
+   309→   309→                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+   310→   310→            }`}
+   311→   311→          >
+   312→   312→            <List className="w-4 h-4" />
+   313→   313→          </button>
+   314→   314→          <button
+   315→   315→            onClick={() => setViewMode('grid')}
+   316→   316→            className={`h-10 w-10 flex items-center justify-center transition-colors ${
+   317→   317→              viewMode === 'grid'
+   318→   318→                ? 'bg-sky-500 text-white'
+   319→   319→                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+   320→   320→            }`}
+   321→   321→          >
+   322→   322→            <LayoutGrid className="w-4 h-4" />
+   323→   323→          </button>
+   324→   324→        </div>
+   325→   325→        <button
+   326→   326→          onClick={handleAdd}
+   327→   327→          className="h-10 px-4 text-sm rounded-lg bg-gradient-to-r from-sky-500 to-sky-600 text-white hover:from-sky-400 hover:to-sky-500 transition-all flex items-center gap-1.5 shadow-lg shadow-sky-500/20"
+   328→   328→        >
+   329→   329→          <Plus className="w-4 h-4" />
+   330→   330→          도서 추가
+   331→   331→        </button>
+   332→   332→      </div>
+   333→   333→
+   334→   334→      {/* 도서 목록 */}
+   335→   335→      {viewMode === 'table' ? (
+   336→   336→        /* TABLE VIEW */
+   337→   337→        <Card className="bg-slate-900 border-slate-700 shadow-sm">
+   338→   338→          <CardContent className="p-0">
+   339→   339→            <div className="overflow-x-auto">
+   340→   340→              <Table>
+   341→   341→                <TableHeader>
+   342→   342→                  <TableRow className="bg-slate-800 hover:bg-slate-800 border-slate-700">
+   343→   343→                    <TableHead className="w-20 text-slate-400">표지</TableHead>
+   344→   344→                    <TableHead className="text-slate-400">제목</TableHead>
+   345→   345→                    <TableHead className="hidden md:table-cell text-slate-400">저자</TableHead>
+   346→   346→                    <TableHead className="hidden lg:table-cell text-slate-400">카테고리</TableHead>
+   347→   347→                    <TableHead className="text-center text-slate-400">재고</TableHead>
+   348→   348→                    <TableHead className="text-center text-slate-400">대출가능</TableHead>
+   349→   349→                    <TableHead className="text-center w-24 text-slate-400">관리</TableHead>
+   350→   350→                  </TableRow>
+   351→   351→                </TableHeader>
+   352→   352→                <TableBody>
+   353→   353→                  {loading ? (
+   354→   354→                    Array.from({ length: 5 }).map((_, i) => (
+   355→   355→                      <TableRow key={i} className="border-slate-700">
+   356→   356→                        <TableCell colSpan={7}>
+   357→   357→                          <Skeleton className="h-10 w-full bg-slate-800" />
+   358→   358→                        </TableCell>
+   359→   359→                      </TableRow>
+   360→   360→                    ))
+   361→   361→                  ) : books.length === 0 ? (
+   362→   362→                    <TableRow className="border-slate-700">
+   363→   363→                      <TableCell colSpan={7} className="text-center py-8 text-slate-400">
+   364→   364→                        <BookOpen className="w-8 h-8 mx-auto mb-2 text-slate-600" />
+   365→   365→                        도서가 없습니다.
+   366→   366→                      </TableCell>
+   367→   367→                    </TableRow>
+   368→   368→                  ) : (
+   369→   369→                    books.map((book) => (
+   370→   370→                      <TableRow key={book.id} className="border-slate-700 hover:bg-slate-800/60 transition-colors duration-150">
+   371→   371→                        <TableCell>
+   372→   372→                          <BookCover coverUrl={book.coverUrl} title={book.title} size="table" />
+   373→   373→                        </TableCell>
+   374→   374→                        <TableCell>
+   375→   375→                          <div>
+   376→   376→                            <p className="font-medium text-sm text-white">{book.title}</p>
+   377→   377→                            <p className="text-xs text-slate-400 md:hidden">{book.author}</p>
+   378→   378→                          </div>
+   379→   379→                        </TableCell>
+   380→   380→                        <TableCell className="hidden md:table-cell text-sm text-slate-300">{book.author}</TableCell>
+   381→   381→                        <TableCell className="hidden lg:table-cell">
+   382→   382→                          {book.category && (
+   383→   383→                            <span className={`text-xs px-2 py-0.5 rounded border ${getCategoryBadgeClass(book.category)}`}>
+   384→   384→                              {book.category}
+   385→   385→                            </span>
+   386→   386→                          )}
+   387→   387→                        </TableCell>
+   388→   388→                        <TableCell className="text-center text-sm text-slate-300">{book.totalCopies}</TableCell>
+   389→   389→                        <TableCell className="text-center">
+   390→   390→                          <Badge
+   391→   391→                            className={`text-xs ${
+   392→   392→                              book.availableCopies > 0
+   393→   393→                                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+   394→   394→                                : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+   395→   395→                            }`}
+   396→   396→                          >
+   397→   397→                            {book.availableCopies}
+   398→   398→                          </Badge>
+   399→   399→                        </TableCell>
+   400→   400→                        <TableCell>
+   401→   401→                          <div className="flex items-center justify-center gap-1">
+   402→   402→                            <Button
+   403→   403→                              variant="ghost"
+   404→   404→                              size="sm"
+   405→   405→                              onClick={() => handleEdit(book)}
+   406→   406→                              className="h-8 w-8 p-0 text-slate-400 hover:text-sky-400 hover:bg-slate-800"
+   407→   407→                            >
+   408→   408→                              <Pencil className="w-3.5 h-3.5" />
+   409→   409→                            </Button>
+   410→   410→                            <Button
+   411→   411→                              variant="ghost"
+   412→   412→                              size="sm"
+   413→   413→                              onClick={() => handleDelete(book)}
+   414→   414→                              className="h-8 w-8 p-0 text-slate-400 hover:text-rose-400 hover:bg-slate-800"
+   415→   415→                            >
+   416→   416→                              <Trash2 className="w-3.5 h-3.5" />
+   417→   417→                            </Button>
+   418→   418→                          </div>
+   419→   419→                        </TableCell>
+   420→   420→                      </TableRow>
+   421→   421→                    ))
+   422→   422→                  )}
+   423→   423→                </TableBody>
+   424→   424→              </Table>
+   425→   425→            </div>
+   426→   426→          </CardContent>
+   427→   427→        </Card>
+   428→   428→      ) : (
+   429→   429→        /* GRID VIEW */
+   430→   430→        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+   431→   431→          {loading ? (
+   432→   432→            Array.from({ length: 8 }).map((_, i) => (
+   433→   433→              <Card key={i} className="bg-slate-900 border-slate-700">
+   434→   434→                <Skeleton className="w-full aspect-[3/4] bg-slate-800 rounded-t-xl" />
+   435→   435→                <CardContent className="p-3">
+   436→   436→                  <Skeleton className="h-4 w-3/4 bg-slate!-800 mb-2" />
+   437→   437→                  <Skeleton className="h-3 w-1/2 bg-slate-800" />
+   438→   438→                </CardContent>
+   439→   439→              </Card>
+   440→   440→            ))
+   441→   441→          ) : books.length === 0 ? (
+   442→   442→            <div className="col-span-full flex flex-col items-center justify-center py-12 text-slate-400">
+   443→   443→              <BookOpen className="w-12 h-12 mb-3 text-slate-600" />
+   444→   444→              <p>도서가 없습니다.</p>
+   445→   445→            </div>
+   446→   446→          ) : (
+   447→   447→            books.map((book) => (
+   448→   448→              <Card
+   449→   449→                key={book.id}
+   450→   450→                className="bg-slate-900 border-slate-700 text-white overflow-hidden group hover:border-slate-600 transition-colors duration-200"
+   451→   451→              >
+   452→   452→                {/* Cover image - top 60% */}
+   453→   453→                <BookCover coverUrl={book.coverUrl} title={book.title} size="grid" />
+   454→   454→                {/* Info */}
+   455→   455→                <CardContent className="p-3 space-y-2">
+   456→   456→                  <p className="font-medium text-sm text-white truncate" title={book.title}>
+   457→   457→                    {book.title}
+   458→   458→                  </p>
+   459→   459→                  <p className="text-xs text-slate-400 truncate">{book.author}</p>
+   460→   460→                  {book.category && (
+   461→   461→                    <span className={`inline-block text-[10px] px-1.5 py-0.5 rounded border ${getCategoryBadgeClass(book.category)}`}>
+   462→   462→                      {book.category}
+   463→   463→                    </span>
+   464→   464→                  )}
+   465→   465→                  <div className="flex items-center gap-2 text-xs text-slate-400">
+   466→   466→                    <span>재고: {book.totalCopies}</span>
+   467→   467→                    <span>•</span>
+   468→   468→                    <span className={book.availableCopies > 0 ? 'text-emerald-400' : 'text-rose-400'}>
+   469→   469→                      대출가능: {book.availableCopies}
+   470→   470→                    </span>
+   471→   471→                  </div>
+   472→   472→                  {/* Actions */}
+   473→   473→                  <div className="flex items-center gap-1 pt-1 border-t border-slate-700/50">
+   474→   474→                    <Button
+   475→   475→                      variant="ghost"
+   476→   476→                      size="sm"
+   477→   477→                      onClick={() => handleEdit(book)}
+   478→   478→                      className="h-7 flex-1 text-slate-400 hover:text-sky-400 hover:bg-slate-800 text-xs"
+   479→   479→                    >
+   480→   480→                      <Pencil className="w-3 h-3 mr-1" />
+   481→   481→                      수정
+   482→   482→                    </Button>
+   483→   483→                    <Button
+   484→   484→                      variant="ghost"
+   485→   485→                      size="sm"
+   486→   486→                      onClick={() => handleDelete(book)}
+   487→   487→                      className="h-7 flex-1 text-slate-400 hover:text-rose-400 hover:bg-slate-800 text-xs"
+   488→   488→                    >
+   489→   489→                      <Trash2 className="w-3 h-3 mr-1" />
+   490→   490→                      삭제
+   491→   491→                    </Button>
+   492→   492→                  </div>
+   493→   493→                </CardContent>
+   494→   494→              </Card>
+   495→   495→            ))
+   496→   496→          )}
+   497→   497→        </div>
+   498→   498→      )}
+   499→   499→
+   500→   500→      {/* 도서 추가/수정 다이얼로그 - Dark styled */}
+   501→   501→      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+   502→   502→        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto bg-slate-900 border-slate-700 text-white">
+   503→   503→          <DialogHeader>
+   504→   504→            <DialogTitle className="text-white">{isAdding ? '도서 추가' : '도서 수정'}</DialogTitle>
+   505→   505→            <DialogDescription className="text-slate-400">
+   506→   506→              {isAdding ? '새로운 도서 정보를 입력하세요.' : '도서 정보를 수정하세요.'}
+   507→   507→            </DialogDescription>
+   508→   508→          </DialogHeader>
+   509→   509→          <div className="grid gap-4 py-2">
+   510→   510→            <div className="grid grid-cols-2 gap-3">
+   511→   511→              <div className="space-y-1.5">
+   512→   512→                <Label className="text-slate-300">ISBN *</Label>
+   513→   513→                <Input
+   514→   514→                  value={form.isbn}
+   515→   515→                  onChange={(e) => setForm((f) => ({ ...f, isbn: e.target.value }))}
+   516→   516→                  placeholder="978..."
+   517→   517→                  disabled={!isAdding}
+   518→   518→                  className={inputBase}
+   519→   519→                />
+   520→   520→              </div>
+   521→   521→              <div className="space-y-1.5">
+   522→   522→                <Label className="text-slate-300">출판년도</Label>
+   523→   523→                <Input
+   524→   524→                  type="number"
+   525→   525→                  value={form.publishYear ?? ''}
+   526→   526→                  onChange={(e) => setForm((f) => ({ ...f, publishYear: e.target.value ? Number(e.target.value) : null }))}
+   527→   527→                  className={inputBase}
+   528→   528→                />
+   529→   529→              </div>
+   530→   530→            </div>
+   531→   531→            <div className="space-y-1.5">
+   532→   532→              <Label className="text-slate-300">제목 *</Label>
+   533→   533→              <Input
+   534→   534→                value={form.title}
+   535→   535→                onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+   536→   536→                className={inputBase}
+   537→   537→              />
+   538→   538→            </div>
+   539→   539→            <div className="grid grid-cols-2 gap-3">
+   540→   540→              <div className="space-y-1.5">
+   541→   541→                <Label className="text-slate-300">저자 *</Label>
+   542→   542→                <Input
+   543→   543→                  value={form.author}
+   544→   544→                  onChange={(e) => setForm((f) => ({ ...f, author: e.target.value }))}
+   545→   545→                  className={inputBase}
+   546→   546→                />
+   547→   547→              </div>
+   548→   548→              <div className="space-y-1.5">
+   549→   549→                <Label className="text-slate-300">출판사</Label>
+   550→   550→                <Input
+   551→   551→                  value={form.publisher ?? ''}
+   552→   552→                  onChange={(e) => setForm((f) => ({ ...f, publisher: e.target.value }))}
+   553→   553→                  className={inputBase}
+   554→   554→                />
+   555→   555→              </div>
+   556→   556→            </div>
+   557→   557→            <div className="grid grid-cols-2 gap-3">
+   558→   558→              <div className="space-y-1.5">
+   559→   559→                <Label className="text-slate-300">카테고리</Label>
+   560→   560→                <Select
+   561→   561→                  value={form.category ?? ''}
+   562→   562→                  onValueChange={(v) => setForm((f) => ({ ...f, category: v }))}
+   563→   563→                >
+   564→   564→                  <SelectTrigger className={inputBase}>
+   565→   565→                    <SelectValue placeholder="선택" />
+   566→   566→                  </SelectTrigger>
+   567→   567→                  <SelectContent className="bg-slate-900 border-slate-700">
+   568→   568→                    {CATEGORIES.filter((c) => c !== '전체').map((cat) => (
+   569→   569→                      <SelectItem key={cat} value={cat} className="text-white focus:bg-slate-800 focus:text-white">
+   570→   570→                        {cat}
+   571→   571→                      </SelectItem>
+   572→   572→                    ))}
+   573→   573→                  </SelectContent>
+   574→   574→                </Select>
+   575→   575→              </div>
+   576→   576→              <div className="space-y-1.5">
+   577→   577→                <Label className="text-slate-300">책장 위치</Label>
+   578→   578→                <Input
+   579→   579→                  value={form.shelfLocation ?? ''}
+   580→   580→                  onChange={(e) => setForm((f) => ({ ...f, shelfLocation: e.target.value }))}
+   581→   581→                  placeholder="2층 A-05"
+   582→   582→                  className={inputBase}
+   583→   583→                />
+   584→   584→              </div>
+   585→   585→            </div>
+   586→   586→            <div className="grid grid-cols-2 gap-3">
+   587→   587→              <div className="space-y-1.5">
+   588→   588→                <Label className="text-slate-300">총 권수</Label>
+   589→   589→                <Input
+   590→   590→                  type="number"
+   591→   591→                  value={form.totalCopies}
+   592→   592→                  onChange={(e) => setForm((f) => ({ ...f, totalCopies: Number(e.target.value) }))}
+   593→   593→                  className={inputBase}
+   594→   594→                />
+   595→   595→              </div>
+   596→   596→              <div className="space-y-1.5">
+   597→   597→                <Label className="text-slate-300">대출 가능 권수</Label>
+   598→   598→                <Input
+   599→   599→                  type="number"
+   600→   600→                  value={form.availableCopies}
+   601→   601→                  onChange={(e) => setForm((f) => ({ ...f, availableCopies: Number(e.target.value) }))}
+   602→   602→                  className={inputBase}
+   603→   603→                />
+   604→   604→              </div>
+   605→   605→            </div>
+   606→   606→            <div className="space-y-1.5">
+   607→   607→              <Label className="text-slate-300">표지 이미지 URL</Label>
+   608→   608→              <Input
+   609→   609→                value={form.coverUrl ?? ''}
+   610→   610→                onChange={(e) => setForm((f) => ({ ...f, coverUrl: e.target.value }))}
+   611→   611→                placeholder="https://..."
+   612→   612→                className={inputBase}
+   613→   613→              />
+   614→   614→              {/* Live preview of cover URL */}
+   615→   615→              {form.coverUrl && (
+   616→   616→                <div className="w-24 h-32 rounded overflow-hidden border border-slate-700 bg-slate-800">
+   617→   617→                  <img
+   618→   618→                    src={form.coverUrl}
+   619→   619→                    alt="미리보기"
+   620→   620→                    className="w-full h-full object-cover"
+   621→   621→                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+   622→   622→                  />
+   623→   623→                </div>
+   624→   624→              )}
+   625→   625→            </div>
+   626→   626→          </div>
+   627→   627→          <DialogFooter>
+   628→   628→            <Button
+   629→   629→              variant="outline"
+   630→   630→              onClick={() => setEditDialogOpen(false)}
+   631→   631→              disabled={saving}
+   632→   632→              className="border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white"
+   633→   633→            >
+   634→   634→              취소
+   635→   635→            </Button>
+   636→   636→            <button
+   637→   637→              onClick={handleSave}
+   638→   638→              disabled={saving}
+   639→   639→              className="h-10 px-4 text-sm rounded-lg bg-gradient-to-r from-sky-500 to-sky-600 text-white hover:from-sky-400 hover:to-sky-500 transition-all flex items-center gap-1.5 shadow-lg shadow-sky-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+   640→   640→            >
+   641→   641→              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+   642→   642→              {isAdding ? '등록' : '저장'}
+   643→   643→            </button>
+   644→   644→          </DialogFooter>
+   645→   645→        </DialogContent>
+   646→   646→      </Dialog>
+   647→   647→
+   648→   648→      {/* 삭제 확인 다이얼로그 - Dark styled */}
+   649→   649→      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+   650→   650→        <AlertDialogContent className="bg-slate-900 border-slate-700 text-white">
+   651→   651→          <AlertDialogHeader>
+   652→   652→            <AlertDialogTitle className="text-white">도서 삭제</AlertDialogTitle>
+   653→   653→            <AlertDialogDescription className="text-slate-400">
+   654→   654→              &quot;{selectedBook?.title}&quot;을(를) 정말 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.
+   655→   655→            </AlertDialogDescription>
+   656→   656→          </AlertDialogHeader>
+   657→   657→          <AlertDialogFooter>
+   658→   658→            <AlertDialogCancel className="border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white">
+   659→   659→              취소
+   660→   660→            </AlertDialogCancel>
+   661→   661→            <AlertDialogAction
+   662→   662→              onClick={handleConfirmDelete}
+   663→   663→              className="bg-rose-600 text-white hover:bg-rose-500"
+   664→   664→            >
+   665→   665→              삭제
+   666→   666→            </AlertDialogAction>
+   667→   667→          </AlertDialogFooter>
+   668→   668→        </AlertDialogContent>
+   669→   669→      </AlertDialog>
+   670→   670→    </div>
+   671→   671→  );
+   672→   672→}
+   673→   673→

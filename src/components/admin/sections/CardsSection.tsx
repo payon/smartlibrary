@@ -23,7 +23,8 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   CreditCard, CheckCircle2, XCircle, Clock, Search, Loader2,
   Plus, Eye, Trash2, UserPlus, AlertCircle,
-  Smartphone, BookOpen, ArrowRight, ChevronRight, IdCard
+  Smartphone, BookOpen, ArrowRight, ChevronRight, IdCard,
+  CheckSquare, Square, ListChecks, XSquare, FileCheck
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -187,17 +188,25 @@ function IssuanceWorkflowPipeline({ stats }: { stats: CardStats }) {
       id: 'apply',
       label: '신청',
       icon: UserPlus,
+      count: stats.total,
+      countLabel: `총 ${stats.total}건`,
+      status: (stats.total > 0 ? 'completed' : 'pending') as 'active' | 'completed' | 'pending',
+    },
+    {
+      id: 'review',
+      label: '심사',
+      icon: FileCheck,
       count: stats.pending,
       countLabel: `${stats.pending}건 대기`,
-      status: stats.pending > 0 ? 'active' : (stats.total > 0 ? 'completed' : 'pending') as 'active' | 'completed' | 'pending',
+      status: (stats.pending > 0 ? 'active' : (stats.approved + stats.issued + stats.rejected > 0 ? 'completed' : 'pending')) as 'active' | 'completed' | 'pending',
     },
     {
       id: 'approve',
-      label: '승인',
+      label: '승인/거부',
       icon: CheckCircle2,
-      count: stats.approved,
-      countLabel: `${stats.approved}건 대기`,
-      status: stats.approved > 0 ? 'active' : (stats.issued > 0 ? 'completed' : 'pending') as 'active' | 'completed' | 'pending',
+      count: stats.approved + stats.rejected,
+      countLabel: `승인 ${stats.approved} / 거부 ${stats.rejected}`,
+      status: (stats.approved > 0 ? 'active' : (stats.issued > 0 || stats.rejected > 0 ? 'completed' : 'pending')) as 'active' | 'completed' | 'pending',
     },
     {
       id: 'issue',
@@ -205,7 +214,7 @@ function IssuanceWorkflowPipeline({ stats }: { stats: CardStats }) {
       icon: CreditCard,
       count: stats.issued,
       countLabel: `${stats.issued}건 완료`,
-      status: stats.issued > 0 ? 'completed' : 'pending' as 'completed' | 'pending',
+      status: (stats.issued > 0 ? 'completed' : 'pending') as 'completed' | 'pending',
     },
   ];
 
@@ -328,6 +337,78 @@ export default function CardsSection() {
     address: '',
     cardType: 'mobile',
   });
+
+  // 일괄 선택 상태
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [batchSaving, setBatchSaving] = useState(false);
+
+  /** 현재 필터링된 대기 중 카드 */
+  const pendingCards = cards.filter((c) => c.status === 'pending');
+  const allPendingSelected = pendingCards.length > 0 && pendingCards.every((c) => selectedIds.has(c.id));
+
+  /** 개별 선택 토글 */
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  /** 전체 대기 선택/해제 */
+  const toggleSelectAll = () => {
+    if (allPendingSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(pendingCards.map((c) => c.id)));
+    }
+  };
+
+  /** 일괄 승인 */
+  const handleBatchApprove = async () => {
+    if (selectedIds.size === 0) return;
+    setBatchSaving(true);
+    let success = 0;
+    let fail = 0;
+    for (const id of selectedIds) {
+      try {
+        const res = await fetch(`/api/admin/cards/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'approve' }),
+        });
+        if (res.ok) success++; else fail++;
+      } catch { fail++; }
+    }
+    setBatchSaving(false);
+    setSelectedIds(new Set());
+    if (fail === 0) toast.success(`${success}건 승인 완료`);
+    else toast.warning(`${success}건 승인, ${fail}건 실패`);
+    await fetchCards(search, statusFilter, cardTypeFilter);
+  };
+
+  /** 일괄 거부 */
+  const handleBatchReject = async () => {
+    if (selectedIds.size === 0) return;
+    setBatchSaving(true);
+    let success = 0;
+    let fail = 0;
+    for (const id of selectedIds) {
+      try {
+        const res = await fetch(`/api/admin/cards/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'reject' }),
+        });
+        if (res.ok) success++; else fail++;
+      } catch { fail++; }
+    }
+    setBatchSaving(false);
+    setSelectedIds(new Set());
+    if (fail === 0) toast.success(`${success}건 거부 완료`);
+    else toast.warning(`${success}건 거부, ${fail}건 실패`);
+    await fetchCards(search, statusFilter, cardTypeFilter);
+  };
 
   // ==========================================================================
   // 데이터 로드
@@ -460,6 +541,24 @@ export default function CardsSection() {
 
   return (
     <div className="space-y-5">
+      {/* ──────── Hero Banner ──────── */}
+      <div className="relative w-full h-[100px] rounded-xl overflow-hidden border border-slate-700 mb-2">
+        <Image
+          src="/images/admin/card-process.png"
+          alt="카드 발급 배너"
+          fill
+          className="object-cover"
+          priority
+        />
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-900/90 via-slate-900/60 to-transparent" />
+        <div className="absolute inset-0 flex items-center px-6">
+          <div>
+            <p className="text-lg font-bold text-white">도서카드 발급 관리</p>
+            <p className="text-sm text-slate-300">신청부터 발급까지 전체 프로세스를 관리합니다</p>
+          </div>
+        </div>
+      </div>
+
       {/* ── 섹션 헤더 (키오스크 스타일) ─────────────────────────────── */}
       <div className="relative">
         <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -467,6 +566,17 @@ export default function CardsSection() {
           도서카드 발급 관리
         </h2>
         <div className="mt-1.5 h-[3px] w-32 rounded-full" style={{ background: 'linear-gradient(90deg, #0ea5e9, #38bdf8, transparent)' }} />
+      </div>
+
+      {/* ── 카드 발급 프로세스 비주얼 ─────────────────────────────── */}
+      <div className="relative w-full h-[80px] rounded-xl overflow-hidden border border-slate-700/50">
+        <Image
+          src="/images/admin/card-process.png"
+          alt="카드 발급 프로세스"
+          fill
+          className="object-cover opacity-50"
+        />
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-900/70 via-transparent to-slate-900/70" />
       </div>
 
       {/* ── 발급 워크플로우 파이프라인 ─────────────────────────────── */}
@@ -586,6 +696,41 @@ export default function CardsSection() {
               </Button>
             </div>
           </div>
+
+          {/* 일괄 처리 바 */}
+          {selectedIds.size > 0 && (
+            <div className="flex items-center gap-3 mt-3 p-2 rounded-lg bg-sky-500/10 border border-sky-500/20">
+              <ListChecks className="w-4 h-4 text-sky-400" />
+              <span className="text-sm text-sky-300 font-medium">{selectedIds.size}건 선택됨</span>
+              <Button
+                size="sm"
+                className="h-8 bg-emerald-600 hover:bg-emerald-700 text-white"
+                onClick={handleBatchApprove}
+                disabled={batchSaving}
+              >
+                {batchSaving && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
+                <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                일괄 승인
+              </Button>
+              <Button
+                size="sm"
+                className="h-8 bg-rose-600 hover:bg-rose-700 text-white"
+                onClick={handleBatchReject}
+                disabled={batchSaving}
+              >
+                <XCircle className="w-3.5 h-3.5 mr-1" />
+                일괄 거부
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 text-slate-400 hover:text-white"
+                onClick={() => setSelectedIds(new Set())}
+              >
+                선택 해제
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -596,6 +741,19 @@ export default function CardsSection() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-slate-800 hover:bg-slate-800 border-slate-700">
+                  <TableHead className="w-10 text-slate-300">
+                    <button
+                      onClick={toggleSelectAll}
+                      className="w-5 h-5 flex items-center justify-center rounded hover:bg-slate-600 transition-colors"
+                      title={allPendingSelected ? '전체 해제' : '대기 건 전체 선택'}
+                    >
+                      {allPendingSelected ? (
+                        <CheckSquare className="w-4 h-4 text-sky-400" />
+                      ) : (
+                        <Square className="w-4 h-4 text-slate-500" />
+                      )}
+                    </button>
+                  </TableHead>
                   <TableHead className="text-slate-300">신청자</TableHead>
                   <TableHead className="hidden md:table-cell text-slate-300">전화번호</TableHead>
                   <TableHead className="text-slate-300">카드유형</TableHead>
@@ -609,12 +767,12 @@ export default function CardsSection() {
                 {loading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i} className="border-slate-700">
-                      <TableCell colSpan={7}><Skeleton className="h-8 w-full bg-slate-700" /></TableCell>
+                      <TableCell colSpan={8}><Skeleton className="h-8 w-full bg-slate-700" /></TableCell>
                     </TableRow>
                   ))
                 ) : cards.length === 0 ? (
                   <TableRow className="border-slate-700">
-                    <TableCell colSpan={7} className="text-center py-12 text-slate-400">
+                    <TableCell colSpan={8} className="text-center py-12 text-slate-400">
                       <CreditCard className="w-8 h-8 mx-auto mb-2 opacity-40" />
                       도서카드 발급 신청이 없습니다.
                     </TableCell>
@@ -623,8 +781,27 @@ export default function CardsSection() {
                   cards.map((card) => (
                     <TableRow
                       key={card.id}
-                      className="group border-slate-700 hover:bg-slate-800/60 transition-colors duration-150"
+                      className={`group border-slate-700 hover:bg-slate-800/60 transition-colors duration-150 ${selectedIds.has(card.id) ? 'bg-sky-500/5' : ''}`}
                     >
+                      {/* 체크박스 */}
+                      <TableCell className="w-10">
+                        {card.status === 'pending' ? (
+                          <button
+                            onClick={() => toggleSelect(card.id)}
+                            className="w-5 h-5 flex items-center justify-center rounded hover:bg-slate-600 transition-colors"
+                          >
+                            {selectedIds.has(card.id) ? (
+                              <CheckSquare className="w-4 h-4 text-sky-400" />
+                            ) : (
+                              <Square className="w-4 h-4 text-slate-500" />
+                            )}
+                          </button>
+                        ) : (
+                          <span className="w-5 h-5 flex items-center justify-center">
+                            <XSquare className="w-4 h-4 text-slate-700" />
+                          </span>
+                        )}
+                      </TableCell>
                       {/* 신청자 - 아바타 + 이름 */}
                       <TableCell className="font-medium text-sm text-white">
                         <div className="flex items-center gap-2">

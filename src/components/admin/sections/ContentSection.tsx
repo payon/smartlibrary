@@ -26,6 +26,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
+import Image from 'next/image';
 
 interface ContentItem {
   id: string;
@@ -387,6 +388,24 @@ export default function ContentSection() {
 
   return (
     <div className="space-y-4">
+      {/* ──────── Hero Banner ──────── */}
+      <div className="relative w-full h-[100px] rounded-xl overflow-hidden border border-slate-700 mb-2">
+        <Image
+          src="/images/admin/content-hero.png"
+          alt="콘텐츠 배너"
+          fill
+          className="object-cover"
+          priority
+        />
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-900/90 via-slate-900/60 to-transparent" />
+        <div className="absolute inset-0 flex items-center px-6">
+          <div>
+            <p className="text-lg font-bold text-white">키오스크 화면 편집</p>
+            <p className="text-sm text-slate-300">각 화면의 텍스트, 색상, 이미지를 커스터마이징합니다</p>
+          </div>
+        </div>
+      </div>
+
       {/* Section Header with sky-blue gradient underline */}
       <div className="relative">
         <h2 className="text-xl font-bold text-white">콘텐츠 관리</h2>

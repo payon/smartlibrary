@@ -102,19 +102,36 @@ export default function KioskAuthPin() {
       }
 
       // ── 3차: authenticatedUser가 없음 → 데모/시뮬레이션 모드 ──
-      // 임의의 4자리 PIN을 허용 (시뮬레이터)
-      // DB에서 첫 번째 활성 사용자를 데모 사용자로 사용
-      const demoRes = await fetch('/api/users', { headers: { 'X-PIN': pin } });
-      if (demoRes.ok) {
-        const users: SimUser[] = await demoRes.json();
+      // 데모 모드: 임의의 4자리 PIN 허용
+      // 1) PIN으로 사용자 조회 → 2) 활성 사용자 아무나 조회 → 3) 가상 데모 사용자 생성
+      const isDemoMode = true; // authenticatedUser가 없으면 항상 데모/시뮬레이터 모드
+
+      // 1) 입력한 PIN으로 사용자 조회 시도
+      const pinRes = await fetch('/api/users', { headers: { 'X-PIN': pin } });
+      if (pinRes.ok) {
+        const users: SimUser[] = await pinRes.json();
         if (users.length > 0) {
           proceedToNext({ ...users[0], pin }, false);
           return;
         }
       }
 
-      // PIN으로 사용자를 찾을 수 없어도 데모 모드에서는 통과
-      // 가상의 데모 사용자 생성
+      // 2) PIN으로 찾지 못함 → 활성 사용자 아무나 조회
+      try {
+        const allUsersRes = await fetch('/api/users');
+        if (allUsersRes.ok) {
+          const allUsers: SimUser[] = await allUsersRes.json();
+          const activeUser = allUsers.find((u) => u.isActive);
+          if (activeUser) {
+            proceedToNext({ ...activeUser, pin }, isDemoMode);
+            return;
+          }
+        }
+      } catch {
+        // 조회 실패 시 다음 단계로 진행
+      }
+
+      // 3) 활성 사용자도 없음 → 가상 데모 사용자 생성
       const demoUser: SimUser = {
         id: 'demo-user',
         name: '데모 이용자',
@@ -128,7 +145,7 @@ export default function KioskAuthPin() {
         createdAt: new Date().toISOString(),
         pin,
       };
-      proceedToNext(demoUser, true);
+      proceedToNext(demoUser, isDemoMode);
     } catch {
       // 네트워크 오류 → 데모 모드에서는 통과시킴
       const demoUser: SimUser = {

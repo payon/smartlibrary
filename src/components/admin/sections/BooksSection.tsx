@@ -259,21 +259,31 @@ export default function BooksSection() {
   return (
     <div className="space-y-4">
       {/* Section Header with hero banner + gradient underline */}
-      <div className="relative overflow-hidden rounded-xl h-[120px]">
+      <div className="relative w-full h-[100px] rounded-xl overflow-hidden border border-slate-700">
         <Image
           src="/images/admin/books-hero.png"
-          alt="도서 관리"
+          alt="도서 배너"
           fill
           className="object-cover"
+          priority
         />
-        <div className="absolute inset-0 bg-gradient-to-r from-slate-900/90 via-slate-900/70 to-slate-900/40" />
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-900/90 via-slate-900/60 to-transparent" />
         <div className="absolute inset-0 flex items-center px-6">
           <div>
-            <h2 className="text-2xl font-bold text-white">도서 관리</h2>
-            <div className="mt-1 h-0.5 w-24 bg-gradient-to-r from-sky-500 via-sky-400 to-transparent" />
-            <p className="text-slate-400 text-sm mt-2">도서 등록, 수정, 재고 관리</p>
+            <p className="text-lg font-bold text-white">도서 관리</p>
+            <p className="text-sm text-slate-300">도서 등록, 수정, 재고 관리</p>
           </div>
         </div>
+      </div>
+
+      {/* Loan process decorative illustration */}
+      <div className="relative w-full h-[50px] rounded-lg overflow-hidden border border-slate-700/50">
+        <Image
+          src="/images/admin/loan-process.png"
+          alt="대출 프로세스"
+          fill
+          className="object-cover opacity-30"
+        />
       </div>
 
       {/* 상단 바: 검색 + 필터 + 뷰 토글 + 추가 */}

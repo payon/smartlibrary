@@ -21,7 +21,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Search, Loader2, Users, UserCheck } from 'lucide-react';
+import { Plus, Search, Loader2, Users, UserCheck, UserPlus } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -47,6 +47,7 @@ import {
 } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
+import Image from 'next/image';
 
 interface AdminUser {
   id: string;
@@ -105,9 +106,11 @@ export default function UsersSection() {
   const [kioskLoading, setKioskLoading] = useState(false);
   const [kioskSearch, setKioskSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [kioskDialogOpen, setKioskDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('admins');
   const [form, setForm] = useState({ email: '', name: '', password: '', role: 'operator' });
+  const [kioskForm, setKioskForm] = useState({ name: '', birthDate: '', phone: '', address: '', pin: '' });
 
   const fetchAdminUsers = useCallback(async () => {
     try {
@@ -171,6 +174,52 @@ export default function UsersSection() {
     }
   };
 
+  /** 키오스크 이용자 생성 */
+  const handleCreateKioskUser = async () => {
+    if (!kioskForm.name || !kioskForm.birthDate || !kioskForm.phone || !kioskForm.pin) {
+      toast.error('이름, 생년월일, 전화번호, PIN은 필수입니다.');
+      return;
+    }
+    if (!/^\d{8}$/.test(kioskForm.birthDate)) {
+      toast.error('생년월일은 8자리 숫자여야 합니다.');
+      return;
+    }
+    if (!/^\d{10,11}$/.test(kioskForm.phone.replace(/[^0-9]/g, ''))) {
+      toast.error('올바른 전화번호를 입력해주세요.');
+      return;
+    }
+    if (!/^\d{4}$/.test(kioskForm.pin)) {
+      toast.error('PIN은 4자리 숫자여야 합니다.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch('/api/admin/kiosk-users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: kioskForm.name,
+          birthDate: kioskForm.birthDate,
+          phone: kioskForm.phone.replace(/[^0-9]/g, ''),
+          address: kioskForm.address || null,
+          pin: kioskForm.pin,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || '생성 실패');
+      }
+      toast.success('키오스크 이용자가 등록되었습니다.');
+      setKioskDialogOpen(false);
+      setKioskForm({ name: '', birthDate: '', phone: '', address: '', pin: '' });
+      await fetchKioskUsers();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '생성에 실패했습니다.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleToggleActive = async (user: AdminUser) => {
     try {
       const res = await fetch(`/api/admin/users/${user.id}`, {
@@ -203,6 +252,24 @@ export default function UsersSection() {
 
   return (
     <div className="space-y-4">
+      {/* ──────── Hero Banner ──────── */}
+      <div className="relative w-full h-[100px] rounded-xl overflow-hidden border border-slate-700 mb-2">
+        <Image
+          src="/images/admin/users-hero.png"
+          alt="이용자 배너"
+          fill
+          className="object-cover"
+          priority
+        />
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-900/90 via-slate-900/60 to-transparent" />
+        <div className="absolute inset-0 flex items-center px-6">
+          <div>
+            <p className="text-lg font-bold text-white">이용자 계정 관리</p>
+            <p className="text-sm text-slate-300">관리자 및 키오스크 이용자 정보를 관리합니다</p>
+          </div>
+        </div>
+      </div>
+
       {/* ──────── Section Header with sky-blue gradient underline ──────── */}
       <div className="flex items-center gap-3 mb-2">
         <h2 className="text-xl font-bold text-white flex items-center gap-2">
@@ -328,6 +395,13 @@ export default function UsersSection() {
       {activeTab === 'kiosk' && (
         <div className="space-y-3">
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => setKioskDialogOpen(true)}
+              className="h-10 px-4 flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-sky-600 to-sky-700 text-white text-sm font-medium hover:from-sky-500 hover:to-sky-600 transition-all shadow-md shadow-sky-500/20 hover:shadow-lg hover:scale-[1.01] active:scale-[0.99]"
+            >
+              <UserPlus className="w-4 h-4" />
+              키오스크 이용자 등록
+            </button>
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <Input
@@ -404,6 +478,89 @@ export default function UsersSection() {
           </Card>
         </div>
       )}
+
+      {/* ──────── 키오스크 이용자 등록 다이얼로그 ──────── */}
+      <Dialog open={kioskDialogOpen} onOpenChange={setKioskDialogOpen}>
+        <DialogContent className="sm:max-w-md bg-slate-900 border-slate-700 text-white">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <UserPlus className="w-5 h-5 text-sky-400" />
+              키오스크 이용자 등록
+            </DialogTitle>
+            <DialogDescription className="text-slate-400">새로운 키오스크 이용자(SimUser)를 등록합니다.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-slate-300">이름 *</Label>
+              <Input
+                value={kioskForm.name}
+                onChange={(e) => setKioskForm((f) => ({ ...f, name: e.target.value }))}
+                placeholder="홍길동"
+                className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 focus:ring-sky-500"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-slate-300">생년월일 (8자리) *</Label>
+              <Input
+                value={kioskForm.birthDate}
+                onChange={(e) => setKioskForm((f) => ({ ...f, birthDate: e.target.value.replace(/\D/g, '').slice(0, 8) }))}
+                placeholder="19900101"
+                maxLength={8}
+                className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 focus:ring-sky-500"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-slate-300">전화번호 *</Label>
+              <Input
+                type="tel"
+                value={kioskForm.phone}
+                onChange={(e) => setKioskForm((f) => ({ ...f, phone: e.target.value }))}
+                placeholder="01012345678"
+                className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 focus:ring-sky-500"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-slate-300">주소 (선택)</Label>
+              <Input
+                value={kioskForm.address}
+                onChange={(e) => setKioskForm((f) => ({ ...f, address: e.target.value }))}
+                placeholder="서울시 강남구 대치동"
+                className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 focus:ring-sky-500"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-slate-300">PIN (4자리 숫자) *</Label>
+              <Input
+                type="password"
+                value={kioskForm.pin}
+                onChange={(e) => setKioskForm((f) => ({ ...f, pin: e.target.value.replace(/\D/g, '').slice(0, 4) }))}
+                placeholder="1234"
+                maxLength={4}
+                className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 focus:ring-sky-500"
+              />
+              <p className="text-xs text-slate-500">대출/반납 시 사용할 4자리 비밀번호입니다</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setKioskDialogOpen(false)}
+              disabled={saving}
+              className="border-slate-600 text-slate-300 hover:bg-slate-800 hover:text-white"
+            >
+              취소
+            </Button>
+            <button
+              onClick={handleCreateKioskUser}
+              disabled={saving}
+              className="h-10 px-4 flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-sky-600 to-sky-700 text-white text-sm font-medium hover:from-sky-500 hover:to-sky-600 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+              등록
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ──────── 관리자 생성 다이얼로그 (Dark) ──────── */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

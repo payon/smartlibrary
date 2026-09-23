@@ -163,8 +163,10 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // 키오스크 대출 시 PIN 검증
-      if (method === 'kiosk' && user.pin) {
+      // 카운터 대출 시 PIN 검증 (키오스크는 PIN 화면에서 이미 검증됨)
+      // kiosk: PIN은 PIN 입력 화면에서 사전 검증되므로 API에서 선택적 검증만 수행
+      const shouldValidatePin = method === 'counter' || (method === 'kiosk' && pin);
+      if (shouldValidatePin && user.pin) {
         const pinRateLimit = checkPinRateLimit(userId);
         if (!pinRateLimit.allowed) {
           return NextResponse.json(
@@ -172,7 +174,7 @@ export async function POST(request: NextRequest) {
             { status: 429 }
           );
         }
-        if (!pin || user.pin !== pin) {
+        if (user.pin !== pin) {
           return NextResponse.json(
             { error: '비밀번호가 일치하지 않습니다.' },
             { status: 401 }

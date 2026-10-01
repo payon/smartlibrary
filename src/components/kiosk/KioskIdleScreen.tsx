@@ -140,8 +140,8 @@ export default function KioskIdleScreen() {
         )}
       </main>
 
-      {/* 접근성 + 시작 */}
-      <footer className="px-5 pb-5 pt-2 shrink-0 bg-white/80 border-t border-slate-200">
+      {/* 접근성 + 시작 (화면 하단 고정) */}
+      <footer className="kiosk-sticky-footer px-5 pb-5 pt-2 shrink-0 bg-white/95 border-t border-slate-200">
         <div className="flex justify-center py-2">
           <KioskA11yBar dark={false} />
         </div>

@@ -108,10 +108,20 @@
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  min-height: 100dvh;
   max-height: 100vh;
+  max-height: 100dvh;
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
+}
+
+/* 시작 버튼 등 핵심 액션 고정 푸터 (모바일 사파리 대응) */
+.kiosk-sticky-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 /* ======================================================================== */

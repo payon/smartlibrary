@@ -15,12 +15,13 @@ import { Toaster } from "sonner";
 /** PWA 테마 컬러 */
 const THEME_COLOR = "#0f172a";
 
-/** 뷰포트 설정 (키오스크 세로 모드) */
+/** 뷰포트 설정 (키오스크 세로 모드, 노치/홈인디케이터 대응) */
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  viewportFit: "cover",
   themeColor: THEME_COLOR,
   colorScheme: "dark",
 };

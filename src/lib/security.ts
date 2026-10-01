@@ -355,6 +355,25 @@ export async function validateRequestBodySize(
 }
 
 /**
+ * 파싱된 본문 객체 크기 검증
+ * JSON 직렬화 길이를 기준으로 최대 크기를 검사합니다.
+ *
+ * @param obj - 검증할 본문 객체
+ * @param maxSize - 최대 허용 크기 (바이트), 기본값 1MB
+ * @returns 본문 크기가 허용 범위 내이면 true
+ */
+export function validateBodySize(
+  obj: unknown,
+  maxSize: number = MAX_REQUEST_BODY_SIZE
+): boolean {
+  try {
+    return JSON.stringify(obj)?.length <= maxSize;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Content-Type 검증
  * 요청이 JSON 형식인지 확인합니다.
  *
@@ -473,16 +492,24 @@ export function getSecurityHeaders(): Record<string, string> {
  * @returns 클라이언트 IP 주소 문자열
  */
 export function getClientIp(request: NextRequest): string {
-  // X-Forwarded-For 헤더에서 첫 번째 IP 추출 (프록시 환경)
-  const forwarded = request.headers.get('x-forwarded-for');
-  if (forwarded) {
-    return forwarded.split(',')[0].trim();
+  const ipPattern = /^\d{1,3}(\.\d{1,3}){3}$|^[a-fA-F0-9:]+$/;
+  const trustProxy = process.env.TRUST_PROXY === 'true';
+
+  // X-Real-IP를 우선 확인 (형식 검증 후 반환)
+  const realIp = request.headers.get('x-real-ip')?.trim();
+  if (realIp && ipPattern.test(realIp)) {
+    return realIp;
   }
 
-  // X-Real-IP 헤더 확인 (Nginx 등)
-  const realIp = request.headers.get('x-real-ip');
-  if (realIp) {
-    return realIp.trim();
+  // X-Forwarded-For는 TRUST_PROXY=true일 때만 신뢰
+  if (trustProxy) {
+    const forwarded = request.headers.get('x-forwarded-for');
+    if (forwarded) {
+      const first = forwarded.split(',')[0].trim();
+      if (first && ipPattern.test(first)) {
+        return first;
+      }
+    }
   }
 
   // 직접 연결의 경우

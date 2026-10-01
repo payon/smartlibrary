@@ -4,13 +4,14 @@
  * [역할]
  * - page.tsx에서 dynamic(ssr:false)로 불러옴
  * - Zustand 스토어 기반 화면 라우팅
- * - 시드 데이터 초기화
+ * - API 상태 확인 (health check)
+ * - 유휴 자동 로그아웃 (120초)
  * - PWA 상태 표시
  */
 
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
 import type { KioskViewName } from '@/lib/constants';
@@ -72,17 +73,29 @@ function ScreenRouter({ screen }: { screen: KioskViewName }) {
 export default function KioskApp() {
   const screen = useAppStore((s) => s.screen);
   const kioskMode = useAppStore((s) => s.kioskMode);
-  const seededRef = useRef(false);
 
   /* 고유 키: 화면명 + 모드 조합으로 AnimatePresence가 컴포넌트를 재생성하도록 함 */
   const screenKey = screen + '-' + (kioskMode || '');
 
-  /* 시드 데이터 초기화 */
+  /* API 상태 확인 (health check, 실패 무시) */
   useEffect(() => {
-    if (seededRef.current) return;
-    seededRef.current = true;
-    fetch('/api/seed', { method: 'POST' }).catch(() => {});
+    fetch('/api').catch(() => {});
   }, []);
+
+  /* 유휴 자동 로그아웃: 화면 변경 시 120초 타이머 리셋 */
+  useEffect(() => {
+    const resetKiosk = () => {
+      const { setAuthenticatedUser, clearSelectedBooks, clearReturnedLoans, setScreen } = useAppStore.getState();
+      setAuthenticatedUser(null);
+      clearSelectedBooks();
+      clearReturnedLoans();
+      setScreen('idle');
+    };
+    const timer = setTimeout(() => {
+      resetKiosk();
+    }, 120000);
+    return () => clearTimeout(timer);
+  }, [screen]);
 
   return (
     <div className="kiosk-frame">

@@ -2,13 +2,14 @@
  * 관리자 인증 모듈
  *
  * [기능]
- * - JWT 토큰 생성 및 검증
+ * - JWT 토큰 생성 및 검증 (jose 사용, HS256)
  * - 비밀번호 해시 및 검증 (bcryptjs 사용)
  * - 역할 기반 권한 관리 (super_admin, admin, operator)
  * - 세션 관리
  */
 
 import bcrypt from 'bcryptjs';
+import { SignJWT, jwtVerify } from 'jose';
 import { db } from '@/lib/db';
 import { ROLE_HIERARCHY, ROLE_PERMISSIONS } from '@/lib/permissions';
 
@@ -16,18 +17,24 @@ import { ROLE_HIERARCHY, ROLE_PERMISSIONS } from '@/lib/permissions';
 // JWT 토큰 관리
 // ============================================================================
 
-/** JWT 시크릿 키 — 반드시 환경변수로 설정해야 함 */
-const JWT_SECRET = process.env.JWT_SECRET || '';
-if (!JWT_SECRET && process.env.NODE_ENV === 'production') {
-  throw new Error(
-    '[SECURITY] JWT_SECRET 환경변수가 설정되지 않았습니다. .env에 JWT_SECRET를 추가하세요.'
-  );
+/** JWT 시크릿 키 — 런타임에 해석 (빌드 시점 강제 종료 방지) */
+function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET || '';
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(
+        '[SECURITY] JWT_SECRET 환경변수가 설정되지 않았습니다. .env에 JWT_SECRET를 추가하세요.'
+      );
+    }
+    console.warn('[SECURITY] JWT_SECRET이 설정되지 않았습니다. 개발용 기본값을 사용합니다.');
+    return 'dev-only-insecure-jwt-secret-do-not-use-in-prod';
+  }
+  return secret;
 }
-if (!JWT_SECRET) {
-  console.warn('[SECURITY] JWT_SECRET이 설정되지 않았습니다. 개발용 기본값을 사용합니다.');
+
+function getSecretKey(): Uint8Array {
+  return new TextEncoder().encode(getJwtSecret());
 }
-/** 개발 환경 폴백 시크릿 (프로덕션에서는 반드시 환경변수 설정) */
-const EFFECTIVE_JWT_SECRET = JWT_SECRET || 'dev-only-insecure-jwt-secret-do-not-use-in-prod';
 
 /** JWT 페이로드 타입 */
 export interface TokenPayload {
@@ -38,57 +45,22 @@ export interface TokenPayload {
   exp?: number;
 }
 
-/** 토큰 만료 시간 (24시간) */
-const TOKEN_EXPIRY_MS = 24 * 60 * 60 * 1000;
-
-/**
- * Base64URL 인코딩
- */
-function base64UrlEncode(data: string): string {
-  return Buffer.from(data).toString('base64url');
-}
-
-/**
- * Base64URL 디코딩
- */
-function base64UrlDecode(data: string): string {
-  return Buffer.from(data, 'base64url').toString('utf-8');
-}
+/** 토큰 만료 시간 (24시간, 초 단위) */
+const TOKEN_EXPIRY_SECONDS = 24 * 60 * 60;
 
 /**
  * JWT 토큰 생성
- * HMAC-SHA256 알고리즘을 사용합니다.
+ * jose SignJWT (HS256)를 사용합니다. iat/exp는 초 단위입니다.
  *
  * @param payload - 토큰에 포함할 데이터
  * @returns JWT 토큰 문자열
  */
 export async function generateToken(payload: Omit<TokenPayload, 'iat' | 'exp'>): Promise<string> {
-  const now = Date.now();
-  const fullPayload: TokenPayload = {
-    ...payload,
-    iat: now,
-    exp: now + TOKEN_EXPIRY_MS,
-  };
-
-  const header = base64UrlEncode(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-  const body = base64UrlEncode(JSON.stringify(fullPayload));
-
-  // Bun의 crypto를 사용한 HMAC-SHA256 서명
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(EFFECTIVE_JWT_SECRET),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  );
-  const signature = await crypto.subtle.sign(
-    'HMAC',
-    key,
-    new TextEncoder().encode(`${header}.${body}`)
-  );
-  const sig = base64UrlEncode(String.fromCharCode(...new Uint8Array(signature)));
-
-  return `${header}.${body}.${sig}`;
+  return await new SignJWT({ ...payload })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt()
+    .setExpirationTime(`${TOKEN_EXPIRY_SECONDS}s`)
+    .sign(getSecretKey());
 }
 
 /**
@@ -99,35 +71,17 @@ export async function generateToken(payload: Omit<TokenPayload, 'iat' | 'exp'>):
  */
 export async function verifyToken(token: string): Promise<TokenPayload | null> {
   try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-
-    const [header, body, sig] = parts;
-
-    // 서명 검증
-    const key = await crypto.subtle.importKey(
-      'raw',
-      new TextEncoder().encode(EFFECTIVE_JWT_SECRET),
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign']
-    );
-    const expectedSig = await crypto.subtle.sign(
-      'HMAC',
-      key,
-      new TextEncoder().encode(`${header}.${body}`)
-    );
-    const expectedSigStr = base64UrlEncode(String.fromCharCode(...new Uint8Array(expectedSig)));
-
-    if (sig !== expectedSigStr) return null;
-
-    // 페이로드 디코딩
-    const payload: TokenPayload = JSON.parse(base64UrlDecode(body));
-
-    // 만료 확인
-    if (payload.exp && Date.now() > payload.exp) return null;
-
-    return payload;
+    const { payload } = await jwtVerify(token, getSecretKey());
+    if (typeof payload.userId !== 'string' || typeof payload.email !== 'string' || typeof payload.role !== 'string') {
+      return null;
+    }
+    return {
+      userId: payload.userId as string,
+      email: payload.email as string,
+      role: payload.role as string,
+      iat: typeof payload.iat === 'number' ? payload.iat : undefined,
+      exp: typeof payload.exp === 'number' ? payload.exp : undefined,
+    };
   } catch {
     return null;
   }
@@ -182,6 +136,28 @@ export function hasPermission(role: string, permission: string): boolean {
 }
 
 /**
+ * 관리자 비밀번호 복잡도 검증 (8자 이상 + 4종 중 3종)
+ * @returns 오류 메시지 또는 null (정상)
+ */
+export function validateAdminPassword(password: unknown): string | null {
+  if (typeof password !== 'string' || password.length < 8) {
+    return '비밀번호는 8자 이상이어야 합니다.';
+  }
+  if (password.length > 128) {
+    return '비밀번호는 128자를 초과할 수 없습니다.';
+  }
+  const hasUpper = /[A-Z]/.test(password);
+  const hasLower = /[a-z]/.test(password);
+  const hasDigit = /\d/.test(password);
+  const hasSpecial = /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password);
+  const kinds = [hasUpper, hasLower, hasDigit, hasSpecial].filter(Boolean).length;
+  if (kinds < 3) {
+    return '비밀번호는 대문자, 소문자, 숫자, 특수문자 중 3가지 이상을 포함해야 합니다.';
+  }
+  return null;
+}
+
+/**
  * 역할 계층 비교
  *
  * @param userRole - 사용자 역할
@@ -214,7 +190,7 @@ export async function createSession(
     data: {
       userId,
       token,
-      expiresAt: new Date(Date.now() + TOKEN_EXPIRY_MS),
+      expiresAt: new Date(Date.now() + TOKEN_EXPIRY_SECONDS * 1000),
       ipAddress,
       userAgent,
     },

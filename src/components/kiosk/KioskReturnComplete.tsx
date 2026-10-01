@@ -6,19 +6,42 @@
 
 import { motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
+import { useKioskSpeak } from '@/hooks/useKioskSpeak';
 import { CheckCircle2 } from 'lucide-react';
 import { CmsText } from '@/components/kiosk/CmsText';
+import KioskReceipt, { formatReceiptDate } from '@/components/kiosk/KioskReceipt';
+import { useScreenTheme } from '@/components/kiosk/CmsMedia';
+import { useCmsText } from '@/hooks/useCmsContent';
 
 export default function KioskReturnComplete() {
-  const { returnedLoans, setScreen, clearReturnedLoans } = useAppStore();
+  const returnCompleteTitle = useCmsText('returncomplete.title', '반납완료');
+  const theme = useScreenTheme('return-complete');
+  useKioskSpeak(`${returnCompleteTitle}. 반납이 완료되었습니다.`);
+  const { authenticatedUser, returnedLoans, setScreen, clearReturnedLoans, setAuthenticatedUser, lastReturnSummary, setLastReturnSummary } = useAppStore();
 
   const handleConfirm = () => {
     clearReturnedLoans();
+    setLastReturnSummary(null);
+    setAuthenticatedUser(null);
     setScreen('idle');
   };
 
+  const penaltyNote = lastReturnSummary
+    ? (() => {
+        const overdueItems = lastReturnSummary.items.filter((i) => i.overdueDays > 0);
+        if (overdueItems.length === 0) return null;
+        const maxBlock = Math.max(...overdueItems.map((i) => i.blockDays));
+        const latestUntil = overdueItems
+          .map((i) => i.blockUntil)
+          .filter(Boolean)
+          .sort()
+          .pop();
+        return `${overdueItems.length}권 연체로 ${maxBlock}일간 대출이 제한됩니다${latestUntil ? ` (${formatReceiptDate(latestUntil as string)}까지)` : ''}. 연체일수만큼 대여가 불가합니다.`;
+      })()
+    : null;
+
   return (
-    <div className="kiosk-screen kiosk-light-bg flex flex-col items-center justify-center px-6">
+    <div className="kiosk-screen kiosk-light-bg flex flex-col items-center justify-center px-6" style={theme.style}>
       <motion.div
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}
@@ -50,22 +73,35 @@ export default function KioskReturnComplete() {
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.8 }}
-        className="w-full max-w-xs bg-white rounded-xl p-4 border border-slate-100 mb-8"
+        className="w-full max-w-xs mb-8"
       >
-        <p className="text-sm font-semibold text-slate-600 mb-3">
-          반납 도서 ({returnedLoans.length}권)
-        </p>
-        {returnedLoans.map((loan) => (
-          <div
-            key={loan.id}
-            className="flex items-center gap-2 py-1.5 border-b border-slate-50 last:border-0"
-          >
-            <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-            <span className="text-sm text-slate-700 truncate">
-              {loan.book?.title || '도서'}
-            </span>
+        {lastReturnSummary ? (
+          <KioskReceipt
+            kind="return"
+            userName={lastReturnSummary.userName}
+            cardNumber={lastReturnSummary.cardNumber}
+            phone={authenticatedUser?.phone}
+            books={lastReturnSummary.items}
+            penaltyNote={penaltyNote}
+          />
+        ) : (
+          <div className="bg-white rounded-xl p-4 border border-slate-100">
+            <p className="text-sm font-semibold text-slate-600 mb-3">
+              반납 도서 ({returnedLoans.length}권)
+            </p>
+            {returnedLoans.map((loan) => (
+              <div
+                key={loan.id}
+                className="flex items-center gap-2 py-1.5 border-b border-slate-50 last:border-0"
+              >
+                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                <span className="text-sm text-slate-700 truncate">
+                  {loan.book?.title || '도서'}
+                </span>
+              </div>
+            ))}
           </div>
-        ))}
+        )}
       </motion.div>
 
       <motion.button

@@ -13,18 +13,42 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
-import type { BookItem } from '@/stores/useAppStore';
+import { useKioskSpeak } from '@/hooks/useKioskSpeak';
+import type { BookItem, LoanItem } from '@/stores/useAppStore';
 import { BOOK_CATEGORIES, MAX_LOAN_COUNT } from '@/lib/constants';
 import { Search, X, ArrowLeft, Check, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { CmsText } from '@/components/kiosk/CmsText';
+import { useScreenTheme } from '@/components/kiosk/CmsMedia';
+import { useCmsText } from '@/hooks/useCmsContent';
 
 export default function KioskLoanSelect() {
-  const { selectedBooks, addBook, removeBook, setScreen, prevScreen } = useAppStore();
+  const loanSelectTitle = useCmsText('loanselect.title', '도서를 선택해주세요');
+  const theme = useScreenTheme('loan-select');
+  useKioskSpeak(`${loanSelectTitle}. 도서를 선택해주세요. 최대 2권까지 대출할 수 있습니다.`);
+  const { selectedBooks, addBook, removeBook, setScreen, prevScreen, authenticatedUser, setKioskMode } = useAppStore();
   const [books, setBooks] = useState<BookItem[]>([]);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('전체');
   const [loading, setLoading] = useState(true);
+  const [activeLoanCount, setActiveLoanCount] = useState<number | null>(null);
+
+  /** 내 활성 대출 권수 조회 (상한 도달 시 반납 유도) */
+  useEffect(() => {
+    if (!authenticatedUser) return;
+    fetch(`/api/loans?userId=${authenticatedUser.id}`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((loans: LoanItem[]) => {
+        setActiveLoanCount(loans.filter((l) => l.status === 'active').length);
+      })
+      .catch(() => {});
+  }, [authenticatedUser]);
+
+  /** 반납하러 가기 (대출 상한 도달 시) */
+  const handleGoReturn = () => {
+    setKioskMode('return');
+    setScreen('return-insert');
+  };
 
   /** 도서 목록 조회 */
   useEffect(() => {
@@ -76,7 +100,7 @@ export default function KioskLoanSelect() {
   };
 
   return (
-    <div className="kiosk-screen kiosk-light-bg flex flex-col">
+    <div className="kiosk-screen kiosk-light-bg flex flex-col" style={theme.style}>
       {/* 상단 타이틀 */}
       <header className="px-5 pt-6 pb-3">
         <h1 className="text-xl font-bold text-slate-800">
@@ -100,6 +124,21 @@ export default function KioskLoanSelect() {
           </div>
         </div>
       </header>
+
+      {/* 대출 상한 도달 안내 (이미 빌린 경우 반납 유도) */}
+      {activeLoanCount !== null && activeLoanCount >= MAX_LOAN_COUNT && (
+        <div className="mx-5 mb-3 rounded-xl border border-amber-300 bg-amber-50 p-3 flex items-center gap-2">
+          <p className="flex-1 text-sm text-amber-700">
+            이미 {activeLoanCount}권을 대출 중입니다. 새로 빌리려면 먼저 반납해주세요.
+          </p>
+          <button
+            onClick={handleGoReturn}
+            className="shrink-0 h-10 px-4 rounded-lg bg-amber-500 text-white text-sm font-semibold"
+          >
+            반납하러 가기
+          </button>
+        </div>
+      )}
 
       {/* 검색 바 */}
       <div className="px-5 mb-3">

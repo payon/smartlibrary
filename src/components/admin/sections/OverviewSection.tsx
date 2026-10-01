@@ -28,14 +28,16 @@ import {
   Activity,
   PackageCheck,
   CreditCard,
+  LayoutDashboard,
+  MonitorSmartphone,
 } from 'lucide-react';
+import AdminHero from '@/components/admin/AdminHero';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAppStore } from '@/stores/useAppStore';
 import { toast } from 'sonner';
-import Image from 'next/image';
 
 interface AnalyticsData {
   totalBooks: number;
@@ -149,23 +151,13 @@ export default function OverviewSection() {
 
   return (
     <div className="space-y-6">
-      {/* ──────── Hero Banner ──────── */}
-      <div className="relative w-full h-[100px] rounded-xl overflow-hidden border border-slate-700 mb-6">
-        <Image
-          src="/images/admin/overview-hero.png"
-          alt="오버뷰 배너"
-          fill
-          className="object-cover"
-          priority
-        />
-        <div className="absolute inset-0 bg-gradient-to-r from-slate-900/90 via-slate-900/60 to-transparent" />
-        <div className="absolute inset-0 flex items-center px-6">
-          <div>
-            <p className="text-lg font-bold text-white">키오스크 관리 대시보드</p>
-            <p className="text-sm text-slate-300">실시간 기기 상태 및 이용 현황을 모니터링합니다</p>
-          </div>
-        </div>
-      </div>
+      {/* ──────── Hero Banner (텍스트-프리 그래픽) ──────── */}
+      <AdminHero
+        icon={LayoutDashboard}
+        title="키오스크 관리 대시보드"
+        subtitle="실시간 기기 상태 및 이용 현황을 모니터링합니다"
+        accent="sky"
+      />
 
       {/* ───────── KPI 카드 (그라디언트) ───────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -214,15 +206,9 @@ export default function OverviewSection() {
         </CardHeader>
         <CardContent className="p-4">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-            {/* 디바이스 이미지 */}
-            <div className="shrink-0 rounded-xl overflow-hidden border border-slate-600/50 bg-slate-800 p-2">
-              <Image
-                src="/images/admin/kiosk-device.png"
-                alt="키오스크 단말기"
-                width={80}
-                height={80}
-                className="rounded-lg object-contain"
-              />
+            {/* 디바이스 상태 아이콘 */}
+            <div className="shrink-0 w-20 h-20 rounded-xl border border-slate-600/50 bg-gradient-to-br from-sky-500/20 to-slate-800 flex items-center justify-center">
+              <MonitorSmartphone className="w-10 h-10 text-sky-400" strokeWidth={1.5} />
             </div>
 
             {/* 상태 인디케이터 */}
@@ -392,15 +378,6 @@ export default function OverviewSection() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 p-4">
-            {/* Loan process decorative illustration */}
-            <div className="relative w-full h-[60px] rounded-lg overflow-hidden mb-2 border border-slate-700/50">
-              <Image
-                src="/images/admin/loan-process.png"
-                alt="대출 프로세스"
-                fill
-                className="object-cover opacity-40"
-              />
-            </div>
             <button
               className="w-full h-12 flex items-center justify-start text-base font-medium rounded-xl bg-gradient-to-r from-sky-600 to-sky-700 text-white hover:from-sky-500 hover:to-sky-600 transition-all shadow-md hover:shadow-lg hover:scale-[1.01] active:scale-[0.99]"
               onClick={handleResetKiosk}

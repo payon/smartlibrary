@@ -4,18 +4,17 @@
  * [GET] /api/admin/users
  * 관리자 계정 목록을 조회합니다.
  *
- * [POST] /api/admin/users
+ * [POST] /api/admin/users (super_admin 전용)
  * 새로운 관리자 계정을 생성합니다.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
-import { verifyToken, hasPermission, hashPassword } from '@/lib/admin-auth';
+import { requireAdmin, json } from '@/lib/api-helpers';
+import { hashPassword, validateAdminPassword } from '@/lib/admin-auth';
 import { logAudit } from '@/lib/audit-logger';
 import { getClientIp } from '@/lib/security';
-
-/** 유효한 관리자 역할 목록 */
-const VALID_ADMIN_ROLES = ['super_admin', 'admin', 'operator'] as const;
+import { VALID_ADMIN_ROLES } from '@/lib/permissions';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,18 +23,9 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: NextRequest) {
   try {
-    const token = request.cookies.get('admin_token')?.value;
-    if (!token) {
-      return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
-    }
-
-    const payload = await verifyToken(token);
-    if (!payload) {
-      return NextResponse.json({ error: '유효하지 않은 토큰입니다.' }, { status: 401 });
-    }
-
-    if (!hasPermission(payload.role, 'users:read')) {
-      return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
+    const auth = await requireAdmin(request, 'users:read');
+    if ('error' in auth) {
+      return json({ error: auth.error }, auth.status);
     }
 
     const users = await db.adminUser.findMany({
@@ -52,63 +42,72 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
     });
 
-    return NextResponse.json({ users });
+    return json({ users });
   } catch (error) {
     console.error('관리자 목록 조회 오류:', error);
-    return NextResponse.json(
+    return json(
       { error: '관리자 목록을 조회하는 중 오류가 발생했습니다.' },
-      { status: 500 }
+      500
     );
   }
 }
 
 /**
- * 관리자 계정 생성
+ * 관리자 계정 생성 (super_admin 전용)
  */
 export async function POST(request: NextRequest) {
   try {
-    const token = request.cookies.get('admin_token')?.value;
-    if (!token) {
-      return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
-    }
-
-    const payload = await verifyToken(token);
-    if (!payload) {
-      return NextResponse.json({ error: '유효하지 않은 토큰입니다.' }, { status: 401 });
+    const auth = await requireAdmin(request);
+    if ('error' in auth) {
+      return json({ error: auth.error }, auth.status);
     }
 
     // super_admin만 관리자 계정 생성 가능
-    if (!hasPermission(payload.role, 'users:read') || payload.role !== 'super_admin') {
-      return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
+    if (auth.user.role !== 'super_admin') {
+      return json({ error: '권한이 없습니다.' }, 403);
     }
 
     const body = await request.json();
     const { email, name, password, role } = body;
 
     if (!email || !name || !password || !role) {
-      return NextResponse.json(
+      return json(
         { error: '이메일, 이름, 비밀번호, 역할은 필수입니다.' },
-        { status: 400 }
+        400
       );
     }
 
+    if (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      return json({ error: '올바른 이메일 형식이어야 합니다.' }, 400);
+    }
+
+    if (typeof name !== 'string' || name.trim().length < 2 || name.trim().length > 50) {
+      return json({ error: '이름은 2~50자여야 합니다.' }, 400);
+    }
+
     // [보안] 역할 검증
-    if (!VALID_ADMIN_ROLES.includes(role as any)) {
-      return NextResponse.json(
+    if (!(VALID_ADMIN_ROLES as readonly string[]).includes(role)) {
+      return json(
         { error: '유효하지 않은 역할입니다. (super_admin, admin, operator)' },
-        { status: 400 }
+        400
       );
+    }
+
+    // [보안] 비밀번호 복잡도 검증
+    const pwError = validateAdminPassword(password);
+    if (pwError) {
+      return json({ error: pwError }, 400);
     }
 
     // 이메일 중복 확인
     const existing = await db.adminUser.findUnique({
-      where: { email },
+      where: { email: email.trim() },
     });
 
     if (existing) {
-      return NextResponse.json(
+      return json(
         { error: '이미 등록된 이메일입니다.' },
-        { status: 409 }
+        409
       );
     }
 
@@ -117,8 +116,8 @@ export async function POST(request: NextRequest) {
 
     const user = await db.adminUser.create({
       data: {
-        email,
-        name,
+        email: email.trim(),
+        name: name.trim(),
         passwordHash,
         role,
         isActive: true,
@@ -136,23 +135,23 @@ export async function POST(request: NextRequest) {
     });
 
     await logAudit({
-      userId: payload.userId,
+      userId: auth.payload.userId,
       action: 'create',
       entity: 'admin',
       entityId: user.id,
-      details: { email, name, role },
+      details: { email: user.email, name: user.name, role: user.role },
       ipAddress: getClientIp(request),
     });
 
-    return NextResponse.json({
+    return json({
       user,
       message: '관리자 계정이 생성되었습니다',
     });
   } catch (error) {
     console.error('관리자 계정 생성 오류:', error);
-    return NextResponse.json(
+    return json(
       { error: '관리자 계정을 생성하는 중 오류가 발생했습니다.' },
-      { status: 500 }
+      500
     );
   }
 }

@@ -27,13 +27,13 @@ import {
   PieChart, Pie, Cell, Legend,
   BarChart, Bar,
 } from 'recharts';
-import { BookOpen, Users, RotateCcw, TrendingUp, RefreshCw } from 'lucide-react';
+import { BookOpen, Users, RotateCcw, TrendingUp, RefreshCw, BarChart3 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import Image from 'next/image';
+import AdminHero from '@/components/admin/AdminHero';
 
 interface AnalyticsData {
   totalBooks: number;
@@ -103,22 +103,7 @@ export default function AnalyticsSection() {
       </div>
 
       {/* ──────── Analytics Hero Banner ──────── */}
-      <div className="relative w-full h-[100px] rounded-xl overflow-hidden border border-slate-700">
-        <Image
-          src="/images/admin/analytics-hero.png"
-          alt="분석 대시보드 배너"
-          fill
-          className="object-cover"
-          priority
-        />
-        <div className="absolute inset-0 bg-gradient-to-r from-slate-900/90 via-slate-900/60 to-transparent" />
-        <div className="absolute inset-0 flex items-center px-6">
-          <div>
-            <p className="text-lg font-bold text-white">데이터 인사이트</p>
-            <p className="text-sm text-slate-300">키오스크 이용 현황을 실시간으로 분석합니다</p>
-          </div>
-        </div>
-      </div>
+      <AdminHero icon={BarChart3} title="데이터 인사이트" subtitle="키오스크 이용 현황을 실시간으로 분석합니다" accent="rose" />
 
       {/* ──────── 날짜 범위 탭 + 새로고침 (Kiosk-style) ──────── */}
       <div className="flex items-center justify-between">

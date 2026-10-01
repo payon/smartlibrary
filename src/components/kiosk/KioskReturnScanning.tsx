@@ -12,11 +12,17 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
+import { useKioskSpeak } from '@/hooks/useKioskSpeak';
 import { BookPlus, CheckCircle2, Loader2 } from 'lucide-react';
 import type { LoanItem } from '@/stores/useAppStore';
 import { CmsText } from '@/components/kiosk/CmsText';
+import { useScreenTheme } from '@/components/kiosk/CmsMedia';
+import { useCmsText } from '@/hooks/useCmsContent';
 
 export default function KioskReturnScanning() {
+  const returnScanningTitle = useCmsText('returnscanning.title', '도서반납');
+  const theme = useScreenTheme('return-scanning');
+  useKioskSpeak(`${returnScanningTitle}. 도서를 인식하고 있습니다.`);
   const { returnedLoans, setScreen, authenticatedUser } = useAppStore();
   const [scanning, setScanning] = useState(true);
   const [remainingLoans, setRemainingLoans] = useState<LoanItem[]>([]);
@@ -56,7 +62,7 @@ export default function KioskReturnScanning() {
   };
 
   return (
-    <div className="kiosk-screen kiosk-dark-bg flex flex-col">
+    <div className="kiosk-screen kiosk-dark-bg flex flex-col" style={theme.style}>
       {/* 상단 타이틀 */}
       <header className="px-6 pt-8 pb-4">
         <h1 className="text-2xl font-bold text-white">

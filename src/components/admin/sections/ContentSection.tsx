@@ -11,12 +11,18 @@
 
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, type CSSProperties } from 'react';
 import {
   Save, RotateCcw, Loader2, ImageIcon, Type, Palette, FileJson,
   Library, CreditCard, ScanLine, Lock, BookOpen, Monitor,
-  ArrowRight, Home,
+  ArrowRight, Home, Plus, ChevronUp, ChevronDown, Trash2,
 } from 'lucide-react';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,7 +32,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
-import Image from 'next/image';
+import AdminHero from '@/components/admin/AdminHero';
 
 interface ContentItem {
   id: string;
@@ -35,6 +41,7 @@ interface ContentItem {
   type: string; // text | image | color | json | number
   screen: string;
   label: string;
+  sortOrder?: number;
 }
 
 const SCREENS = [
@@ -49,11 +56,15 @@ const SCREENS = [
   { value: 'return-scanning', label: '반납 스캔' },
   { value: 'return-confirm', label: '반납 확인' },
   { value: 'return-complete', label: '반납 완료' },
+  { value: 'card-apply', label: '카드 발급선택' },
+  { value: 'card-form', label: '카드 개인정보' },
+  { value: 'card-pending', label: '카드 승인대기' },
+  { value: 'card-complete', label: '카드 발급완료' },
   { value: 'global', label: '전역 설정' },
 ] as const;
 
 /** Screen preview mock content renderer */
-function ScreenPreview({ screen }: { screen: string }) {
+function ScreenPreview({ screen, backgroundStyle }: { screen: string; backgroundStyle?: CSSProperties }) {
   const screenLabel = SCREENS.find((s) => s.value === screen)?.label || screen;
 
   const renderContent = () => {
@@ -152,7 +163,7 @@ function ScreenPreview({ screen }: { screen: string }) {
       <p className="text-slate-400 text-xs font-medium">스크린 프리뷰</p>
       <div
         className="w-[200px] h-[320px] rounded-2xl overflow-hidden border-2 border-slate-700 shadow-lg"
-        style={{ background: '#0b1120' }}
+        style={{ background: '#0b1120', ...backgroundStyle }}
       >
         {/* Top status bar mockup */}
         <div className="h-6 bg-slate-800/80 flex items-center justify-between px-3">
@@ -171,6 +182,71 @@ function ScreenPreview({ screen }: { screen: string }) {
   );
 }
 
+interface MediaAsset {
+  id: string;
+  path: string;
+  fileName?: string;
+  mimeType?: string;
+}
+
+/** Parse hex (#rgb / #rrggbb) to r/g/b, returns null when invalid */
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const m = hex.trim().match(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/);
+  if (!m) return null;
+  let h = m[1];
+  if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+  const n = parseInt(h, 16);
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+  const c = (v: number) =>
+    Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0');
+  return `#${c(r)}${c(g)}${c(b)}`;
+}
+
+/** Derive r/g/b/a from current color value (rgb()/rgba() or hex). */
+function parseColorValue(value: string): { r: string; g: string; b: string; a: string } {
+  const rgba = value.trim().match(
+    /^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})(?:\s*,\s*([0-9]*\.?[0-9]+))?\s*\)$/
+  );
+  if (rgba) {
+    return { r: rgba[1], g: rgba[2], b: rgba[3], a: rgba[4] ?? '' };
+  }
+  const rgb = hexToRgb(value);
+  if (rgb) {
+    return { r: String(rgb.r), g: String(rgb.g), b: String(rgb.b), a: '' };
+  }
+  return { r: '', g: '', b: '', a: '' };
+}
+
+const BUTTON_ORDER_OPTIONS = [
+  { value: 'card', label: '도서카드 발급' },
+  { value: 'loan', label: '도서 대출' },
+  { value: 'return', label: '도서 반납' },
+] as const;
+
+const DEFAULT_BUTTON_ORDER = ['card', 'loan', 'return'];
+
+/** Parse button_order JSON defensively: filter unknown, append missing. */
+function parseButtonOrder(raw: string): string[] {
+  const known: string[] = BUTTON_ORDER_OPTIONS.map((o) => o.value);
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [...DEFAULT_BUTTON_ORDER];
+    const filtered = parsed.filter(
+      (v): v is string => typeof v === 'string' && known.includes(v)
+    );
+    const deduped = [...new Set(filtered)];
+    for (const k of known) {
+      if (!deduped.includes(k)) deduped.push(k);
+    }
+    return deduped;
+  } catch {
+    return [...DEFAULT_BUTTON_ORDER];
+  }
+}
+
 export default function ContentSection() {
   const [activeScreen, setActiveScreen] = useState('idle');
   const [items, setItems] = useState<ContentItem[]>([]);
@@ -178,6 +254,18 @@ export default function ContentSection() {
   const [saving, setSaving] = useState<Set<string>>(new Set());
   const [bulkSaving, setBulkSaving] = useState(false);
   const [editedValues, setEditedValues] = useState<Record<string, string>>({});
+  const [uploading, setUploading] = useState<Record<string, boolean>>({});
+  const [libraryFor, setLibraryFor] = useState<string | null>(null);
+  const [libraryItems, setLibraryItems] = useState<MediaAsset[]>([]);
+  const [libraryLoading, setLibraryLoading] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const [addScreen, setAddScreen] = useState('idle');
+  const [addName, setAddName] = useState('');
+  const [addType, setAddType] = useState('text');
+  const [addLabel, setAddLabel] = useState('');
+  const [addValue, setAddValue] = useState('');
+  const [addSaving, setAddSaving] = useState(false);
+  const [rowBusy, setRowBusy] = useState<Set<string>>(new Set());
 
   const fetchContent = useCallback(async (screen: string) => {
     try {
@@ -205,6 +293,42 @@ export default function ContentSection() {
 
   const handleValueChange = (key: string, value: string) => {
     setEditedValues((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleImageUpload = async (key: string, file: File) => {
+    setUploading((prev) => ({ ...prev, [key]: true }));
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/admin/media', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '업로드 실패');
+      handleValueChange(key, data.media.path);
+      toast.success('이미지 업로드 완료');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '업로드에 실패했습니다.');
+    } finally {
+      setUploading((prev) => ({ ...prev, [key]: false }));
+    }
+  };
+
+  const openLibrary = async (key: string) => {
+    setLibraryFor(key);
+    setLibraryLoading(true);
+    try {
+      const res = await fetch('/api/admin/media?mimeType=image&pageSize=24');
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setLibraryItems(data.media || []);
+    } catch {
+      toast.error('미디어 라이브러리를 불러오는데 실패했습니다.');
+      setLibraryItems([]);
+    } finally {
+      setLibraryLoading(false);
+    }
   };
 
   const handleSave = async (key: string) => {
@@ -287,6 +411,104 @@ export default function ContentSection() {
     }
   };
 
+  const handleMove = async (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= items.length) return;
+    const a = items[index];
+    const b = items[target];
+    const orderA = a.sortOrder ?? index;
+    const orderB = b.sortOrder ?? target;
+    setRowBusy((prev) => new Set(prev).add(a.key).add(b.key));
+    try {
+      for (const payload of [
+        { key: a.key, value: editedValues[a.key] ?? a.value, sortOrder: orderB },
+        { key: b.key, value: editedValues[b.key] ?? b.value, sortOrder: orderA },
+      ]) {
+        const res = await fetch('/api/admin/content', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error((data as { error?: string }).error || '순서 변경 실패');
+        }
+      }
+      await fetchContent(activeScreen);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '순서 변경에 실패했습니다.');
+    } finally {
+      setRowBusy((prev) => {
+        const next = new Set(prev);
+        next.delete(a.key);
+        next.delete(b.key);
+        return next;
+      });
+    }
+  };
+
+  const handleDelete = async (key: string) => {
+    if (!window.confirm(`"${key}" 삭제?`)) return;
+    setRowBusy((prev) => new Set(prev).add(key));
+    try {
+      const res = await fetch(`/api/admin/content?key=${encodeURIComponent(key)}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error((data as { error?: string }).error || '삭제 실패');
+      }
+      toast.success(`"${key}" 삭제 완료`);
+      await fetchContent(activeScreen);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '삭제에 실패했습니다.');
+    } finally {
+      setRowBusy((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    }
+  };
+
+  const handleAdd = async () => {
+    const name = addName.trim();
+    if (!addScreen || !name || !addLabel.trim() || !addType) {
+      toast.error('모든 필드를 입력해주세요.');
+      return;
+    }
+    const fullKey = `${addScreen}.${name}`;
+    setAddSaving(true);
+    try {
+      const res = await fetch('/api/admin/content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          key: fullKey,
+          value: addValue,
+          type: addType,
+          screen: addScreen,
+          label: addLabel.trim(),
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error((data as { error?: string }).error || '추가 실패');
+      }
+      toast.success(`"${fullKey}" 추가 완료`);
+      setAddOpen(false);
+      setAddName('');
+      setAddLabel('');
+      setAddValue('');
+      setAddType('text');
+      await fetchContent(activeScreen);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '추가에 실패했습니다.');
+    } finally {
+      setAddSaving(false);
+    }
+  };
+
   const getTypeIcon = (type: string) => {
     switch (type) {
       case 'image': return <ImageIcon className="w-4 h-4" />;
@@ -309,28 +531,152 @@ export default function ContentSection() {
 
   const renderField = (item: ContentItem) => {
     const currentValue = editedValues[item.key] ?? item.value;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const isChanged = currentValue !== item.value;
     const inputBase = 'bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 focus-visible:ring-sky-500';
 
+    if (item.key === 'mainmenu.button_order') {
+      const order = parseButtonOrder(currentValue);
+      const moveOrder = (idx: number, dir: -1 | 1) => {
+        const j = idx + dir;
+        if (j < 0 || j >= order.length) return;
+        const next = [...order];
+        [next[idx], next[j]] = [next[j], next[idx]];
+        handleValueChange(item.key, JSON.stringify(next));
+      };
+      return (
+        <div className="space-y-2">
+          <p className="text-[11px] text-slate-500">키오스크 메인 화면 버튼 순서 (위→아래)</p>
+          <div className="space-y-1.5">
+            {order.map((v, idx) => {
+              const opt = BUTTON_ORDER_OPTIONS.find((o) => o.value === v);
+              return (
+                <div
+                  key={v}
+                  className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2"
+                >
+                  <span className="text-xs font-medium text-white flex-1">
+                    {idx + 1}. {opt?.label ?? v}
+                    <span className="ml-2 font-mono text-[11px] text-slate-500">{v}</span>
+                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => moveOrder(idx, -1)}
+                    disabled={idx === 0}
+                    className="h-7 w-7 p-0 border-slate-700 text-slate-200"
+                    aria-label="위로"
+                  >
+                    <ChevronUp className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => moveOrder(idx, 1)}
+                    disabled={idx === order.length - 1}
+                    className="h-7 w-7 p-0 border-slate-700 text-slate-200"
+                    aria-label="아래로"
+                  >
+                    <ChevronDown className="w-4 h-4" />
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
     switch (item.type) {
-      case 'color':
+      case 'color': {
+        const { r, g, b, a } = parseColorValue(currentValue);
+        const pickerValue =
+          hexToRgb(currentValue)
+            ? (currentValue.length === 4
+                ? rgbToHex(
+                    hexToRgb(currentValue)!.r,
+                    hexToRgb(currentValue)!.g,
+                    hexToRgb(currentValue)!.b
+                  )
+                : currentValue)
+            : r !== '' && g !== '' && b !== ''
+              ? rgbToHex(Number(r), Number(g), Number(b))
+              : '#000000';
+        const emitRgb = (nr: string, ng: string, nb: string, na: string) => {
+          const ir = Math.max(0, Math.min(255, Number(nr)));
+          const ig = Math.max(0, Math.min(255, Number(ng)));
+          const ib = Math.max(0, Math.min(255, Number(nb)));
+          if (Number.isNaN(ir) || Number.isNaN(ig) || Number.isNaN(ib)) return;
+          if (na !== '' && Number(na) < 1) {
+            handleValueChange(item.key, `rgba(${ir}, ${ig}, ${ib}, ${na})`);
+          } else {
+            handleValueChange(item.key, `rgb(${ir}, ${ig}, ${ib})`);
+          }
+        };
         return (
-          <div className="flex items-center gap-3">
-            <input
-              type="color"
-              value={currentValue || '#000000'}
-              onChange={(e) => handleValueChange(item.key, e.target.value)}
-              className="w-12 h-12 rounded-lg border-2 border-slate-700 cursor-pointer shrink-0"
-            />
-            <Input
-              value={currentValue}
-              onChange={(e) => handleValueChange(item.key, e.target.value)}
-              className={`flex-1 h-12 ${inputBase}`}
-              placeholder="#000000"
-            />
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <input
+                type="color"
+                value={pickerValue}
+                onChange={(e) => handleValueChange(item.key, e.target.value)}
+                className="w-12 h-12 rounded-lg border-2 border-slate-700 cursor-pointer shrink-0"
+              />
+              <Input
+                value={currentValue}
+                onChange={(e) => handleValueChange(item.key, e.target.value)}
+                className={`flex-1 h-12 ${inputBase}`}
+                placeholder="#000000"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Label className="text-xs text-slate-400 shrink-0">R</Label>
+              <Input
+                type="number"
+                min={0}
+                max={255}
+                value={r}
+                onChange={(e) => emitRgb(e.target.value, g === '' ? '0' : g, b === '' ? '0' : b, a)}
+                className={`h-9 ${inputBase}`}
+              />
+              <Label className="text-xs text-slate-400 shrink-0">G</Label>
+              <Input
+                type="number"
+                min={0}
+                max={255}
+                value={g}
+                onChange={(e) => emitRgb(r === '' ? '0' : r, e.target.value, b === '' ? '0' : b, a)}
+                className={`h-9 ${inputBase}`}
+              />
+              <Label className="text-xs text-slate-400 shrink-0">B</Label>
+              <Input
+                type="number"
+                min={0}
+                max={255}
+                value={b}
+                onChange={(e) => emitRgb(r === '' ? '0' : r, g === '' ? '0' : g, e.target.value, a)}
+                className={`h-9 ${inputBase}`}
+              />
+              <Label className="text-xs text-slate-400 shrink-0">A</Label>
+              <Input
+                type="number"
+                min={0}
+                max={1}
+                step={0.1}
+                value={a}
+                placeholder="1"
+                onChange={(e) => emitRgb(r === '' ? '0' : r, g === '' ? '0' : g, b === '' ? '0' : b, e.target.value)}
+                className={`h-9 ${inputBase}`}
+              />
+            </div>
           </div>
         );
-      case 'image':
+      }
+      case 'image': {
+        const isUploading = !!uploading[item.key];
+        const inputId = `image-upload-${item.key}`;
         return (
           <div className="space-y-2">
             <Input
@@ -339,20 +685,59 @@ export default function ContentSection() {
               className={`h-12 ${inputBase}`}
               placeholder="이미지 URL 입력"
             />
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={isUploading}
+                onClick={() => document.getElementById(inputId)?.click()}
+                className="h-8 border-slate-700 text-slate-200"
+              >
+                {isUploading ? (
+                  <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                ) : null}
+                업로드
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => openLibrary(item.key)}
+                className="h-8 border-slate-700 text-slate-200"
+              >
+                라이브러리
+              </Button>
+              <input
+                id={inputId}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = '';
+                  if (file) handleImageUpload(item.key, file);
+                }}
+              />
+            </div>
             {currentValue && (
-              <div className="w-32 h-24 rounded-lg overflow-hidden border border-slate-700 bg-slate-800">
-                <img
-                  src={currentValue}
-                  alt="콘텐츠 이미지 미리보기"
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = 'none';
-                  }}
-                />
+              <div>
+                <div className="w-32 h-24 rounded-lg overflow-hidden border border-slate-700 bg-slate-800">
+                  <img
+                    src={currentValue}
+                    alt="콘텐츠 이미지 미리보기"
+                    className="w-full h-full object-contain"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                </div>
+                <p className="text-[11px] text-slate-500 font-mono mt-1 break-all">{currentValue}</p>
               </div>
             )}
           </div>
         );
+      }
       case 'json':
         return (
           <Textarea
@@ -386,25 +771,29 @@ export default function ContentSection() {
     (item) => editedValues[item.key] !== undefined && editedValues[item.key] !== item.value
   ).length;
 
+  // Live preview background: lookup saved values, overlay unsaved edits
+  const valueLookup: Record<string, string> = {};
+  items.forEach((item) => {
+    valueLookup[item.key] = item.value;
+  });
+  Object.assign(valueLookup, editedValues);
+
+  const getPreviewStyle = (tabValue: string): CSSProperties | undefined => {
+    const img = (valueLookup[`${tabValue}.background_image_url`] ?? '').trim();
+    if (img && (img.startsWith('/') || img.startsWith('https://'))) {
+      return { backgroundImage: `url(${img})`, backgroundSize: 'cover', backgroundPosition: 'center' };
+    }
+    const color = (valueLookup[`${tabValue}.background_color`] ?? '').trim();
+    if (color) {
+      return { background: color };
+    }
+    return undefined;
+  };
+
   return (
     <div className="space-y-4">
       {/* ──────── Hero Banner ──────── */}
-      <div className="relative w-full h-[100px] rounded-xl overflow-hidden border border-slate-700 mb-2">
-        <Image
-          src="/images/admin/content-hero.png"
-          alt="콘텐츠 배너"
-          fill
-          className="object-cover"
-          priority
-        />
-        <div className="absolute inset-0 bg-gradient-to-r from-slate-900/90 via-slate-900/60 to-transparent" />
-        <div className="absolute inset-0 flex items-center px-6">
-          <div>
-            <p className="text-lg font-bold text-white">키오스크 화면 편집</p>
-            <p className="text-sm text-slate-300">각 화면의 텍스트, 색상, 이미지를 커스터마이징합니다</p>
-          </div>
-        </div>
-      </div>
+      <AdminHero icon={Type} title="키오스크 화면 편집" subtitle="각 화면의 텍스트, 색상, 이미지를 커스터마이징합니다" accent="violet" />
 
       {/* Section Header with sky-blue gradient underline */}
       <div className="relative">
@@ -422,6 +811,16 @@ export default function ContentSection() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              setAddScreen(activeScreen);
+              setAddOpen(true);
+            }}
+            className="h-9 px-3 text-sm rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-600 text-white hover:from-emerald-400 hover:to-emerald-500 transition-all flex items-center gap-1.5 shadow-lg shadow-emerald-500/20"
+          >
+            <Plus className="w-4 h-4" />
+            콘텐츠 추가
+          </button>
           <button
             onClick={handleReset}
             className="h-9 px-3 text-sm rounded-lg bg-gradient-to-r from-slate-600 to-slate-700 text-slate-200 hover:from-slate-500 hover:to-slate-600 transition-all flex items-center gap-1.5 border border-slate-500/30"
@@ -481,9 +880,10 @@ export default function ContentSection() {
                   </Card>
                 ) : (
                   <div className="space-y-3">
-                    {items.map((item) => {
+                {items.map((item, index) => {
                       const isChanged = (editedValues[item.key] ?? item.value) !== item.value;
                       const isSaving = saving.has(item.key);
+                      const isBusy = isSaving || rowBusy.has(item.key);
 
                       return (
                         <Card
@@ -510,18 +910,55 @@ export default function ContentSection() {
                                 </div>
                                 {renderField(item)}
                               </div>
-                              <Button
-                                size="sm"
-                                onClick={() => handleSave(item.key)}
-                                disabled={!isChanged || isSaving}
-                                className="h-9 shrink-0 mt-6 bg-sky-600 hover:bg-sky-500 text-white disabled:opacity-40"
-                              >
-                                {isSaving ? (
-                                  <Loader2 className="w-4 h-4 animate-spin" />
-                                ) : (
-                                  <Save className="w-4 h-4" />
-                                )}
-                              </Button>
+                              <div className="flex flex-col gap-1 shrink-0 mt-6">
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleSave(item.key)}
+                                  disabled={!isChanged || isBusy}
+                                  className="h-9 bg-sky-600 hover:bg-sky-500 text-white disabled:opacity-40"
+                                >
+                                  {isSaving ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <Save className="w-4 h-4" />
+                                  )}
+                                </Button>
+                                <div className="flex gap-1">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleMove(index, -1)}
+                                    disabled={index === 0 || isBusy}
+                                    className="h-7 w-7 p-0 border-slate-700 text-slate-200"
+                                    aria-label="위로 이동"
+                                  >
+                                    <ChevronUp className="w-4 h-4" />
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleMove(index, 1)}
+                                    disabled={index === items.length - 1 || isBusy}
+                                    className="h-7 w-7 p-0 border-slate-700 text-slate-200"
+                                    aria-label="아래로 이동"
+                                  >
+                                    <ChevronDown className="w-4 h-4" />
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleDelete(item.key)}
+                                    disabled={isBusy}
+                                    className="h-7 w-7 p-0 border-red-500/30 text-red-400 hover:bg-red-500/10"
+                                    aria-label="삭제"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                </div>
+                              </div>
                             </div>
                           </CardContent>
                         </Card>
@@ -533,17 +970,162 @@ export default function ContentSection() {
 
               {/* Screen Preview Panel - visible on lg screens, above editor on mobile */}
               <div className="hidden lg:block shrink-0 sticky top-4">
-                <ScreenPreview screen={screen.value} />
+                <ScreenPreview screen={screen.value} backgroundStyle={getPreviewStyle(screen.value)} />
               </div>
             </div>
 
             {/* Mobile preview - shown above editor on smaller screens */}
             <div className="lg:hidden mt-4 flex justify-center">
-              <ScreenPreview screen={screen.value} />
+              <ScreenPreview screen={screen.value} backgroundStyle={getPreviewStyle(screen.value)} />
             </div>
           </TabsContent>
         ))}
       </Tabs>
+
+      {/* Add content dialog */}
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white">
+          <DialogHeader>
+            <DialogTitle className="text-white">콘텐츠 추가</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-sm text-slate-300">화면</Label>
+              <Select value={addScreen} onValueChange={setAddScreen}>
+                <SelectTrigger className="bg-slate-800 border-slate-700 text-white">
+                  <SelectValue placeholder="화면 선택" />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700 text-white">
+                  {SCREENS.map((s) => (
+                    <SelectItem key={s.value} value={s.value}>
+                      {s.label} ({s.value})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm text-slate-300">키 이름</Label>
+              <Input
+                value={addName}
+                onChange={(e) => setAddName(e.target.value)}
+                placeholder="예: subtitle"
+                className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+              />
+              <p className="text-[11px] text-slate-500 font-mono">
+                전체 키: {addScreen}.{addName.trim() || '...'}
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm text-slate-300">타입</Label>
+              <Select value={addType} onValueChange={setAddType}>
+                <SelectTrigger className="bg-slate-800 border-slate-700 text-white">
+                  <SelectValue placeholder="타입 선택" />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700 text-white">
+                  {['text', 'image', 'color', 'json', 'number'].map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {t}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm text-slate-300">표시 이름</Label>
+              <Input
+                value={addLabel}
+                onChange={(e) => setAddLabel(e.target.value)}
+                placeholder="표시 이름 입력"
+                className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm text-slate-300">값</Label>
+              <Textarea
+                value={addValue}
+                onChange={(e) => setAddValue(e.target.value)}
+                placeholder="값 입력"
+                className="min-h-[100px] bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setAddOpen(false)}
+              className="border-slate-700 text-slate-200"
+            >
+              취소
+            </Button>
+            <Button
+              type="button"
+              onClick={handleAdd}
+              disabled={addSaving}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white"
+            >
+              {addSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+              추가
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Media library picker modal */}
+      {libraryFor !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-2xl max-h-[80vh] overflow-hidden rounded-xl border border-slate-700 bg-slate-900 flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-700 px-4 py-3">
+              <p className="text-sm font-medium text-white">미디어 라이브러리 (이미지)</p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setLibraryFor(null)}
+                className="h-8 border-slate-700 text-slate-200"
+              >
+                닫기
+              </Button>
+            </div>
+            <div className="overflow-y-auto p-4">
+              {libraryLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-sky-400" />
+                </div>
+              ) : libraryItems.length === 0 ? (
+                <p className="py-8 text-center text-sm text-slate-400">
+                  등록된 이미지가 없습니다.
+                </p>
+              ) : (
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                  {libraryItems.map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => {
+                        handleValueChange(libraryFor, m.path);
+                        setLibraryFor(null);
+                      }}
+                      className="group overflow-hidden rounded-lg border border-slate-700 bg-slate-800 hover:border-sky-500"
+                    >
+                      <img
+                        src={m.path}
+                        alt={m.fileName || m.path}
+                        className="h-24 w-full object-contain"
+                        loading="lazy"
+                      />
+                      <p className="truncate px-1 py-1 text-[10px] text-slate-500 font-mono">
+                        {m.path}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

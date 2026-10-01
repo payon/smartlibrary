@@ -315,3 +315,118 @@
 .qr-glow {
   animation: qrPulse 1.5s ease-in-out infinite;
 }
+
+/* ======================================================================== */
+/* 배리어프리 — 글자 크기 (스토어 fontSize → .kiosk-frame data-fontsize)       */
+/* ======================================================================== */
+
+.kiosk-frame[data-fontsize='large'] {
+  font-size: 112.5%;
+}
+
+.kiosk-frame[data-fontsize='large'] .kiosk-btn {
+  font-size: 1.25rem;
+  min-height: 60px;
+}
+
+.kiosk-frame[data-fontsize='xlarge'] {
+  font-size: 125%;
+}
+
+.kiosk-frame[data-fontsize='xlarge'] .kiosk-btn {
+  font-size: 1.375rem;
+  min-height: 64px;
+}
+
+/* ======================================================================== */
+/* 배리어프리 — 고대비 모드 (data-contrast='high')                             */
+/* ======================================================================== */
+
+.kiosk-frame[data-contrast='high'] .kiosk-dark-bg {
+  background: #000000;
+  color: #ffffff;
+}
+
+.kiosk-frame[data-contrast='high'] .kiosk-light-bg {
+  background: #ffffff;
+  color: #000000;
+}
+
+.kiosk-frame[data-contrast='high'] .text-slate-400,
+.kiosk-frame[data-contrast='high'] .text-slate-500,
+.kiosk-frame[data-contrast='high'] .text-slate-600 {
+  color: inherit;
+  opacity: 0.9;
+}
+
+.kiosk-frame[data-contrast='high'] button:focus-visible,
+.kiosk-frame[data-contrast='high'] a:focus-visible,
+.kiosk-frame[data-contrast='high'] input:focus-visible {
+  outline: 3px solid #facc15;
+  outline-offset: 2px;
+}
+
+/* ======================================================================== */
+/* 배리어프리 — 명확한 키보드 포커스 (기본)                                    */
+/* ======================================================================== */
+
+.kiosk-frame button:focus-visible,
+.kiosk-frame a:focus-visible,
+.kiosk-frame input:focus-visible {
+  outline: 3px solid #38bdf8;
+  outline-offset: 2px;
+}
+
+/* ======================================================================== */
+/* 배리어프리 — 모션 최소화 요청 시 애니메이션 비활성화                         */
+/* ======================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .kiosk-frame *,
+  .kiosk-frame *::before,
+  .kiosk-frame *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ======================================================================== */
+/* 배리어프리 — 스크린리더 전용 시각 숨김 텍스트                               */
+/* ======================================================================== */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ======================================================================== */
+/* 반응형 키오스크 프레임 — 디스플레이 크기별 자동 조정                         */
+/*   모바일/태블릿 세로: 480px (기본)                                          */
+/*   데스크톱·21인치: 560px / 24인치 이상: 640px / 32인치 이상: 680px          */
+/* ======================================================================== */
+
+@media (min-width: 1024px) {
+  .kiosk-frame {
+    max-width: 560px;
+  }
+}
+
+@media (min-width: 1600px) {
+  .kiosk-frame {
+    max-width: 640px;
+  }
+}
+
+@media (min-width: 2000px) {
+  .kiosk-frame {
+    max-width: 680px;
+  }
+}

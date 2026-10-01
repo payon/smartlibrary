@@ -44,9 +44,11 @@ COPY --from=deps /app/node_modules ./node_modules
 # 소스 코드 복사
 COPY . .
 
-# Prisma 클라이언트 생성 (SQLite용)
-ENV DATABASE_URL="file:/app/db/custom.db"
-RUN npx prisma generate
+# Prisma 클라이언트 생성 (PostgreSQL용 스키마)
+# 런타임 DATABASE_URL의 프로토콜과 일치해야 함
+ARG PRISMA_SCHEMA=prisma/schema.postgres.prisma
+ENV DATABASE_URL="postgresql://build:build@localhost:5432/build"
+RUN npx prisma generate --schema=${PRISMA_SCHEMA}
 
 # Next.js standalone 빌드
 # 빌드 스크립트가 자동으로 .next/static과 public을 .next/standalone/에 복사함
@@ -66,10 +68,11 @@ WORKDIR /app
 RUN groupadd --gid 1001 nodejs && \
     useradd --uid 1001 --gid nodejs --shell /bin/bash --create-home appuser
 
-# 환경 변수 기본값
+# 환경 변수 기본값 (실제 값은 compose/env_file에서 주입)
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV DATABASE_URL="file:/app/db/custom.db"
+ENV DATABASE_URL="postgresql://library:library@db:5432/smartlib"
+ENV PRISMA_SCHEMA="prisma/schema.postgres.prisma"
 ENV HOSTNAME="0.0.0.0"
 ENV PORT=3000
 
@@ -86,7 +89,7 @@ COPY --from=builder --chown=appuser:nodejs /app/prisma ./prisma
 # prisma CLI 바이너리 복사 (entrypoint에서 db push 실행에 필요)
 COPY --from=builder --chown=appuser:nodejs /app/node_modules/prisma ./node_modules/prisma
 
-# ── 데이터베이스 디렉토리 생성 ───────────────────────────────────────────
+# ── 데이터베이스 디렉토리 생성 (SQLite 호환 유지) ─────────────────────────
 RUN mkdir -p /app/db && chown appuser:nodejs /app/db
 
 # ── Entrypoint 스크립트 ───────────────────────────────────────────────────

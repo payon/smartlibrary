@@ -12,14 +12,25 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
+import { useKioskSpeak } from '@/hooks/useKioskSpeak';
 import { LOAN_PERIOD_DAYS } from '@/lib/constants';
 import { ArrowLeft, CheckCircle2, User } from 'lucide-react';
 import { toast } from 'sonner';
 import { CmsText } from '@/components/kiosk/CmsText';
+import { useScreenTheme } from '@/components/kiosk/CmsMedia';
+import { useCmsText } from '@/hooks/useCmsContent';
 
 export default function KioskLoanConfirm() {
+  const loanConfirmTitle = useCmsText('loanconfirm.title', '대출 정보를 확인해주세요');
+  const theme = useScreenTheme('loan-confirm');
+  useKioskSpeak(`${loanConfirmTitle}. 대출 정보를 확인한 뒤 대출하기를 눌러주세요.`);
   const { selectedBooks, authenticatedUser, setScreen, prevScreen } = useAppStore();
   const [isProcessing, setIsProcessing] = useState(false);
+  const [loanError, setLoanError] = useState<{
+    message: string;
+    overdueDays?: number;
+    blockDays?: number;
+  } | null>(null);
 
   /** 반납 예정일 계산 */
   const dueDate = new Date();
@@ -29,6 +40,11 @@ export default function KioskLoanConfirm() {
   /** 대출 실행 (한 번에 모든 도서 처리) */
   const handleLoan = async () => {
     if (!authenticatedUser || selectedBooks.length === 0) return;
+    if (!authenticatedUser.pin) {
+      toast.error('PIN 인증이 필요합니다');
+      setScreen('auth-pin');
+      return;
+    }
 
     setIsProcessing(true);
 
@@ -47,10 +63,22 @@ export default function KioskLoanConfirm() {
       if (res.ok) {
         const data = await res.json();
         toast.success(`${data.loanedCount}권 대출이 완료되었습니다`);
+        setLoanError(null);
+        useAppStore.getState().clearSelectedBooks();
         setScreen('loan-complete');
       } else {
         const data = await res.json().catch(() => ({}));
-        toast.error(data.error || '대출 처리에 실패했습니다. 다시 시도해주세요.');
+        const message = data.error || '대출 처리에 실패했습니다. 다시 시도해주세요.';
+        if (data.code === 'OVERDUE_BLOCKED') {
+          setLoanError({
+            message,
+            overdueDays: data.overdueDays,
+            blockDays: data.blockDays ?? data.penaltyRemainingDays,
+          });
+        } else {
+          setLoanError({ message });
+        }
+        toast.error(message);
       }
     } catch {
       toast.error('네트워크 오류가 발생했습니다. 다시 시도해주세요.');
@@ -60,7 +88,7 @@ export default function KioskLoanConfirm() {
   };
 
   return (
-    <div className="kiosk-screen kiosk-light-bg flex flex-col">
+    <div className="kiosk-screen kiosk-light-bg flex flex-col" style={theme.style}>
       {/* 상단 타이틀 */}
       <header className="px-5 pt-6 pb-3">
         <h1 className="text-xl font-bold text-slate-800">
@@ -112,6 +140,26 @@ export default function KioskLoanConfirm() {
             ))}
           </div>
         </div>
+
+        {/* 연체 차단 안내 (서버가 대출을 거부한 경우) */}
+        {loanError && (
+          <div
+            className={`rounded-xl p-4 mb-3 ${loanError.overdueDays ? 'bg-red-50 border border-red-200' : 'bg-slate-100 border border-slate-200'}`}
+            role="alert"
+          >
+            <p className={`text-sm font-semibold ${loanError.overdueDays ? 'text-red-700' : 'text-slate-700'}`}>
+              ⚠ 대출할 수 없습니다
+            </p>
+            <p className={`text-sm mt-1 ${loanError.overdueDays ? 'text-red-600' : 'text-slate-600'}`}>
+              {loanError.message}
+            </p>
+            {loanError.overdueDays ? (
+              <p className="text-xs text-red-500 mt-1">
+                연체 {loanError.overdueDays}일 → 연체일수만큼 대여가 제한됩니다. 연체 도서를 먼저 반납해주세요.
+              </p>
+            ) : null}
+          </div>
+        )}
 
         {/* 요약 */}
         <div className="bg-sky-50 rounded-xl p-4">

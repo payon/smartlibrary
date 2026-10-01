@@ -3,9 +3,9 @@
  *
  * [기능]
  * - 회원증 RFID 스캔 안내 (CMS 관리)
- * - 2초 후 자동 인식 시뮬레이션 → DB에서 사용자 조회 → authenticatedUser 설정
- * - 인식 성공 메시지 표시 후 PIN 입력으로 이동
- * - 회원증 없이 이용하기 옵션 (데모용) → PIN 입력으로 이동
+ * - 카드 태그 시뮬레이션: 데모 회원증 인식 → authenticatedUser 설정
+ * - 대출 모드 → PIN 입력으로 이동 (본인 확인)
+ * - 반납 모드 → PIN 없이 바로 반납 투입으로 이동 (실제 기기와 동일)
  */
 
 'use client';
@@ -13,75 +13,68 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
-import { CreditCard, CheckCircle2, X } from 'lucide-react';
-import { toast } from 'sonner';
 import type { SimUser } from '@/stores/useAppStore';
+import { useKioskSpeak } from '@/hooks/useKioskSpeak';
+import { CreditCard, CheckCircle2, X } from 'lucide-react';
 import { CmsText } from '@/components/kiosk/CmsText';
+import { useScreenTheme } from '@/components/kiosk/CmsMedia';
+import { useCmsText } from '@/hooks/useCmsContent';
 
 export default function KioskAuthScan() {
-  const { setScreen, prevScreen, setAuthenticatedUser } = useAppStore();
+  const authScanTitle = useCmsText('authscan.title', '회원인증');
+  const theme = useScreenTheme('auth-scan');
+  useKioskSpeak(`${authScanTitle}. 회원증을 카드 리더기에 가져다 대세요. 회원증이 없으면 회원증 없이 이용하기를 눌러주세요.`);
+  const { setScreen, prevScreen, kioskMode, setAuthenticatedUser } = useAppStore();
   const [status, setStatus] = useState<'scanning' | 'recognized' | 'skipped'>('scanning');
 
-  /** DB에서 데모 사용자를 조회하여 authenticatedUser에 설정 */
-  const fetchAndSetDemoUser = async (): Promise<boolean> => {
+  /** 데모 회원증 인식 (RFID 태그 시뮬레이션 — PIN 입력 없음) */
+  const recognizeDemoCard = async (): Promise<void> => {
     try {
-      // PIN 1234로 사용자 조회
       const res = await fetch('/api/users', { headers: { 'X-PIN': '1234' } });
       if (res.ok) {
         const users: SimUser[] = await res.json();
         if (users.length > 0) {
           setAuthenticatedUser({ ...users[0], pin: '1234' });
-          return true;
-        }
-      }
-
-      // 다른 PIN으로 재시도 (0001~0010)
-      for (let i = 1; i <= 10; i++) {
-        const tryPin = String(i).padStart(4, '0');
-        const retryRes = await fetch('/api/users', { headers: { 'X-PIN': tryPin } });
-        if (retryRes.ok) {
-          const retryUsers: SimUser[] = await retryRes.json();
-          if (retryUsers.length > 0) {
-            setAuthenticatedUser({ ...retryUsers[0], pin: tryPin });
-            return true;
-          }
         }
       }
     } catch {
-      // 네트워크 오류 - 데모 모드로 계속 진행
+      // 인식 실패 시에도 화면은 진행 (다음 화면에서 안내)
     }
-    return false;
   };
+
+  /** 다음 화면 결정 (반납은 PIN 없이 바로 투입 — 실제 기기와 동일) */
+  const getNextScreen = () => (kioskMode === 'return' ? 'return-insert' as const : 'auth-pin' as const);
 
   /** 2초 후 자동 인식 시뮬레이션 */
   useEffect(() => {
+    let cancelled = false;
     const timer = setTimeout(() => {
-      setStatus('recognized');
+      if (!cancelled) setStatus('recognized');
     }, 2000);
     const moveTimer = setTimeout(async () => {
-      // 스캔 인식 후 DB에서 사용자 조회
-      await fetchAndSetDemoUser();
-      // PIN 화면으로 이동 (사용자가 있든 없든 PIN 화면에서 처리)
-      setScreen('auth-pin');
+      if (cancelled) return;
+      await recognizeDemoCard();
+      if (!cancelled) setScreen(getNextScreen());
     }, 3500);
     return () => {
+      cancelled = true;
       clearTimeout(timer);
       clearTimeout(moveTimer);
     };
-  }, [setScreen, setAuthenticatedUser]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setScreen, kioskMode]);
 
-  /** 회원증 없이 이용하기 (데모 모드) → PIN 입력으로 이동 */
+  /** 회원증 없이 이용하기 → 다음 화면으로 이동 */
   const handleSkip = async () => {
     setStatus('skipped');
-    // 데모 사용자를 찾아서 설정 (있으면 좋고, 없어도 PIN 화면에서 처리)
-    await fetchAndSetDemoUser();
+    await recognizeDemoCard();
     setTimeout(() => {
-      setScreen('auth-pin');
+      setScreen(getNextScreen());
     }, 500);
   };
 
   return (
-    <div className="kiosk-screen kiosk-dark-bg flex flex-col">
+    <div className="kiosk-screen kiosk-dark-bg flex flex-col" style={theme.style}>
       {/* 상단 타이틀 */}
       <header className="px-6 pt-8 pb-4">
         <h1 className="text-2xl font-bold text-white">
@@ -139,7 +132,7 @@ export default function KioskAuthScan() {
               animate={{ opacity: 1 }}
               className="text-sky-300 text-base"
             >
-              데모 모드로 진행합니다
+              {kioskMode === 'return' ? '반납으로 이동합니다' : 'PIN 입력으로 이동합니다'}
             </motion.p>
           )}
 

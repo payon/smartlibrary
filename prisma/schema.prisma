@@ -120,6 +120,7 @@ model ContentItem {
   type      String   @default("text") // text | image | color | json | number
   screen    String   @default("global") // kiosk screen name
   label     String   // Korean display name for admin UI
+  sortOrder Int      @default(0) // display order within screen (admin)
   updatedAt DateTime @updatedAt
   versions  ContentVersion[]
 }

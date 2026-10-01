@@ -15,8 +15,11 @@
 
 import { motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
+import { useKioskSpeak } from '@/hooks/useKioskSpeak';
 import { Smartphone, CreditCard, Zap, ArrowLeft } from 'lucide-react';
 import { CmsText } from '@/components/kiosk/CmsText';
+import { useScreenTheme } from '@/components/kiosk/CmsMedia';
+import { useCmsText } from '@/hooks/useCmsContent';
 
 /** 버튼 진입 애니메이션 variants */
 const cardVariants = {
@@ -29,6 +32,9 @@ const cardVariants = {
 };
 
 export default function KioskCardApply() {
+  const cardApplyTitle = useCmsText('cardapply.title', '도서증 발급');
+  const theme = useScreenTheme('card-apply', '#0b1120');
+  useKioskSpeak(`${cardApplyTitle}. 발급받을 도서증 종류를 선택해주세요.`);
   const { setScreen, setKioskMode, setCardApplication } = useAppStore();
 
   /** 뒤로가기 */
@@ -78,7 +84,7 @@ export default function KioskCardApply() {
   return (
     <div
       className="flex flex-col h-screen"
-      style={{ background: '#0b1120' }}
+      style={theme.style}
     >
       {/* 상단 헤더 */}
       <header className="flex items-center px-6 pt-8 pb-4">

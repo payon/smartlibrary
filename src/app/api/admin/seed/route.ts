@@ -18,23 +18,23 @@ import { invalidateCache } from '@/lib/content-cache';
 import { logAudit } from '@/lib/audit-logger';
 import { getClientIp } from '@/lib/security';
 
-/** 기본 관리자 계정 정의 */
+/** 기본 관리자 계정 정의 (비밀번호는 환경변수 필수 — 하드코딩 금지) */
 const DEFAULT_ADMIN_USERS = [
   {
     email: 'superadmin@library.go.kr',
-    password: 'admin1234',
+    password: process.env.ADMIN_SEED_PASSWORD,
     name: '최고관리자',
     role: 'super_admin',
   },
   {
     email: 'admin@library.go.kr',
-    password: 'admin1234',
+    password: process.env.ADMIN_SEED_PASSWORD,
     name: '관리자',
     role: 'admin',
   },
   {
     email: 'operator@library.go.kr',
-    password: 'admin1234',
+    password: process.env.ADMIN_SEED_PASSWORD,
     name: '운영자',
     role: 'operator',
   },
@@ -86,6 +86,14 @@ export async function POST(request: NextRequest) {
       userId = payload.userId;
     }
 
+    // [보안] 시드 비밀번호는 환경변수 필수 (하드코딩된 기본값 사용 금지)
+    if (!process.env.ADMIN_SEED_PASSWORD) {
+      return NextResponse.json(
+        { error: 'ADMIN_SEED_PASSWORD 환경변수가 설정되지 않았습니다.' },
+        { status: 500 }
+      );
+    }
+
     const results = {
       adminsCreated: 0,
       contentSeeded: 0,
@@ -109,7 +117,7 @@ export async function POST(request: NextRequest) {
 
     const adminResults: { email: string; role: string }[] = [];
     for (const adminDef of DEFAULT_ADMIN_USERS) {
-      const passwordHash = await hashPassword(adminDef.password);
+      const passwordHash = await hashPassword(adminDef.password!);
       const admin = await db.adminUser.create({
         data: {
           email: adminDef.email,

@@ -16,7 +16,7 @@ import { ROLE_PERMISSIONS } from '@/lib/permissions';
 // 타입 정의
 // ============================================================================
 
-export type AdminSection = 'overview' | 'content' | 'books' | 'cards' | 'users' | 'analytics' | 'settings' | 'audit';
+export type AdminSection = 'overview' | 'content' | 'books' | 'cards' | 'users' | 'analytics' | 'pwa' | 'settings' | 'audit';
 
 export interface AdminUser {
   id: string;
@@ -130,6 +130,8 @@ export const useAdminStore = create<AdminState>((set, get) => ({
     const { adminUser } = get();
     if (!adminUser) return false;
     const permissions = ROLE_PERMISSIONS[adminUser.role] || [];
+    // super_admin은 모든 권한 보유
+    if (permissions.includes('*')) return true;
     return permissions.includes(permission);
   },
 

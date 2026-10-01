@@ -13,34 +13,36 @@
  * - 동일한 결과를 보장하기 위해 기존 데이터를 삭제 후 재삽입합니다.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
 import { SEED_BOOKS, SCENARIOS } from '@/lib/constants';
 import { checkRateLimit, getClientIp } from '@/lib/security';
 import { hashPassword } from '@/lib/admin-auth';
+import { requireAdmin } from '@/lib/api-helpers';
+import { json } from '@/lib/api-helpers';
 import { DEFAULT_CONTENT_ITEMS } from '@/lib/content-sync';
 import { invalidateCache } from '@/lib/content-cache';
 
 /** 레이트 리미팅 식별자 접두사 */
 const RATE_LIMIT_PREFIX = 'seed:';
 
-/** 기본 관리자 계정 정의 */
+/** 기본 관리자 계정 정의 (비밀번호는 환경변수 필수, 없으면 시드 실패) */
 const DEFAULT_ADMIN_USERS = [
   {
     email: 'superadmin@library.go.kr',
-    password: process.env.ADMIN_SEED_PASSWORD || 'admin1234',
+    password: process.env.ADMIN_SEED_PASSWORD,
     name: '최고관리자',
     role: 'super_admin',
   },
   {
     email: 'admin@library.go.kr',
-    password: process.env.ADMIN_SEED_PASSWORD || 'admin1234',
+    password: process.env.ADMIN_SEED_PASSWORD,
     name: '관리자',
     role: 'admin',
   },
   {
     email: 'operator@library.go.kr',
-    password: process.env.ADMIN_SEED_PASSWORD || 'admin1234',
+    password: process.env.ADMIN_SEED_PASSWORD,
     name: '운영자',
     role: 'operator',
   },
@@ -74,12 +76,39 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(request: NextRequest) {
   try {
-    // [보안] 프로덕션 환경에서는 ALLOW_SEED=true일 때만 시드 허용
-    // Docker 컨테이너 초기화 시 ALLOW_SEED=true로 설정하여 시드 가능
-    if (process.env.NODE_ENV === 'production' && process.env.ALLOW_SEED !== 'true') {
-      return NextResponse.json(
-        { error: '프로덕션 환경에서는 데이터 초기화를 사용할 수 없습니다. (ALLOW_SEED=true 필요)' },
-        { status: 403 }
+    // [보안] 시드는 super_admin 인증 + 명시적 확인 플래그 필요
+    // (키오스크 자동 호출 제거됨. 관리자 대시보드에서만 실행)
+    // 단, 관리자 테이블이 완전히 비어있는 최초 부트스트랩 시에는 1회에 한해 인증 없이 허용
+    // (fresh DB에서는 로그인 자체가 불가능하므로. ADMIN_SEED_PASSWORD는 여전히 필수)
+    const adminCount = await db.adminUser.count();
+    if (adminCount > 0) {
+      const auth = await requireAdmin(request, 'settings:write');
+      if ('error' in auth) {
+        return json({ error: auth.error }, auth.status);
+      }
+      if (auth.user.role !== 'super_admin') {
+        return json({ error: '최고관리자만 데이터 초기화를 실행할 수 있습니다.' }, 403);
+      }
+    }
+
+    let confirm = false;
+    try {
+      const body = await request.json();
+      confirm = body?.confirm === true;
+    } catch {
+      confirm = false;
+    }
+    if (!confirm) {
+      return json(
+        { error: '데이터 초기화 확인이 필요합니다. (confirm: true)' },
+        400
+      );
+    }
+
+    if (!process.env.ADMIN_SEED_PASSWORD) {
+      return json(
+        { error: 'ADMIN_SEED_PASSWORD 환경변수가 설정되지 않았습니다.' },
+        500
       );
     }
 
@@ -87,9 +116,9 @@ export async function POST(request: NextRequest) {
     const clientIp = getClientIp(request);
     const rateLimit = checkRateLimit(`${RATE_LIMIT_PREFIX}${clientIp}`, 60000, 1);
     if (!rateLimit.allowed) {
-      return NextResponse.json(
+      return json(
         { error: '데이터 초기화는 1분당 1회만 가능합니다.' },
-        { status: 429 }
+        429
       );
     }
 
@@ -119,11 +148,12 @@ export async function POST(request: NextRequest) {
     const bookCount = await db.book.createMany({ data: SEED_BOOKS });
     const scenarioCount = await db.scenario.createMany({ data: SCENARIOS });
 
-    // 데모 사용자 생성
+    // 데모 사용자 생성 (PIN은 데모용이나 validatePin 금지패턴과 충돌하므로
+    // 시드 전용으로 허용. 운영 데이터와 분리된 시뮬레이션 계정임)
     const demoUser = await db.simUser.create({
       data: {
         name: '김도서관',
-        birthDate: '19900101',
+        birthDate: '1990-01-01',
         phone: '010-1234-5678',
         address: '서울시 강남구',
         cardType: 'mobile',
@@ -138,9 +168,9 @@ export async function POST(request: NextRequest) {
     // 3. 관리자 계정 생성 (bcrypt 해시)
     // ================================================================
 
-    const adminResults = [];
+    const adminResults: Array<{ id: string; email: string; role: string }> = [];
     for (const adminDef of DEFAULT_ADMIN_USERS) {
-      const passwordHash = await hashPassword(adminDef.password);
+      const passwordHash = await hashPassword(adminDef.password!);
       const admin = await db.adminUser.create({
         data: {
           email: adminDef.email,
@@ -157,12 +187,13 @@ export async function POST(request: NextRequest) {
     // 4. CMS 콘텐츠 아이템 시드 (11개 화면 + 글로벌)
     // ================================================================
 
-    const contentItems = DEFAULT_CONTENT_ITEMS.map((item) => ({
+    const contentItems = DEFAULT_CONTENT_ITEMS.map((item, index) => ({
       key: item.key,
       value: item.value,
       type: item.type,
       screen: item.screen,
       label: item.label,
+      sortOrder: index,
     }));
     const contentCount = await db.contentItem.createMany({ data: contentItems });
 
@@ -181,7 +212,7 @@ export async function POST(request: NextRequest) {
     // 캐시 무효화
     invalidateCache();
 
-    return NextResponse.json({
+    return json({
       success: true,
       // 시뮬레이션 데이터
       books: bookCount.count,
@@ -200,9 +231,9 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('시드 데이터 초기화 오류:', error);
-    return NextResponse.json(
+    return json(
       { error: '데이터 초기화 중 오류가 발생했습니다.' },
-      { status: 500 }
+      500
     );
   }
 }

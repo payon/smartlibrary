@@ -281,7 +281,7 @@ export const SCENARIOS = [
     orderIndex: 5,
     stepsJson: JSON.stringify([
       { step: 1, title: '키오스크 시작하기', description: '키오스크 화면을 터치하여 도서 대여를 선택합니다.' },
-      { step: 2, title: '책 선택하기', description: '빌릴 책을 최대 10권까지 선택합니다. 자동으로 바코드가 스캔됩니다.' },
+      { step: 2, title: '책 선택하기', description: '빌릴 책을 최대 2권까지 선택합니다. 자동으로 바코드가 스캔됩니다.' },
       { step: 3, title: '도서증 바코드 스캔', description: '모바일 도서증 또는 실물 도서증의 바코드를 스캔합니다.' },
       { step: 4, title: '비밀번호 입력', description: '설정한 4자리 비밀번호를 입력합니다.' },
       { step: 5, title: '대여 완료 확인', description: '대여 내역을 확인하고 완료를 누릅니다.' },
@@ -340,6 +340,25 @@ export type KioskViewName =
 
 /** 키오스크 모드 타입 */
 export type KioskMode = 'loan' | 'return' | 'card' | null;
+
+/** 키오스크 화면 한국어 이름 (스크린리더 안내용) */
+export const KIOSK_VIEW_NAMES: Record<KioskViewName, string> = {
+  idle: '대기 화면',
+  'main-menu': '메인 메뉴',
+  'card-apply': '도서증 발급 종류 선택',
+  'card-form': '개인정보 입력',
+  'card-pending': '발급 승인 대기',
+  'card-complete': '도서증 발급 완료',
+  'auth-scan': '회원증 인증',
+  'auth-pin': '비밀번호 입력',
+  'loan-select': '도서 선택',
+  'loan-confirm': '대출 확인',
+  'loan-complete': '대출 완료',
+  'return-insert': '도서 투입',
+  'return-scanning': '도서 인식',
+  'return-confirm': '반납 확인',
+  'return-complete': '반납 완료',
+};
 
 /** 키오스크 화면 상수 */
 export const KIOSK_VIEWS = {

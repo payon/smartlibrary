@@ -12,13 +12,20 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
+import { useKioskSpeak } from '@/hooks/useKioskSpeak';
 import type { LoanItem } from '@/stores/useAppStore';
 import { MAX_LOAN_COUNT, LOAN_PERIOD_DAYS } from '@/lib/constants';
 import { CheckCircle2, BookOpen, AlertTriangle, CheckCircle } from 'lucide-react';
 import { CmsText } from '@/components/kiosk/CmsText';
+import KioskReceipt from '@/components/kiosk/KioskReceipt';
+import { useScreenTheme } from '@/components/kiosk/CmsMedia';
+import { useCmsText } from '@/hooks/useCmsContent';
 
 export default function KioskLoanComplete() {
-  const { authenticatedUser, setScreen, clearSelectedBooks } = useAppStore();
+  const loanCompleteTitle = useCmsText('loancomplete.title', '대출완료');
+  const theme = useScreenTheme('loan-complete');
+  useKioskSpeak(`${loanCompleteTitle}. 대출이 완료되었습니다.`);
+  const { authenticatedUser, setScreen, clearSelectedBooks, setAuthenticatedUser } = useAppStore();
   const [loans, setLoans] = useState<LoanItem[]>([]);
   const [stats, setStats] = useState({ available: MAX_LOAN_COUNT, current: 0, overdue: 0 });
 
@@ -49,22 +56,17 @@ export default function KioskLoanComplete() {
     fetchData();
   }, [authenticatedUser]);
 
-  /** 확인 버튼 - 초기화 후 대기 화면으로 */
+  /** 확인 버튼 - 세션 정리(선택/인증 초기화) 후 대기 화면으로 */
   const handleConfirm = () => {
     clearSelectedBooks();
+    setAuthenticatedUser(null);
     setScreen('idle');
-  };
-
-  /** 반납일 포맷팅 */
-  const formatDueDate = (dateStr: string) => {
-    const d = new Date(dateStr);
-    return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
   };
 
   const activeLoans = loans.filter((l) => l.status === 'active');
 
   return (
-    <div className="kiosk-screen kiosk-light-bg flex flex-col">
+    <div className="kiosk-screen kiosk-light-bg flex flex-col" style={theme.style}>
       {/* 성공 타이틀 */}
       <header className="text-center pt-10 pb-4">
         <motion.div
@@ -121,36 +123,24 @@ export default function KioskLoanComplete() {
         </div>
       </div>
 
-      {/* 대출 도서 목록 */}
+      {/* 대출 영수증 */}
       <div className="flex-1 overflow-y-auto kiosk-scroll px-5 pb-4">
-        <p className="text-sm font-semibold text-slate-600 mb-2">
-          <CmsText contentKey="loancomplete.list_title" fallback="대출 도서 목록" />
-        </p>
-        {activeLoans.length === 0 ? (
+        <div className="mb-2">
+          <KioskReceipt
+            kind="loan"
+            userName={authenticatedUser?.name || ''}
+            cardNumber={authenticatedUser?.cardNumber || ''}
+            phone={authenticatedUser?.phone}
+            books={activeLoans.map((loan) => ({
+              title: loan.book?.title || '도서',
+              author: loan.book?.author || '',
+              loanDate: loan.loanDate,
+              dueDate: loan.dueDate,
+            }))}
+          />
+        </div>
+        {activeLoans.length === 0 && (
           <p className="text-sm text-slate-400 text-center py-4">대출 도서가 없습니다</p>
-        ) : (
-          <div className="space-y-2">
-            {activeLoans.map((loan, idx) => (
-              <motion.div
-                key={loan.id}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.1 * idx }}
-                className="flex gap-3 bg-white rounded-xl p-3 border border-slate-100"
-              >
-                <div className="w-10 h-14 rounded-lg bg-slate-100 shrink-0 overflow-hidden">
-                  {loan.book?.coverUrl ? (
-                    <img src={loan.book.coverUrl} alt={loan.book.title} className="w-full h-full object-cover" />
-                  ) : null}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-slate-800 truncate">{loan.book?.title || '도서'}</p>
-                  <p className="text-xs text-slate-400">{loan.book?.author}</p>
-                  <p className="text-xs text-sky-600 mt-0.5">반납: {formatDueDate(loan.dueDate)}</p>
-                </div>
-              </motion.div>
-            ))}
-          </div>
         )}
       </div>
 

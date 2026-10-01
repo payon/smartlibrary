@@ -8,9 +8,9 @@
  * 키오스크 설정을 업데이트합니다.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
-import { verifyToken, hasPermission } from '@/lib/admin-auth';
+import { requireAdmin, json } from '@/lib/api-helpers';
 import { logAudit } from '@/lib/audit-logger';
 import { getClientIp } from '@/lib/security';
 
@@ -21,18 +21,9 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: NextRequest) {
   try {
-    const token = request.cookies.get('admin_token')?.value;
-    if (!token) {
-      return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
-    }
-
-    const payload = await verifyToken(token);
-    if (!payload) {
-      return NextResponse.json({ error: '유효하지 않은 토큰입니다.' }, { status: 401 });
-    }
-
-    if (!hasPermission(payload.role, 'settings:read')) {
-      return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
+    const auth = await requireAdmin(request, 'settings:read');
+    if ('error' in auth) {
+      return json({ error: auth.error }, auth.status);
     }
 
     const configs = await db.kioskConfig.findMany({
@@ -48,12 +39,12 @@ export async function GET(request: NextRequest) {
       grouped[config.category].push(config);
     }
 
-    return NextResponse.json({ configs, grouped });
+    return json({ configs, grouped });
   } catch (error) {
     console.error('설정 목록 조회 오류:', error);
-    return NextResponse.json(
+    return json(
       { error: '설정 목록을 조회하는 중 오류가 발생했습니다.' },
-      { status: 500 }
+      500
     );
   }
 }
@@ -63,27 +54,18 @@ export async function GET(request: NextRequest) {
  */
 export async function PUT(request: NextRequest) {
   try {
-    const token = request.cookies.get('admin_token')?.value;
-    if (!token) {
-      return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
-    }
-
-    const payload = await verifyToken(token);
-    if (!payload) {
-      return NextResponse.json({ error: '유효하지 않은 토큰입니다.' }, { status: 401 });
-    }
-
-    if (!hasPermission(payload.role, 'settings:write')) {
-      return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
+    const auth = await requireAdmin(request, 'settings:write');
+    if ('error' in auth) {
+      return json({ error: auth.error }, auth.status);
     }
 
     const body = await request.json();
     const { key, value } = body;
 
     if (!key || value === undefined) {
-      return NextResponse.json(
+      return json(
         { error: 'key와 value는 필수입니다.' },
-        { status: 400 }
+        400
       );
     }
 
@@ -92,10 +74,16 @@ export async function PUT(request: NextRequest) {
     });
 
     if (!existing) {
-      return NextResponse.json(
+      return json(
         { error: '해당 키의 설정을 찾을 수 없습니다.' },
-        { status: 404 }
+        404
       );
+    }
+
+    // [보안] 키별 값 범위 검증 (잘못된 값으로 키오스크 동작이 깨지는 것 방지)
+    const rangeError = validateSettingValue(key, value);
+    if (rangeError) {
+      return json({ error: rangeError }, 400);
     }
 
     const config = await db.kioskConfig.update({
@@ -104,7 +92,7 @@ export async function PUT(request: NextRequest) {
     });
 
     await logAudit({
-      userId: payload.userId,
+      userId: auth.payload.userId,
       action: 'update',
       entity: 'kiosk_config',
       entityId: config.id,
@@ -112,15 +100,55 @@ export async function PUT(request: NextRequest) {
       ipAddress: getClientIp(request),
     });
 
-    return NextResponse.json({
+    return json({
       config,
       message: '설정이 업데이트되었습니다',
     });
   } catch (error) {
     console.error('설정 업데이트 오류:', error);
-    return NextResponse.json(
+    return json(
       { error: '설정을 업데이트하는 중 오류가 발생했습니다.' },
-      { status: 500 }
+      500
     );
+  }
+}
+
+/**
+ * 설정 키별 허용 범위 검증
+ * @returns 오류 메시지 또는 null (정상)
+ */
+function validateSettingValue(key: string, value: unknown): string | null {
+  if (typeof value !== 'string' || value.length > 100) {
+    return '값은 100자 이내 문자열이어야 합니다.';
+  }
+  const num = Number(value);
+  switch (key) {
+    case 'kiosk.volume':
+      if (!Number.isInteger(num) || num < 0 || num > 100) {
+        return '음량은 0~100 정수여야 합니다.';
+      }
+      return null;
+    case 'kiosk.screen_brightness':
+      if (!Number.isInteger(num) || num < 10 || num > 100) {
+        return '화면 밝기는 10~100 정수여야 합니다.';
+      }
+      return null;
+    case 'kiosk.idle_timeout_seconds':
+      if (!Number.isInteger(num) || num < 30 || num > 600) {
+        return '유휴 시간은 30~600초 정수여야 합니다.';
+      }
+      return null;
+    case 'loan.max_books_per_loan':
+      if (!Number.isInteger(num) || num < 1 || num > 10) {
+        return '최대 대여 권수는 1~10 정수여야 합니다.';
+      }
+      return null;
+    case 'loan.loan_period_days':
+      if (!Number.isInteger(num) || num < 1 || num > 60) {
+        return '대여 기간은 1~60일 정수여야 합니다.';
+      }
+      return null;
+    default:
+      return null;
   }
 }

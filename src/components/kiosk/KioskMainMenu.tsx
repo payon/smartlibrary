@@ -15,11 +15,18 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
+import { useKioskSpeak } from '@/hooks/useKioskSpeak';
 import { BookOpen, ArrowDownToLine, Clock, Library, CreditCard } from 'lucide-react';
 import { CmsText } from '@/components/kiosk/CmsText';
+import { useScreenTheme } from '@/components/kiosk/CmsMedia';
+import { useCmsText } from '@/hooks/useCmsContent';
+import KioskA11yBar from '@/components/kiosk/KioskA11yBar';
 
 export default function KioskMainMenu() {
   const { setScreen, setKioskMode } = useAppStore();
+  const mainMenuTitle = useCmsText('mainmenu.title', 'SMART LIBRARY');
+  const theme = useScreenTheme('main-menu', '#0b1120');
+  useKioskSpeak(`${mainMenuTitle}. 원하시는 서비스를 선택하세요. 도서카드 발급, 도서 대출, 도서 반납이 있습니다.`);
   const [currentTime, setCurrentTime] = useState('');
 
   /** 현재 시간 업데이트 (1초 간격) */
@@ -53,10 +60,67 @@ export default function KioskMainMenu() {
     setScreen('auth-scan');
   };
 
+  /** 메인 버튼 정의 (표시 순서는 CMS mainmenu.button_order 따름) */
+  const BUTTON_DEFS = [
+    {
+      id: 'card',
+      label: '도서카드 발급',
+      textKey: 'mainmenu.card_button_text',
+      Icon: CreditCard,
+      iconColor: 'text-amber-400',
+      gradient: 'linear-gradient(135deg, #4a3620 0%, #3a2a15 100%)',
+      border: '1px solid rgba(251, 191, 36, 0.15)',
+      onClick: handleCardApply,
+    },
+    {
+      id: 'loan',
+      label: '도서 대출',
+      textKey: 'mainmenu.loan_button_text',
+      Icon: BookOpen,
+      iconColor: 'text-sky-400',
+      gradient: 'linear-gradient(135deg, #1e3a5f 0%, #0f2744 100%)',
+      border: '1px solid rgba(56, 189, 248, 0.15)',
+      onClick: handleLoan,
+    },
+    {
+      id: 'return',
+      label: '도서 반납',
+      textKey: 'mainmenu.return_button_text',
+      Icon: ArrowDownToLine,
+      iconColor: 'text-teal-400',
+      gradient: 'linear-gradient(135deg, #134e4a 0%, #0a3d3a 100%)',
+      border: '1px solid rgba(45, 212, 191, 0.15)',
+      onClick: handleReturn,
+    },
+  ] as const;
+
+  const cmsOrderRaw = useAppStore((s) => s.cmsContent['mainmenu.button_order']);
+  const orderedButtons = (() => {
+    try {
+      const parsed: unknown = JSON.parse(cmsOrderRaw || '["card","loan","return"]');
+      if (!Array.isArray(parsed)) return [...BUTTON_DEFS];
+      const ids = parsed.filter(
+        (v): v is 'card' | 'loan' | 'return' =>
+          v === 'card' || v === 'loan' || v === 'return'
+      );
+      const seen = new Set<string>();
+      const ordered = ids
+        .filter((id) => (seen.has(id) ? false : (seen.add(id), true)))
+        .map((id) => BUTTON_DEFS.find((b) => b.id === id)!);
+      // 누락된 버튼은 뒤에 추가 (삭제 방지)
+      for (const def of BUTTON_DEFS) {
+        if (!seen.has(def.id)) ordered.push({ ...def });
+      }
+      return ordered;
+    } catch {
+      return [...BUTTON_DEFS];
+    }
+  })();
+
   return (
     <div
       className="flex flex-col h-screen"
-      style={{ background: '#0b1120' }}
+      style={theme.style}
     >
       {/* 상단 브랜딩 영역 */}
       <header className="flex flex-col items-center pt-10 pb-6 px-6">
@@ -74,78 +138,42 @@ export default function KioskMainMenu() {
         </p>
       </header>
 
-      {/* 메인 버튼 영역 */}
+      {/* 메인 버튼 영역 (순서는 CMS mainmenu.button_order 따름) */}
       <main className="flex-1 flex flex-col items-center justify-center px-8 gap-6">
-        {/* 도서카드 발급 버튼 */}
-        <motion.button
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.05 }}
-          whileTap={{ scale: 0.97 }}
-          onClick={handleCardApply}
-          className="w-full max-w-md rounded-2xl flex items-center justify-center gap-5 cursor-pointer transition-shadow duration-200 hover:shadow-xl active:shadow-md"
-          style={{
-            minHeight: '140px',
-            background: 'linear-gradient(135deg, #4a3620 0%, #3a2a15 100%)',
-            boxShadow: '0 4px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255,255,255,0.06)',
-            border: '1px solid rgba(251, 191, 36, 0.15)',
-          }}
-        >
-          <CreditCard className="w-12 h-12 text-amber-400" strokeWidth={1.5} />
-          <span className="text-2xl font-bold text-white tracking-wider">
-            <CmsText contentKey="mainmenu.card_button_text" fallback="도서카드 발급" />
-          </span>
-        </motion.button>
-
-        {/* 도서 대출 버튼 */}
-        <motion.button
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.15 }}
-          whileTap={{ scale: 0.97 }}
-          onClick={handleLoan}
-          className="w-full max-w-md rounded-2xl flex items-center justify-center gap-5 cursor-pointer transition-shadow duration-200 hover:shadow-xl active:shadow-md"
-          style={{
-            minHeight: '140px',
-            background: 'linear-gradient(135deg, #1e3a5f 0%, #0f2744 100%)',
-            boxShadow: '0 4px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255,255,255,0.06)',
-            border: '1px solid rgba(56, 189, 248, 0.15)',
-          }}
-        >
-          <BookOpen className="w-12 h-12 text-sky-400" strokeWidth={1.5} />
-          <span className="text-2xl font-bold text-white tracking-wider">
-            <CmsText contentKey="mainmenu.loan_button_text" fallback="도서 대출" />
-          </span>
-        </motion.button>
-
-        {/* 도서 반납 버튼 */}
-        <motion.button
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.3 }}
-          whileTap={{ scale: 0.97 }}
-          onClick={handleReturn}
-          className="w-full max-w-md rounded-2xl flex items-center justify-center gap-5 cursor-pointer transition-shadow duration-200 hover:shadow-xl active:shadow-md"
-          style={{
-            minHeight: '140px',
-            background: 'linear-gradient(135deg, #134e4a 0%, #0a3d3a 100%)',
-            boxShadow: '0 4px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255,255,255,0.06)',
-            border: '1px solid rgba(45, 212, 191, 0.15)',
-          }}
-        >
-          <ArrowDownToLine className="w-12 h-12 text-teal-400" strokeWidth={1.5} />
-          <span className="text-2xl font-bold text-white tracking-wider">
-            <CmsText contentKey="mainmenu.return_button_text" fallback="도서 반납" />
-          </span>
-        </motion.button>
+        {orderedButtons.map((btn, idx) => (
+          <motion.button
+            key={btn.id}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.05 + idx * 0.1 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={btn.onClick}
+            className="w-full max-w-md rounded-2xl flex items-center justify-center gap-5 cursor-pointer transition-shadow duration-200 hover:shadow-xl active:shadow-md"
+            style={{
+              minHeight: '140px',
+              background: btn.gradient,
+              boxShadow: '0 4px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255,255,255,0.06)',
+              border: btn.border,
+            }}
+            aria-label={btn.label}
+          >
+            <btn.Icon className={`w-12 h-12 ${btn.iconColor}`} strokeWidth={1.5} />
+            <span className="text-2xl font-bold text-white tracking-wider">
+              <CmsText contentKey={btn.textKey} fallback={btn.label} />
+            </span>
+          </motion.button>
+        ))}
       </main>
 
-      {/* 하단 시간 표시 */}
-      <footer className="pb-8 flex items-center justify-center gap-2">
-        <Clock className="w-4 h-4 text-slate-600" />
-        <span className="text-slate-600 text-sm tracking-wider font-mono">
-          {currentTime}
-        </span>
+      {/* 하단 시간 표시 + 접근성 툴바 */}
+      <footer className="pb-8 px-6 flex flex-col items-center gap-3">
+        <KioskA11yBar dark />
+        <div className="flex items-center justify-center gap-2">
+          <Clock className="w-4 h-4 text-slate-600" />
+          <span className="text-slate-600 text-sm tracking-wider font-mono">
+            {currentTime}
+          </span>
+        </div>
       </footer>
     </div>
   );

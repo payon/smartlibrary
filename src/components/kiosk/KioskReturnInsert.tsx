@@ -12,16 +12,22 @@
 import { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
+import { useKioskSpeak } from '@/hooks/useKioskSpeak';
 import { BookDown, ArrowDown, X, Info } from 'lucide-react';
 import type { LoanItem } from '@/stores/useAppStore';
 import { CmsText } from '@/components/kiosk/CmsText';
+import { useScreenTheme, CmsImage } from '@/components/kiosk/CmsMedia';
+import { useCmsText } from '@/hooks/useCmsContent';
 
 export default function KioskReturnInsert() {
-  const { setScreen, prevScreen, addReturnedLoan, clearReturnedLoans, authenticatedUser } = useAppStore();
+  const returnInsertTitle = useCmsText('returninsert.title', '도서반납');
+  const theme = useScreenTheme('return-insert');
+  useKioskSpeak(`${returnInsertTitle}. 반납할 도서를 투입구에 넣어주세요.`);
+  const { setScreen, prevScreen, addReturnedLoan, authenticatedUser } = useAppStore();
   const [detected, setDetected] = useState(false);
   const [noLoans, setNoLoans] = useState(false);
 
-  /** 사용자 대출 조회 및 자동 감지 처리 */
+  /** 사용자 대출 조회 및 자동 감지 처리 (이미 담은 도서 제외) */
   const checkAndDetect = useCallback(async () => {
     if (!authenticatedUser) {
       setNoLoans(true);
@@ -35,14 +41,20 @@ export default function KioskReturnInsert() {
         return;
       }
       const loans: LoanItem[] = await res.json();
-      const active = loans.filter((l) => l.status === 'active');
+      const addedIds = new Set(useAppStore.getState().returnedLoans.map((l) => l.id));
+      const active = loans.filter((l) => l.status === 'active' && !addedIds.has(l.id));
 
       if (active.length === 0) {
-        setNoLoans(true);
+        // 남은 대출이 없으면 스캔 화면으로 (이미 담은 목록 확인)
+        if (addedIds.size > 0) {
+          setScreen('return-scanning');
+        } else {
+          setNoLoans(true);
+        }
         return;
       }
 
-      // 2초 후 첫 번째 대출 도서 자동 감지
+      // 2초 후 아직 담지 않은 첫 번째 대출 도서 자동 감지
       setDetected(true);
       addReturnedLoan(active[0]);
       setTimeout(() => {
@@ -55,13 +67,12 @@ export default function KioskReturnInsert() {
 
   /** 초기화 및 감지 시작 */
   useEffect(() => {
-    clearReturnedLoans();
     const timer = setTimeout(checkAndDetect, 2000);
     return () => clearTimeout(timer);
-  }, [clearReturnedLoans, checkAndDetect]);
+  }, [checkAndDetect]);
 
   return (
-    <div className="kiosk-screen kiosk-dark-bg flex flex-col">
+    <div className="kiosk-screen kiosk-dark-bg flex flex-col" style={theme.style}>
       {/* 상단 타이틀 */}
       <header className="px-6 pt-8 pb-4">
         <h1 className="text-2xl font-bold text-white">
@@ -92,6 +103,7 @@ export default function KioskReturnInsert() {
             className="text-center"
           >
             {/* 도서 아이콘 */}
+            <CmsImage contentKey="returninsert.sensor_image_url" alt="반납구 안내 이미지" imgClassName="w-28 h-28 object-contain mx-auto mb-4" />
             <div className="relative mb-8">
               <div className="w-28 h-28 mx-auto rounded-2xl bg-white/5 border border-slate-600 flex items-center justify-center">
                 {detected ? (
@@ -139,14 +151,22 @@ export default function KioskReturnInsert() {
       </main>
 
       {/* 하단 취소 버튼 */}
-      <footer className="pb-10 px-6">
+      <footer className="pb-10 px-6 flex gap-3">
         <button
           onClick={prevScreen}
-          className="kiosk-btn bg-slate-700 hover:bg-slate-600 text-white w-full"
+          className="kiosk-btn bg-slate-700 hover:bg-slate-600 text-white flex-1"
         >
           <X className="w-5 h-5" />
           취소
         </button>
+        {noLoans && (
+          <button
+            onClick={() => setScreen('idle')}
+            className="kiosk-btn bg-slate-800 hover:bg-slate-700 text-white flex-1"
+          >
+            처음으로
+          </button>
+        )}
       </footer>
     </div>
   );

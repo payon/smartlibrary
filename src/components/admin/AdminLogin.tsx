@@ -202,7 +202,7 @@ export default function AdminLogin() {
             >
               <p className="font-medium mb-1 text-xs text-slate-400">테스트 계정 안내</p>
               <p className="text-xs text-slate-500">이메일: superadmin@library.go.kr</p>
-              <p className="text-xs text-slate-500">비밀번호: admin1234</p>
+              <p className="text-xs text-slate-500">비밀번호: 서버에 설정된 관리자 비밀번호</p>
             </div>
           )}
         </div>

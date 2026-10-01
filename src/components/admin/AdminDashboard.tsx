@@ -30,11 +30,13 @@ import {
   CreditCard,
   Users,
   BarChart3,
+  Smartphone,
   Settings,
   FileText,
   Menu,
   Bell,
   LogOut,
+  User,
   CheckCheck,
   Library,
   ArrowLeft,
@@ -53,11 +55,13 @@ import BooksSection from '@/components/admin/sections/BooksSection';
 import CardsSection from '@/components/admin/sections/CardsSection';
 import UsersSection from '@/components/admin/sections/UsersSection';
 import AnalyticsSection from '@/components/admin/sections/AnalyticsSection';
+import PwaIconSection from '@/components/admin/sections/PwaIconSection';
 import SettingsSection from '@/components/admin/sections/SettingsSection';
 import AuditSection from '@/components/admin/sections/AuditSection';
 
 // --- Kiosk Preview ---
 import KioskPreview from '@/components/admin/KioskPreview';
+import ProfileDialog from '@/components/admin/ProfileDialog';
 
 // --- UI Components ---
 import { Button } from '@/components/ui/button';
@@ -93,6 +97,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'cards', label: '도서카드 발급', icon: CreditCard },
   { id: 'users', label: '이용자 관리', icon: Users },
   { id: 'analytics', label: '분석 대시보드', icon: BarChart3 },
+  { id: 'pwa', label: 'PWA 아이콘', icon: Smartphone },
   { id: 'settings', label: '시스템 설정', icon: Settings },
   { id: 'audit', label: '감사 로그', icon: FileText },
 ];
@@ -108,6 +113,7 @@ const SECTION_TITLES: Record<AdminSection, string> = {
   cards: '도서카드 발급',
   users: '이용자 관리',
   analytics: '분석 대시보드',
+  pwa: 'PWA 아이콘',
   settings: '시스템 설정',
   audit: '감사 로그',
 };
@@ -155,6 +161,8 @@ function SectionContent({ section }: { section: AdminSection }) {
       return <UsersSection />;
     case 'analytics':
       return <AnalyticsSection />;
+    case 'pwa':
+      return <PwaIconSection />;
     case 'settings':
       return <SettingsSection />;
     case 'audit':
@@ -327,6 +335,7 @@ export default function AdminDashboard() {
 
   // --- 키오스크 프리뷰 상태 ---
   const [showKioskPreview, setShowKioskPreview] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   // --- 파생 상태 ---
   const sectionTitle = SECTION_TITLES[activeSection];
@@ -534,22 +543,44 @@ export default function AdminDashboard() {
 
             {/* 관리자 사용자 정보 */}
             {adminUser && (
-              <div className="hidden sm:flex items-center gap-2">
-                <span className="text-sm font-medium text-slate-300 truncate max-w-[120px]">
-                  {adminUser.name}
-                </span>
-                <span
-                  className="text-[10px] font-medium px-1.5 py-0.5 rounded-full tracking-wider"
-                  style={{
-                    backgroundColor: 'rgba(56,189,248,0.1)',
-                    color: '#38bdf8',
-                    border: '1px solid rgba(56,189,248,0.2)',
-                  }}
-                >
-                  {roleLabel}
-                </span>
-              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="hidden sm:flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-white/[0.06] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 cursor-pointer">
+                    <span className="text-sm font-medium text-slate-300 truncate max-w-[120px]">
+                      {adminUser.name}
+                    </span>
+                    <span
+                      className="text-[10px] font-medium px-1.5 py-0.5 rounded-full tracking-wider"
+                      style={{
+                        backgroundColor: 'rgba(56,189,248,0.1)',
+                        color: '#38bdf8',
+                        border: '1px solid rgba(56,189,248,0.2)',
+                      }}
+                    >
+                      {roleLabel}
+                    </span>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" style={{ backgroundColor: '#0f1729', borderColor: 'rgba(255,255,255,0.08)' }}>
+                  <DropdownMenuItem
+                    className="cursor-pointer text-slate-300 hover:bg-white/[0.04] focus:bg-white/[0.04]"
+                    onClick={() => setProfileOpen(true)}
+                  >
+                    <User className="size-4 mr-2" />
+                    내 프로필
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator className="bg-white/[0.06]" />
+                  <DropdownMenuItem
+                    className="cursor-pointer text-slate-300 hover:bg-white/[0.04] focus:bg-white/[0.04]"
+                    onClick={handleLogout}
+                  >
+                    <LogOut className="size-4 mr-2" />
+                    로그아웃
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
+            <ProfileDialog open={profileOpen} onOpenChange={setProfileOpen} />
 
             {/* 로그아웃 버튼 */}
             <Button

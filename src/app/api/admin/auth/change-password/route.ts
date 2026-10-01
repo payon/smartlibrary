@@ -5,9 +5,10 @@
  * 현재 비밀번호를 확인 후 새 비밀번호로 변경합니다.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
-import { verifyToken, verifyPassword, hashPassword } from '@/lib/admin-auth';
+import { requireAdmin, json } from '@/lib/api-helpers';
+import { verifyPassword, hashPassword, validateAdminPassword } from '@/lib/admin-auth';
 import { logAudit } from '@/lib/audit-logger';
 import { getClientIp, checkRateLimit } from '@/lib/security';
 
@@ -18,15 +19,11 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(request: NextRequest) {
   try {
-    const token = request.cookies.get('admin_token')?.value;
-    if (!token) {
-      return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
+    const auth = await requireAdmin(request);
+    if ('error' in auth) {
+      return json({ error: auth.error }, auth.status);
     }
-
-    const payload = await verifyToken(token);
-    if (!payload) {
-      return NextResponse.json({ error: '유효하지 않은 토큰입니다.' }, { status: 401 });
-    }
+    const payload = auth.payload;
 
     // 레이트 리미팅 (5분당 5회)
     const clientIp = getClientIp(request);
@@ -36,40 +33,20 @@ export async function POST(request: NextRequest) {
       5
     );
     if (!rateLimitResult.allowed) {
-      return NextResponse.json(
-        { error: '비밀번호 변경 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.' },
-        { status: 429 }
-      );
+      return json({ error: '비밀번호 변경 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.' }, 429);
     }
 
     const body = await request.json();
     const { currentPassword, newPassword } = body;
 
     if (!currentPassword || !newPassword) {
-      return NextResponse.json(
-        { error: '현재 비밀번호와 새 비밀번호를 입력해주세요.' },
-        { status: 400 }
-      );
+      return json({ error: '현재 비밀번호와 새 비밀번호를 입력해주세요.' }, 400);
     }
 
-    // 새 비밀번호 길이 검증
-    if (!newPassword || newPassword.length < 8) {
-      return NextResponse.json(
-        { error: '비밀번호는 8자 이상이어야 합니다.' },
-        { status: 400 }
-      );
-    }
-    // [보안] 비밀번호 복잡도 검증
-    const hasUpper = /[A-Z]/.test(newPassword);
-    const hasLower = /[a-z]/.test(newPassword);
-    const hasDigit = /\d/.test(newPassword);
-    const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(newPassword);
-    const complexityCount = [hasUpper, hasLower, hasDigit, hasSpecial].filter(Boolean).length;
-    if (complexityCount < 3) {
-      return NextResponse.json(
-        { error: '비밀번호는 대문자, 소문자, 숫자, 특수문자 중 3가지 이상을 포함해야 합니다.' },
-        { status: 400 }
-      );
+    // [보안] 새 비밀번호 복잡도 검증 (공통 기준)
+    const pwError = validateAdminPassword(newPassword);
+    if (pwError) {
+      return json({ error: pwError }, 400);
     }
 
     // 관리자 사용자 조회
@@ -78,10 +55,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (!user) {
-      return NextResponse.json(
-        { error: '사용자를 찾을 수 없습니다.' },
-        { status: 404 }
-      );
+      return json({ error: '사용자를 찾을 수 없습니다.' }, 404);
     }
 
     // 현재 비밀번호 검증
@@ -97,10 +71,7 @@ export async function POST(request: NextRequest) {
         ipAddress: clientIp,
       });
 
-      return NextResponse.json(
-        { error: '현재 비밀번호가 올바르지 않습니다.' },
-        { status: 401 }
-      );
+      return json({ error: '현재 비밀번호가 올바르지 않습니다.' }, 401);
     }
 
     // 새 비밀번호 해시 및 업데이트
@@ -120,14 +91,12 @@ export async function POST(request: NextRequest) {
       ipAddress: clientIp,
     });
 
-    return NextResponse.json({
+    return json({
       message: '비밀번호가 변경되었습니다',
     });
   } catch (error) {
     console.error('비밀번호 변경 오류:', error);
-    return NextResponse.json(
-      { error: '비밀번호를 변경하는 중 오류가 발생했습니다.' },
-      { status: 500 }
-    );
+    return json(
+      { error: '비밀번호를 변경하는 중 오류가 발생했습니다.' }, 500);
   }
 }

@@ -4,7 +4,8 @@
  * [기능]
  * - SMART LIBRARY 브랜딩 표시 (CMS 관리)
  * - 터치 시 메인 메뉴로 이동
- * - 관리자 모드 진입 버튼 (우측 하단)
+ * - 배리어프리 툴바 (음성/글자크기/고대비)
+ * - 관리자 진입은 /admin 전용 URL 사용 (화면 내 버튼 없음)
  *
  * [디자인]
  * - 다크 네이비 전체 화면 배경 (CMS 관리)
@@ -17,35 +18,34 @@
 import { useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
-import { Library, Settings } from 'lucide-react';
+import { useKioskSpeak } from '@/hooks/useKioskSpeak';
 import { CmsText } from '@/components/kiosk/CmsText';
+import { useScreenTheme, CmsImage } from '@/components/kiosk/CmsMedia';
+import { useCmsText } from '@/hooks/useCmsContent';
+import KioskA11yBar from '@/components/kiosk/KioskA11yBar';
 
 export default function KioskIdleScreen() {
-  const { setScreen, setAdminMode } = useAppStore();
-  const cmsContent = useAppStore((s) => s.cmsContent);
+  const { setScreen } = useAppStore();
+  const idleTitle = useCmsText('idle.title', 'SMART LIBRARY');
+  const theme = useScreenTheme('idle', '#0b1120');
+  useKioskSpeak(`${idleTitle}. 스마트 도서관 무인 대출 반납기입니다. 화면을 터치하여 시작하세요.`);
 
-  /** CMS 배경색 또는 기본값 (hex 색상만 허용하여 CSS 인젝션 방지) */
-  const rawBgColor = cmsContent['idle.background_color'] || '#0b1120';
-  const bgColor = /^#[0-9a-fA-F]{3,8}$/.test(rawBgColor) ? rawBgColor : '#0b1120';
-
-  /** 화면 터치 시 메인 메뉴로 이동 */
+  /** 화면 터치 시 메인 메뉴로 이동 (첫 제스처에서 음성 엔진 예열) */
   const handleTouch = useCallback(() => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      try {
+        window.speechSynthesis.getVoices();
+      } catch {
+        // 예열 실패 무시
+      }
+    }
     setScreen('main-menu');
   }, [setScreen]);
-
-  /** 관리자 모드 진입 */
-  const handleAdminClick = useCallback(
-    (e: React.MouseEvent | React.TouchEvent) => {
-      e.stopPropagation();
-      setAdminMode(true);
-    },
-    [setAdminMode]
-  );
 
   return (
     <div
       className="flex flex-col items-center justify-center h-screen relative select-none cursor-pointer"
-      style={{ background: bgColor }}
+      style={theme.style}
       onClick={handleTouch}
       onTouchStart={handleTouch}
       role="button"
@@ -70,13 +70,7 @@ export default function KioskIdleScreen() {
           transition={{ duration: 0.8, ease: 'easeOut' }}
           className="flex flex-col items-center"
         >
-          <Library
-            className="w-16 h-16 text-sky-400 mb-5"
-            strokeWidth={1.2}
-            style={{
-              filter: 'drop-shadow(0 0 12px rgba(56, 189, 248, 0.3))',
-            }}
-          />
+          <CmsImage contentKey="idle.logo_url" fallback="/logo.svg" alt="도서관 로고" imgClassName="w-16 h-16 object-contain" />
           <CmsText
             contentKey="idle.title"
             fallback="SMART LIBRARY"
@@ -125,15 +119,10 @@ export default function KioskIdleScreen() {
         }}
       />
 
-      {/* 관리자 모드 진입 버튼 */}
-      <button
-        onClick={handleAdminClick}
-        onTouchStart={handleAdminClick}
-        className="absolute bottom-4 right-4 w-10 h-10 flex items-center justify-center rounded-lg text-slate-400 hover:text-sky-300 hover:bg-white/5 transition-all opacity-50 hover:opacity-100 z-20"
-        aria-label="관리자 모드"
-      >
-        <Settings className="w-5 h-5" />
-      </button>
+      {/* 접근성 툴바 */}
+      <div className="absolute bottom-4 inset-x-4 z-20 flex items-center justify-center">
+        <KioskA11yBar dark />
+      </div>
     </div>
   );
 }

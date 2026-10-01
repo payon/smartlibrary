@@ -3,32 +3,28 @@
  *
  * [POST] /api/admin/content/bulk
  * 여러 콘텐츠 아이템을 한 번에 업데이트합니다.
+ *
+ * [보안]
+ * - 세션 DB 검증 포함 관리자 인증 (requireAdmin)
+ * - 항목별 타입 검증 (부적합 항목은 전체 거부 + 원인 키 명시)
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
-import { verifyToken, hasPermission } from '@/lib/admin-auth';
+import { requireAdmin, json } from '@/lib/api-helpers';
 import { logAudit } from '@/lib/audit-logger';
 import { invalidateCache } from '@/lib/content-cache';
 import { getClientIp } from '@/lib/security';
+import { validateContentValue } from '@/lib/content-validation';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
-    // 인증 확인
-    const token = request.cookies.get('admin_token')?.value;
-    if (!token) {
-      return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
-    }
-
-    const payload = await verifyToken(token);
-    if (!payload) {
-      return NextResponse.json({ error: '유효하지 않은 토큰입니다.' }, { status: 401 });
-    }
-
-    if (!hasPermission(payload.role, 'content:write')) {
-      return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
+    // 인증 확인 (세션 DB 검증 포함)
+    const auth = await requireAdmin(request, 'content:write');
+    if ('error' in auth) {
+      return json({ error: auth.error }, auth.status);
     }
 
     const body = await request.json();
@@ -38,10 +34,39 @@ export async function POST(request: NextRequest) {
     };
 
     if (!items || !Array.isArray(items) || items.length === 0) {
-      return NextResponse.json(
+      return json(
         { error: '업데이트할 아이템 목록이 필요합니다.' },
-        { status: 400 }
+        400
       );
+    }
+
+    if (items.length > 200) {
+      return json(
+        { error: '한 번에 200개까지만 업데이트할 수 있습니다.' },
+        400
+      );
+    }
+
+    // 사전 검증: 모든 항목의 타입 적합성 확인 (부분 적용 방지)
+    const existingItems = await db.contentItem.findMany({
+      where: { key: { in: items.map((i) => i.key) } },
+    });
+    const typeByKey = new Map(existingItems.map((e) => [e.key, e.type]));
+    for (const item of items) {
+      const type = typeByKey.get(item.key);
+      if (!type) {
+        return json(
+          { error: `존재하지 않는 키입니다: ${item.key}` },
+          404
+        );
+      }
+      const validation = validateContentValue(type, item.value);
+      if (!validation.ok) {
+        return json(
+          { error: `[${item.key}] ${validation.error}` },
+          400
+        );
+      }
     }
 
     let updatedCount = 0;
@@ -68,7 +93,7 @@ export async function POST(request: NextRequest) {
               contentItemId: existingItem.id,
               oldValue,
               newValue: item.value,
-              changedBy: changedBy || payload.userId,
+              changedBy: auth.payload.userId,
             },
           });
 
@@ -82,22 +107,22 @@ export async function POST(request: NextRequest) {
 
     // 감사 로그 기록
     await logAudit({
-      userId: payload.userId,
+      userId: auth.payload.userId,
       action: 'update',
       entity: 'content',
       details: { bulkUpdate: true, count: updatedCount, keys: items.map((i) => i.key) },
       ipAddress: getClientIp(request),
     });
 
-    return NextResponse.json({
+    return json({
       updated: updatedCount,
       message: `${updatedCount}개의 콘텐츠가 업데이트되었습니다`,
     });
   } catch (error) {
     console.error('콘텐츠 일괄 업데이트 오류:', error);
-    return NextResponse.json(
+    return json(
       { error: '콘텐츠를 일괄 업데이트하는 중 오류가 발생했습니다.' },
-      { status: 500 }
+      500
     );
   }
 }

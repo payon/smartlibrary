@@ -9,7 +9,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
 import { EcoHeader, EcoSteps, EcoUserPill, EcoTicker, LOAN_STEPS } from '@/components/kiosk/eco/EcoChrome';
@@ -25,13 +25,29 @@ export default function KioskLoanConfirm() {
   const loanConfirmTitle = useCmsText('loanconfirm.title', '대출 정보를 확인해주세요');
   const theme = useScreenTheme('loan-confirm');
   useKioskSpeak(`${loanConfirmTitle}. 대출 정보를 확인한 뒤 대출하기를 눌러주세요.`);
-  const { selectedBooks, authenticatedUser, setScreen, prevScreen } = useAppStore();
+  const { selectedBooks, authenticatedUser, setScreen, prevScreen, autoLoan, setAutoLoan } = useAppStore();
   const [isProcessing, setIsProcessing] = useState(false);
   const [loanError, setLoanError] = useState<{
     message: string;
     overdueDays?: number;
     blockDays?: number;
   } | null>(null);
+
+  const autoFiredRef = useRef(false);
+
+  /** 인증 후 복귀 시 자동 대출 실행 (확인→인증→처리 흐름) */
+  useEffect(() => {
+    if (autoLoan && !autoFiredRef.current && authenticatedUser?.pin && selectedBooks.length > 0) {
+      autoFiredRef.current = true;
+      setAutoLoan(false);
+      handleLoan();
+    }
+    return () => {
+      setAutoLoan(false);
+      autoFiredRef.current = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoLoan, authenticatedUser, selectedBooks.length]);
 
   /** 반납 예정일 계산 */
   const dueDate = new Date();
@@ -46,7 +62,8 @@ export default function KioskLoanConfirm() {
       return;
     }
     if (!authenticatedUser) {
-      toast.error('회원인증이 필요합니다');
+      toast.success('도서 확인 완료. 회원인증을 진행합니다.');
+      setAutoLoan(true);
       setScreen('auth-scan');
       return;
     }

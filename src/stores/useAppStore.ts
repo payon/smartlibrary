@@ -211,6 +211,14 @@ interface KioskState {
   setReceiptPrint: (print: boolean) => void;
 
   // ------------------------------------------------------------------------
+  // 대출 자동 실행 플래그 (확인→인증→복귀 시 자동 대출)
+  // ------------------------------------------------------------------------
+  /** 확인 화면 복귀 시 자동 실행 여부 */
+  autoLoan: boolean;
+  /** 자동 실행 플래그 설정 */
+  setAutoLoan: (auto: boolean) => void;
+
+  // ------------------------------------------------------------------------
   // 센서 상태 (시뮬레이션)
   // ------------------------------------------------------------------------
   /** 센서 활성화 여부 */
@@ -397,6 +405,8 @@ export const useAppStore = create<KioskState>((set, get) => ({
   setDispenseQueue: (queue) => set({ dispenseQueue: queue }),
   receiptPrint: true,
   setReceiptPrint: (print) => set({ receiptPrint: print }),
+  autoLoan: false,
+  setAutoLoan: (auto) => set({ autoLoan: auto }),
 
   // ------------------------------------------------------------------------
   // 센서 상태 초기값 및 액션

@@ -96,10 +96,10 @@ export default function KioskLoanSelect() {
     }
   };
 
-  /** 다음 단계로 이동 (선택 → 회원인증) */
+  /** 다음 단계로 이동 (선택 → 도서확인) */
   const handleNext = () => {
     if (selectedBooks.length === 0) return;
-    setScreen('auth-scan');
+    setScreen('loan-confirm');
   };
 
   return (

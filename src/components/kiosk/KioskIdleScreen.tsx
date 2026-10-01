@@ -42,12 +42,15 @@ export default function KioskIdleScreen() {
     image: img(`miryang.return_img_${n}`),
   }));
 
+  // 안내 이미지가 있으면 이미지 자체가 전체 안내이므로 텍스트 섹션 생략
+  const hasHero = !!img('miryang.hero_image');
+
   return (
     <div className="kiosk-screen flex flex-col" style={theme.style}>
       <main className="flex-1 overflow-y-auto kiosk-scroll">
         {/* 상단 안내 이미지 */}
         {img('miryang.hero_image') ? (
-          <img src={img('miryang.hero_image')} alt="스마트도서관 안내" className="w-full h-64 object-cover object-top" />
+          <img src={img('miryang.hero_image')} alt="스마트도서관 안내" className="w-full h-auto block" />
         ) : (
           <div className="px-6 pt-10 pb-6 text-center bg-gradient-to-b from-amber-50 to-orange-50">
             <p className="text-lg font-bold text-slate-800">{t('miryang.quote', '"상상이 자라는 공간"')}</p>
@@ -55,6 +58,9 @@ export default function KioskIdleScreen() {
           </div>
         )}
 
+        {/* 리본 제목 이하 텍스트 섹션 (안내 이미지 없을 때만) */}
+        {!hasHero && (
+          <>
         {/* 리본 제목 */}
         <div className="mx-6 mt-4 rounded-lg bg-[#0e5a6d] py-2.5 text-center">
           <p className="text-white text-lg font-bold tracking-[0.3em]">{t('miryang.ribbon', '스마트도서관 이용방법')}</p>
@@ -130,6 +136,8 @@ export default function KioskIdleScreen() {
           </div>
         </div>
         <div className="h-4" />
+          </>
+        )}
       </main>
 
       {/* 접근성 + 시작 */}

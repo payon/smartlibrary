@@ -46,7 +46,7 @@ export default function KioskLoanDispense() {
     }
     const t = setTimeout(() => setCurrent((c) => c + 1), 2000);
     return () => clearTimeout(t);
-  }, [dispenseQueue.length, done, setScreen]);
+  }, [dispenseQueue.length, done, current, setScreen]);
 
   const book = dispenseQueue[Math.min(current, dispenseQueue.length - 1)];
 

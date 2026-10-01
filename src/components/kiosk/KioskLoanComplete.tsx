@@ -12,6 +12,7 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
+import { EcoHeader, EcoSteps, EcoUserPill, EcoTicker, LOAN_STEPS } from '@/components/kiosk/eco/EcoChrome';
 import { useKioskSpeak } from '@/hooks/useKioskSpeak';
 import type { LoanItem } from '@/stores/useAppStore';
 import { MAX_LOAN_COUNT, LOAN_PERIOD_DAYS } from '@/lib/constants';
@@ -66,9 +67,12 @@ export default function KioskLoanComplete() {
   const activeLoans = loans.filter((l) => l.status === 'active');
 
   return (
-    <div className="kiosk-screen kiosk-light-bg flex flex-col" style={theme.style}>
+    <div className="kiosk-screen eco-bg flex flex-col" style={theme.style}>
+      <EcoHeader title="도서대출" />
+      <EcoSteps steps={LOAN_STEPS} current={5} />
+      <EcoUserPill />
       {/* 성공 타이틀 */}
-      <header className="text-center pt-10 pb-4">
+      <header className="text-center pt-6 pb-4">
         <motion.div
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
@@ -77,7 +81,7 @@ export default function KioskLoanComplete() {
         >
           <CheckCircle2 className="w-9 h-9 text-white" />
         </motion.div>
-        <h1 className="text-2xl font-bold text-emerald-600">
+        <h1 className="text-3xl font-bold text-center eco-title-text">
           <CmsText contentKey="loancomplete.title" fallback="대출완료" />
         </h1>
       </header>
@@ -148,11 +152,12 @@ export default function KioskLoanComplete() {
       <footer className="pb-8 px-5">
         <button
           onClick={handleConfirm}
-          className="kiosk-btn bg-slate-800 hover:bg-slate-700 text-white w-full"
+          className="eco-btn-primary w-full"
         >
           <CmsText contentKey="loancomplete.confirm_button_text" fallback="확인하기" />
         </button>
       </footer>
+      <EcoTicker />
     </div>
   );
 }

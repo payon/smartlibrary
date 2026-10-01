@@ -16,6 +16,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
+import { EcoHeader, EcoSteps, EcoUserPill, EcoTicker, LOAN_STEPS, RETURN_STEPS } from '@/components/kiosk/eco/EcoChrome';
 import { useKioskSpeak } from '@/hooks/useKioskSpeak';
 import { Delete, CheckCircle2, ArrowLeft, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
@@ -30,6 +31,8 @@ export default function KioskAuthPin() {
   const theme = useScreenTheme('auth-pin');
   useKioskSpeak(`${authPinTitle}. 4자리 비밀번호를 입력해주세요.`);
   const { setScreen, prevScreen, kioskMode, authenticatedUser, setAuthenticatedUser } = useAppStore();
+  const flowTitle = kioskMode === 'return' ? '도서반납' : '도서대출';
+  const flowSteps = kioskMode === 'return' ? RETURN_STEPS : LOAN_STEPS;
   const [pin, setPin] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isError, setIsError] = useState(false);
@@ -152,19 +155,22 @@ export default function KioskAuthPin() {
   const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del'];
 
   return (
-    <div className="kiosk-screen kiosk-dark-bg flex flex-col" style={theme.style}>
+    <div className="kiosk-screen eco-bg flex flex-col" style={theme.style}>
+      <EcoHeader title={flowTitle} />
+      {kioskMode !== 'card' && <EcoSteps steps={flowSteps} current={0} />}
+      <EcoUserPill />
       {/* 상단 타이틀 */}
-      <header className="px-6 pt-8 pb-4">
-        <h1 className="text-2xl font-bold text-white">
+      <header className="px-6 pt-6 pb-2">
+        <h1 className="text-3xl font-bold text-center eco-title-text">
           <CmsText contentKey="authpin.title" fallback="비밀번호 입력" />
         </h1>
-        <p className="text-slate-400 text-sm mt-1">
+        <p className="text-slate-600 text-sm mt-1 text-center">
           4자리 비밀번호를 입력해주세요
         </p>
         <button
           onClick={handleDemoFill}
           disabled={isProcessing || isError}
-          className="mt-3 w-full rounded-xl border border-sky-500/40 bg-sky-500/10 px-4 py-3 text-sm text-sky-300 disabled:opacity-40"
+          className="mt-3 w-full rounded-xl border border-sky-300 bg-sky-50 px-4 py-3 text-sm text-sky-700 disabled:opacity-40"
           aria-label={`연습용 비밀번호 ${demoPin} 자동 입력`}
         >
           💡 연습용입니다 — 비밀번호 {demoPin} 자동 입력
@@ -172,8 +178,10 @@ export default function KioskAuthPin() {
       </header>
 
       {/* PIN 도트 표시 영역 (스크린리더 입력 상태 안내) */}
+      <div className="px-6 pt-4">
+      <div className="eco-card px-6 py-6">
       <div
-        className="flex justify-center py-8"
+        className="flex justify-center py-4"
         role="status"
         aria-live="polite"
         aria-label={`비밀번호 ${pin.length}자리 입력됨`}
@@ -212,7 +220,7 @@ export default function KioskAuthPin() {
             transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
             className="w-8 h-8 border-2 border-sky-400 border-t-transparent rounded-full mx-auto"
           />
-          <p className="text-slate-400 text-sm mt-2">인증 중...</p>
+          <p className="text-slate-600 text-sm mt-2">인증 중...</p>
         </div>
       )}
 
@@ -229,7 +237,7 @@ export default function KioskAuthPin() {
       )}
 
       {/* 숫자 키패드 */}
-      <div className="flex-1 flex items-center justify-center px-6 pb-4">
+      <div className="flex items-center justify-center px-2 pb-2">
         <div className="grid grid-cols-3 gap-3 w-full max-w-xs">
           {keys.map((key) => {
             if (key === '') return <div key="empty" />;
@@ -241,7 +249,7 @@ export default function KioskAuthPin() {
                   onClick={handleDelete}
                   disabled={isProcessing || isError}
                   aria-label="마지막 숫자 지우기"
-                  className="kiosk-btn bg-slate-700 hover:bg-slate-600 text-white h-16 rounded-xl"
+                  className="eco-btn-secondary h-16 rounded-xl text-2xl"
                 >
                   <Delete className="w-6 h-6" aria-hidden="true" />
                 </button>
@@ -254,13 +262,15 @@ export default function KioskAuthPin() {
                 onClick={() => handleKeyPress(key)}
                 disabled={isProcessing || isError || pin.length >= 4}
                 aria-label={`숫자 ${key} 입력`}
-                className="kiosk-btn bg-slate-800 hover:bg-slate-700 text-white text-2xl font-semibold h-16 rounded-xl"
+                className="eco-btn-secondary h-16 rounded-xl text-2xl font-semibold"
               >
                 {key}
               </button>
             );
           })}
         </div>
+      </div>
+      </div>
       </div>
 
       {/* 하단 버튼 */}
@@ -270,7 +280,7 @@ export default function KioskAuthPin() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             onClick={handleConfirm}
-            className="kiosk-btn bg-sky-600 hover:bg-sky-500 text-white"
+            className="eco-btn-primary w-full"
           >
             <CheckCircle2 className="w-5 h-5" />
             확인
@@ -280,12 +290,13 @@ export default function KioskAuthPin() {
         <button
           onClick={prevScreen}
           disabled={isProcessing}
-          className="kiosk-btn bg-transparent hover:bg-slate-800 text-slate-400"
+          className="eco-btn-secondary w-full"
         >
           <ArrowLeft className="w-5 h-5" />
           취소
         </button>
       </footer>
+      <EcoTicker />
     </div>
   );
 }

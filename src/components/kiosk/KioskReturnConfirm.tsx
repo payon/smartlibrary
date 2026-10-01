@@ -12,6 +12,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
+import { EcoHeader, EcoSteps, EcoUserPill, EcoTicker, RETURN_STEPS } from '@/components/kiosk/eco/EcoChrome';
 import { useKioskSpeak } from '@/hooks/useKioskSpeak';
 import { CheckCircle2, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
@@ -82,10 +83,13 @@ export default function KioskReturnConfirm() {
   };
 
   return (
-    <div className="kiosk-screen kiosk-light-bg flex flex-col" style={theme.style}>
+    <div className="kiosk-screen eco-bg flex flex-col" style={theme.style}>
+      <EcoHeader title="도서반납" />
+      <EcoSteps steps={RETURN_STEPS} current={2} />
+      <EcoUserPill />
       {/* 상단 타이틀 */}
       <header className="px-5 pt-6 pb-3">
-        <h1 className="text-xl font-bold text-slate-800">
+        <h1 className="text-3xl font-bold text-center eco-title-text">
           <CmsText contentKey="returnconfirm.title" fallback="반납 정보를 확인해주세요" />
         </h1>
       </header>
@@ -139,7 +143,7 @@ export default function KioskReturnConfirm() {
       <footer className="pb-8 px-5 flex gap-3">
         <button
           onClick={prevScreen}
-          className="kiosk-btn bg-slate-200 hover:bg-slate-300 text-slate-700 flex-1"
+          className="eco-btn-secondary flex-1"
           disabled={isProcessing}
         >
           <ArrowLeft className="w-5 h-5" />
@@ -148,7 +152,7 @@ export default function KioskReturnConfirm() {
         <button
           onClick={handleReturn}
           disabled={isProcessing}
-          className="kiosk-btn bg-slate-800 hover:bg-slate-700 text-white flex-[2] disabled:opacity-60"
+          className="eco-btn-primary flex-[2] disabled:opacity-60"
         >
           {isProcessing ? (
             <>
@@ -163,6 +167,7 @@ export default function KioskReturnConfirm() {
           )}
         </button>
       </footer>
+      <EcoTicker />
     </div>
   );
 }

@@ -430,3 +430,106 @@
     max-width: 680px;
   }
 }
+
+/* ======================================================================== */
+/* ECO 테마 (실기기 참조, 세로형) — 밝은 하늘색 + 도트 배경                     */
+/* ======================================================================== */
+
+.eco-bg {
+  background-color: #eaf3fd;
+  background-image: radial-gradient(rgba(120, 170, 220, 0.18) 1.5px, transparent 1.5px);
+  background-size: 18px 18px;
+  color: #1e3a5f;
+}
+
+.eco-header-bar {
+  background: linear-gradient(180deg, #7ba7d9 0%, #6b9bd1 100%);
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(30, 58, 95, 0.4);
+}
+
+.eco-card {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(140, 180, 220, 0.5);
+  border-radius: 1rem;
+  box-shadow: 0 2px 12px rgba(90, 140, 190, 0.15);
+}
+
+.eco-btn-primary {
+  background: linear-gradient(180deg, #8ec3ef 0%, #5ea3dd 100%);
+  border-bottom: 3px solid #3d7fb8;
+  color: #0f2f52;
+  font-weight: 700;
+  border-radius: 0.75rem;
+  min-height: 56px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.eco-btn-primary:active {
+  transform: translateY(1px);
+  border-bottom-width: 2px;
+}
+
+.eco-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.eco-btn-secondary {
+  background: linear-gradient(180deg, #a9cdf0 0%, #7fb0e3 100%);
+  border-bottom: 3px solid #5b8fc4;
+  color: #173a5e;
+  font-weight: 600;
+  border-radius: 0.75rem;
+  min-height: 56px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.eco-btn-secondary:active {
+  transform: translateY(1px);
+  border-bottom-width: 2px;
+}
+
+.eco-step-pill {
+  border-radius: 9999px;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #5b7a99;
+  white-space: nowrap;
+}
+
+.eco-step-pill-active {
+  background: #8e8ed6;
+  color: #ffffff;
+  box-shadow: 0 1px 6px rgba(142, 142, 214, 0.5);
+}
+
+.eco-user-pill {
+  background: #ffffff;
+  border: 1px solid rgba(140, 180, 220, 0.6);
+  border-radius: 9999px;
+  box-shadow: 0 1px 4px rgba(90, 140, 190, 0.12);
+}
+
+.eco-ticker-bar {
+  background: #eef6ee;
+  border-top: 1px solid rgba(140, 180, 160, 0.4);
+}
+
+.eco-title-text {
+  color: #3b5bdb;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.8);
+}

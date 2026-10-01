@@ -6,6 +6,7 @@
 
 import { motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
+import { EcoHeader, EcoSteps, EcoUserPill, EcoTicker, RETURN_STEPS } from '@/components/kiosk/eco/EcoChrome';
 import { useKioskSpeak } from '@/hooks/useKioskSpeak';
 import { CheckCircle2 } from 'lucide-react';
 import { CmsText } from '@/components/kiosk/CmsText';
@@ -41,12 +42,18 @@ export default function KioskReturnComplete() {
     : null;
 
   return (
-    <div className="kiosk-screen kiosk-light-bg flex flex-col items-center justify-center px-6" style={theme.style}>
+    <div className="kiosk-screen eco-bg flex flex-col" style={theme.style}>
+      <div className="w-full">
+        <EcoHeader title="도서반납" />
+        <EcoSteps steps={RETURN_STEPS} current={4} />
+        <EcoUserPill />
+      </div>
+      <main className="flex-1 flex flex-col items-center justify-center px-6 w-full">
       <motion.div
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}
         transition={{ type: 'spring', stiffness: 200, delay: 0.2 }}
-        className="mb-6"
+        className="mb-6 mt-6"
       >
         <CheckCircle2 className="w-20 h-20 text-emerald-500" />
       </motion.div>
@@ -55,7 +62,7 @@ export default function KioskReturnComplete() {
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.4 }}
-        className="text-2xl font-bold text-slate-800 mb-2"
+        className="text-3xl font-bold text-center eco-title-text mb-2"
       >
         <CmsText contentKey="returncomplete.title" fallback="반납완료" />
       </motion.h1>
@@ -109,11 +116,13 @@ export default function KioskReturnComplete() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 1.0 }}
         onClick={handleConfirm}
-        className="kiosk-btn bg-slate-800 hover:bg-slate-700 text-white w-full max-w-xs"
+        className="eco-btn-primary w-full max-w-xs"
       >
         <CheckCircle2 className="w-5 h-5" />
         <CmsText contentKey="returncomplete.confirm_button_text" fallback="확인하기" />
       </motion.button>
+      </main>
+      <EcoTicker />
     </div>
   );
 }

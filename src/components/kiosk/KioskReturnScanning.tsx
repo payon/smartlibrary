@@ -12,6 +12,7 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
+import { EcoHeader, EcoSteps, EcoUserPill, EcoTicker, RETURN_STEPS } from '@/components/kiosk/eco/EcoChrome';
 import { useKioskSpeak } from '@/hooks/useKioskSpeak';
 import { BookPlus, CheckCircle2, Loader2 } from 'lucide-react';
 import type { LoanItem } from '@/stores/useAppStore';
@@ -62,13 +63,16 @@ export default function KioskReturnScanning() {
   };
 
   return (
-    <div className="kiosk-screen kiosk-dark-bg flex flex-col" style={theme.style}>
+    <div className="kiosk-screen eco-bg flex flex-col" style={theme.style}>
+      <EcoHeader title="도서반납" />
+      <EcoSteps steps={RETURN_STEPS} current={0} />
+      <EcoUserPill />
       {/* 상단 타이틀 */}
-      <header className="px-6 pt-8 pb-4">
-        <h1 className="text-2xl font-bold text-white">
+      <header className="px-6 pt-6 pb-2">
+        <h1 className="text-3xl font-bold text-center eco-title-text">
           <CmsText contentKey="returnscanning.title" fallback="도서반납" />
         </h1>
-        <p className="text-slate-400 text-sm mt-1">
+        <p className="text-slate-600 text-sm mt-1 text-center">
           인식된 도서: {returnedLoans.length}권
         </p>
       </header>
@@ -89,7 +93,7 @@ export default function KioskReturnScanning() {
             className="absolute w-24 h-24 rounded-full border border-sky-400"
           />
           {/* 중심 아이콘 */}
-          <div className="relative w-32 h-32 rounded-full bg-white/5 flex items-center justify-center">
+          <div className="relative w-32 h-32 rounded-full bg-sky-50 border border-sky-200 flex items-center justify-center">
             {scanning ? (
               <Loader2 className="w-12 h-12 text-sky-400 animate-spin" />
             ) : (
@@ -109,7 +113,7 @@ export default function KioskReturnScanning() {
           <motion.p
             animate={{ opacity: [0.6, 1, 0.6] }}
             transition={{ duration: 1.5, repeat: Infinity }}
-            className="text-slate-300 text-base"
+            className="text-slate-700 text-base"
           >
             <CmsText contentKey="returnscanning.scanning_text" fallback="도서가 인식되었습니다. 잠시 기다려주세요." />
           </motion.p>
@@ -117,7 +121,7 @@ export default function KioskReturnScanning() {
           <motion.p
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="text-emerald-400 text-lg font-semibold"
+            className="text-emerald-600 text-lg font-semibold"
           >
             <CmsText contentKey="returnscanning.complete_text" fallback="스캔이 완료되었습니다" />
           </motion.p>
@@ -132,12 +136,12 @@ export default function KioskReturnScanning() {
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: idx * 0.05 }}
-                className="bg-white/5 rounded-lg px-4 py-2.5 flex items-center gap-3 border border-white/10"
+                className="eco-card rounded-lg px-4 py-2.5 flex items-center gap-3"
               >
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
                 <div className="min-w-0">
-                  <p className="text-sm text-white truncate">{loan.book?.title || '도서'}</p>
-                  <p className="text-xs text-slate-400">{loan.book?.author || ''}</p>
+                  <p className="text-sm text-slate-800 font-medium truncate">{loan.book?.title || '도서'}</p>
+                  <p className="text-xs text-slate-500">{loan.book?.author || ''}</p>
                 </div>
               </motion.div>
             ))}
@@ -148,7 +152,7 @@ export default function KioskReturnScanning() {
       {/* 하단 버튼 */}
       {scanning ? (
         <footer className="pb-10 px-6">
-          <div className="kiosk-btn bg-slate-700 text-white w-full opacity-60 cursor-wait">
+          <div className="eco-btn-secondary w-full opacity-60 cursor-wait">
             <Loader2 className="w-5 h-5 animate-spin" />
             스캔 중...
           </div>
@@ -158,7 +162,7 @@ export default function KioskReturnScanning() {
           {remainingLoans.length > 0 && (
             <button
               onClick={handleMore}
-              className="kiosk-btn bg-sky-700 hover:bg-sky-600 text-white"
+              className="eco-btn-secondary w-full"
             >
               <BookPlus className="w-5 h-5" />
               <CmsText contentKey="returnscanning.more_button_text" fallback={`더 넣기 (${remainingLoans.length}권 남음)`} />
@@ -166,13 +170,14 @@ export default function KioskReturnScanning() {
           )}
           <button
             onClick={handleComplete}
-            className="kiosk-btn bg-emerald-600 hover:bg-emerald-500 text-white"
+            className="eco-btn-primary w-full"
           >
             <CheckCircle2 className="w-5 h-5" />
             <CmsText contentKey="returnscanning.complete_button_text" fallback="반납 완료하기" />
           </button>
         </footer>
       )}
+      <EcoTicker />
     </div>
   );
 }

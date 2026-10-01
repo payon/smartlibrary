@@ -200,6 +200,8 @@ export const DEFAULT_CONTENT_ITEMS: DefaultContentItem[] = [
   { key: 'global.library_subtitle', value: '시민과 함께하는 평생학습 도서관', type: 'text', screen: 'global', label: '도서관 부제목' },
   { key: 'global.primary_color', value: '#2563eb', type: 'color', screen: 'global', label: '메인 컬러' },
   { key: 'global.accent_color', value: '#16a34a', type: 'color', screen: 'global', label: '강조 컬러' },
+  { key: 'ticker.weather', value: '맑음/13.0℃', type: 'text', screen: 'global', label: '티커 날씨' },
+  { key: 'ticker.notice', value: '24시간 도서 대출/반납이 가능한 스마트도서관입니다.', type: 'text', screen: 'global', label: '티커 공지' },
 ];
 
 /**

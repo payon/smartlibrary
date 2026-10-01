@@ -12,6 +12,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
+import { EcoHeader, EcoSteps, EcoUserPill, EcoTicker, RETURN_STEPS } from '@/components/kiosk/eco/EcoChrome';
 import { useKioskSpeak } from '@/hooks/useKioskSpeak';
 import { BookDown, ArrowDown, X, Info } from 'lucide-react';
 import type { LoanItem } from '@/stores/useAppStore';
@@ -72,10 +73,13 @@ export default function KioskReturnInsert() {
   }, [checkAndDetect]);
 
   return (
-    <div className="kiosk-screen kiosk-dark-bg flex flex-col" style={theme.style}>
+    <div className="kiosk-screen eco-bg flex flex-col" style={theme.style}>
+      <EcoHeader title="도서반납" />
+      <EcoSteps steps={RETURN_STEPS} current={0} />
+      <EcoUserPill />
       {/* 상단 타이틀 */}
-      <header className="px-6 pt-8 pb-4">
-        <h1 className="text-2xl font-bold text-white">
+      <header className="px-6 pt-6 pb-2">
+        <h1 className="text-3xl font-bold text-center eco-title-text">
           <CmsText contentKey="returninsert.title" fallback="도서반납" />
         </h1>
       </header>
@@ -89,7 +93,7 @@ export default function KioskReturnInsert() {
             className="text-center"
           >
             <Info className="w-16 h-16 text-sky-400 mx-auto mb-4" />
-            <p className="text-slate-200 text-lg font-medium mb-2">
+            <p className="text-slate-700 text-lg font-medium mb-2">
               <CmsText contentKey="returninsert.no_loans_title" fallback="반납할 도서가 없습니다" />
             </p>
             <p className="text-slate-500 text-sm">
@@ -105,7 +109,7 @@ export default function KioskReturnInsert() {
             {/* 도서 아이콘 */}
             <CmsImage contentKey="returninsert.sensor_image_url" alt="반납구 안내 이미지" imgClassName="w-28 h-28 object-contain mx-auto mb-4" />
             <div className="relative mb-8">
-              <div className="w-28 h-28 mx-auto rounded-2xl bg-white/5 border border-slate-600 flex items-center justify-center">
+              <div className="w-28 h-28 mx-auto rounded-2xl bg-sky-50 border border-sky-200 flex items-center justify-center">
                 {detected ? (
                   <motion.div initial={{ scale: 0.8 }} animate={{ scale: 1 }}>
                     <BookDown className="w-14 h-14 text-emerald-400" />
@@ -132,13 +136,13 @@ export default function KioskReturnInsert() {
               <motion.p
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="text-emerald-400 text-lg font-semibold"
+                className="text-emerald-600 text-lg font-semibold"
               >
                 <CmsText contentKey="returninsert.detected_text" fallback="도서가 감지되었습니다" />
               </motion.p>
             ) : (
               <>
-                <p className="text-slate-200 text-lg font-medium mb-2">
+                <p className="text-slate-700 text-lg font-medium mb-2">
                   <CmsText contentKey="returninsert.instruction" fallback="반납할 도서를 하나씩 넣어주세요" />
                 </p>
                 <p className="text-slate-500 text-sm">
@@ -154,7 +158,7 @@ export default function KioskReturnInsert() {
       <footer className="pb-10 px-6 flex gap-3">
         <button
           onClick={prevScreen}
-          className="kiosk-btn bg-slate-700 hover:bg-slate-600 text-white flex-1"
+          className="eco-btn-secondary flex-1"
         >
           <X className="w-5 h-5" />
           취소
@@ -162,12 +166,13 @@ export default function KioskReturnInsert() {
         {noLoans && (
           <button
             onClick={() => setScreen('idle')}
-            className="kiosk-btn bg-slate-800 hover:bg-slate-700 text-white flex-1"
+            className="eco-btn-primary flex-1"
           >
             처음으로
           </button>
         )}
       </footer>
+      <EcoTicker />
     </div>
   );
 }

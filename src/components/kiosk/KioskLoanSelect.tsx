@@ -13,6 +13,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
+import { EcoHeader, EcoSteps, EcoUserPill, EcoTicker, LOAN_STEPS } from '@/components/kiosk/eco/EcoChrome';
 import { useKioskSpeak } from '@/hooks/useKioskSpeak';
 import type { BookItem, LoanItem } from '@/stores/useAppStore';
 import { BOOK_CATEGORIES, MAX_LOAN_COUNT } from '@/lib/constants';
@@ -100,10 +101,13 @@ export default function KioskLoanSelect() {
   };
 
   return (
-    <div className="kiosk-screen kiosk-light-bg flex flex-col" style={theme.style}>
+    <div className="kiosk-screen eco-bg flex flex-col" style={theme.style}>
+      <EcoHeader title="도서대출" />
+      <EcoSteps steps={LOAN_STEPS} current={1} />
+      <EcoUserPill />
       {/* 상단 타이틀 */}
       <header className="px-5 pt-6 pb-3">
-        <h1 className="text-xl font-bold text-slate-800">
+        <h1 className="text-3xl font-bold text-center eco-title-text">
           <CmsText contentKey="loanselect.title" fallback="도서를 선택해주세요" />
         </h1>
         <div className="flex items-center justify-between mt-1">
@@ -286,7 +290,7 @@ export default function KioskLoanSelect() {
       <footer className="pb-8 px-5 flex gap-3">
         <button
           onClick={prevScreen}
-          className="kiosk-btn bg-slate-200 hover:bg-slate-300 text-slate-700 flex-1"
+          className="eco-btn-secondary flex-1"
         >
           <ArrowLeft className="w-5 h-5" />
           이전
@@ -294,12 +298,13 @@ export default function KioskLoanSelect() {
         <button
           onClick={handleNext}
           disabled={selectedBooks.length === 0}
-          className="kiosk-btn bg-slate-800 hover:bg-slate-700 text-white flex-1 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="eco-btn-primary flex-1 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <CmsText contentKey="loanselect.confirm_button_text" fallback="다음 단계" />
           <ChevronRight className="w-5 h-5" />
         </button>
       </footer>
+      <EcoTicker />
     </div>
   );
 }

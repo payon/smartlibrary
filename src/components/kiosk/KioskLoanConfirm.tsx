@@ -12,6 +12,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
+import { EcoHeader, EcoSteps, EcoUserPill, EcoTicker, LOAN_STEPS } from '@/components/kiosk/eco/EcoChrome';
 import { useKioskSpeak } from '@/hooks/useKioskSpeak';
 import { LOAN_PERIOD_DAYS } from '@/lib/constants';
 import { ArrowLeft, CheckCircle2, User } from 'lucide-react';
@@ -88,10 +89,13 @@ export default function KioskLoanConfirm() {
   };
 
   return (
-    <div className="kiosk-screen kiosk-light-bg flex flex-col" style={theme.style}>
+    <div className="kiosk-screen eco-bg flex flex-col" style={theme.style}>
+      <EcoHeader title="도서대출" />
+      <EcoSteps steps={LOAN_STEPS} current={2} />
+      <EcoUserPill />
       {/* 상단 타이틀 */}
       <header className="px-5 pt-6 pb-3">
-        <h1 className="text-xl font-bold text-slate-800">
+        <h1 className="text-3xl font-bold text-center eco-title-text">
           <CmsText contentKey="loanconfirm.title" fallback="대출 정보를 확인해주세요" />
         </h1>
       </header>
@@ -99,7 +103,7 @@ export default function KioskLoanConfirm() {
       {/* 콘텐츠 영역 */}
       <div className="flex-1 overflow-y-auto kiosk-scroll px-5 pb-4">
         {/* 사용자 정보 카드 */}
-        <div className="bg-slate-50 rounded-xl p-4 mb-4 flex items-center gap-3">
+        <div className="eco-card p-4 mb-4 flex items-center gap-3">
           <div className="w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center">
             <User className="w-6 h-6 text-slate-500" />
           </div>
@@ -178,7 +182,7 @@ export default function KioskLoanConfirm() {
       <footer className="pb-8 px-5 flex gap-3">
         <button
           onClick={prevScreen}
-          className="kiosk-btn bg-slate-200 hover:bg-slate-300 text-slate-700 flex-1"
+          className="eco-btn-secondary flex-1"
           disabled={isProcessing}
         >
           <ArrowLeft className="w-5 h-5" />
@@ -187,7 +191,7 @@ export default function KioskLoanConfirm() {
         <button
           onClick={handleLoan}
           disabled={isProcessing}
-          className="kiosk-btn bg-slate-800 hover:bg-slate-700 text-white flex-[2] disabled:opacity-60"
+          className="eco-btn-primary flex-[2] disabled:opacity-60"
         >
           {isProcessing ? (
             <>
@@ -202,6 +206,7 @@ export default function KioskLoanConfirm() {
           )}
         </button>
       </footer>
+      <EcoTicker />
     </div>
   );
 }

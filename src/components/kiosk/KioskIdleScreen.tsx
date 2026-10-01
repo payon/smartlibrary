@@ -138,7 +138,7 @@ export default function KioskIdleScreen() {
           <KioskA11yBar dark={false} />
         </div>
         <button
-          onClick={() => setScreen('main-menu')}
+          onClick={() => setScreen('portal')}
           className="w-full h-14 rounded-2xl bg-[#0e5a6d] text-white text-lg font-bold shadow-lg"
           aria-label="도서관 이용 시작하기"
         >

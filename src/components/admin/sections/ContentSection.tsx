@@ -46,6 +46,7 @@ interface ContentItem {
 
 const SCREENS = [
   { value: 'miryang-main', label: '밀양안내(첫화면)' },
+  { value: 'portal', label: '대기 메인 포털' },
   { value: 'signup-guide', label: '회원가입방법' },
   { value: 'idle', label: '대기 화면' },
   { value: 'main-menu', label: '메인 메뉴' },

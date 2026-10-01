@@ -20,6 +20,7 @@ import { KIOSK_VIEW_NAMES } from '@/lib/constants';
 import { isSafeColor } from '@/components/kiosk/CmsMedia';
 import type { KioskViewName } from '@/lib/constants';
 import KioskIdleScreen from '@/components/kiosk/KioskIdleScreen';
+import KioskPortal from '@/components/kiosk/KioskPortal';
 import KioskSignupGuide from '@/components/kiosk/KioskSignupGuide';
 import KioskMainMenu from '@/components/kiosk/KioskMainMenu';
 import KioskAuthScan from '@/components/kiosk/KioskAuthScan';
@@ -47,6 +48,7 @@ function ScreenRouter({ screen }: { screen: KioskViewName }) {
   switch (screen) {
     case 'idle': return <KioskIdleScreen />;
     case 'miryang-main': return <KioskIdleScreen />;
+    case 'portal': return <KioskPortal />;
     case 'signup-guide': return <KioskSignupGuide />;
     case 'main-menu': return <KioskMainMenu />;
     case 'card-apply': return <KioskCardApply />;
@@ -151,8 +153,8 @@ export default function Home() {
 
   const screenKey = screen + '-' + (kioskMode || '');
   const screenName = KIOSK_VIEW_NAMES[screen] || '키오스크';
-  // 안내/메인메뉴에는 툴바 내 도움말 버튼이 있어 FAB 숨김
-  const showGuideFab = !adminMode && screen !== 'miryang-main' && screen !== 'main-menu';
+  // 안내/포털/메인메뉴에는 툴바 내 도움말 버튼이 있어 FAB 숨김
+  const showGuideFab = !adminMode && screen !== 'miryang-main' && screen !== 'portal' && screen !== 'main-menu';
 
   // 관리자 모드
   if (adminMode) {

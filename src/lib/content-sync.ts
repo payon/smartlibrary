@@ -211,12 +211,12 @@ export const DEFAULT_CONTENT_ITEMS: DefaultContentItem[] = [
   { key: 'miryang.info_4_value', value: '해당 공간 오픈시간', type: 'text', screen: 'miryang-main', label: '안내4 내용' },
   { key: 'miryang.loan_title', value: '대출', type: 'text', screen: 'miryang-main', label: '대출 섹션 제목' },
   { key: 'miryang.loan_step_1', value: '[대출]선택', type: 'text', screen: 'miryang-main', label: '대출 1단계' },
-  { key: 'miryang.loan_step_2', value: '책바구니 담기', type: 'text', screen: 'miryang-main', label: '대출 2단계' },
+  { key: 'miryang.loan_step_2', value: '도서확인', type: 'text', screen: 'miryang-main', label: '대출 2단계' },
   { key: 'miryang.loan_step_3', value: '회원인증', type: 'text', screen: 'miryang-main', label: '대출 3단계' },
   { key: 'miryang.loan_step_4', value: '비밀번호 입력', type: 'text', screen: 'miryang-main', label: '대출 4단계' },
-  { key: 'miryang.loan_step_5', value: '도서확인', type: 'text', screen: 'miryang-main', label: '대출 5단계' },
-  { key: 'miryang.loan_step_6', value: '대출처리', type: 'text', screen: 'miryang-main', label: '대출 6단계' },
-  { key: 'miryang.loan_step_7', value: '대출완료', type: 'text', screen: 'miryang-main', label: '대출 7단계' },
+  { key: 'miryang.loan_step_5', value: '대출처리', type: 'text', screen: 'miryang-main', label: '대출 5단계' },
+  { key: 'miryang.loan_step_6', value: '영수증발급', type: 'text', screen: 'miryang-main', label: '대출 6단계' },
+  { key: 'miryang.loan_step_7', value: '처리완료', type: 'text', screen: 'miryang-main', label: '대출 7단계' },
   { key: 'miryang.loan_img_1', value: '', type: 'image', screen: 'miryang-main', label: '대출 1단계 이미지' },
   { key: 'miryang.loan_img_2', value: '', type: 'image', screen: 'miryang-main', label: '대출 2단계 이미지' },
   { key: 'miryang.loan_img_3', value: '', type: 'image', screen: 'miryang-main', label: '대출 3단계 이미지' },
@@ -251,9 +251,10 @@ export const DEFAULT_CONTENT_ITEMS: DefaultContentItem[] = [
   { key: 'signup.background_color', value: '', type: 'color', screen: 'signup-guide', label: '가입안내 배경색' },
   { key: 'signup.background_image_url', value: '', type: 'image', screen: 'signup-guide', label: '가입안내 배경이미지' },
   { key: 'signup.background_fit', value: 'cover', type: 'text', screen: 'signup-guide', label: '가입안내 배경 맞춤' },
+  { key: 'guide.portal', value: '{"title":"대기 화면","steps":["빌리려면 “대출”, 돌려주려면 “반납”을 누릅니다.","처음이면 “회원가입” 안내를 확인하세요.","인기 도서를 눌러 상세 정보를 볼 수 있습니다."]}', type: 'json', screen: 'portal', label: '포털 가이드' },
   { key: 'guide.signup-guide', value: '{"title":"회원가입 방법","steps":["도서관 방문 회원가입 순서를 확인하세요.","신분증을 지참하고 2층 종합자료실을 방문하세요."]}', type: 'json', screen: 'signup-guide', label: '가입안내 가이드' },
   // ── 대출/반납 절차 순서 (관리자 편집용, 프론트 단계 스트립과 동일 순서) ──
-  { key: 'loanflow.order', value: '["[대출]선택","책바구니 담기","회원인증","비밀번호 입력","도서확인","대출처리","대출완료"]', type: 'json', screen: 'main-menu', label: '대출 절차 순서' },
+  { key: 'loanflow.order', value: '["[대출]선택","도서확인","회원인증","비밀번호 입력","대출처리","영수증발급","처리완료"]', type: 'json', screen: 'main-menu', label: '대출 절차 순서' },
   { key: 'returnflow.order', value: '["[반납]선택","도서인식","도서투입","반납완료"]', type: 'json', screen: 'main-menu', label: '반납 절차 순서' },
   // ── 글로벌 설정 ──
 

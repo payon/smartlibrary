@@ -16,6 +16,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
 import type { KioskViewName } from '@/lib/constants';
 import KioskIdleScreen from '@/components/kiosk/KioskIdleScreen';
+import KioskPortal from '@/components/kiosk/KioskPortal';
 import KioskSignupGuide from '@/components/kiosk/KioskSignupGuide';
 import KioskMainMenu from '@/components/kiosk/KioskMainMenu';
 import KioskAuthScan from '@/components/kiosk/KioskAuthScan';
@@ -42,6 +43,8 @@ function ScreenRouter({ screen }: { screen: KioskViewName }) {
       return <KioskIdleScreen />;
     case 'miryang-main':
       return <KioskIdleScreen />;
+    case 'portal':
+      return <KioskPortal />;
     case 'signup-guide':
       return <KioskSignupGuide />;
     case 'main-menu':

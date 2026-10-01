@@ -288,7 +288,9 @@ const screenHistory: KioskViewName[] = [];
 
 /** 이전 화면 매핑 */
 const PREV_SCREEN_MAP: Partial<Record<KioskViewName, KioskViewName>> = {
-  'main-menu': 'miryang-main',
+  'miryang-main': 'miryang-main',
+  'portal': 'miryang-main',
+  'main-menu': 'portal',
   'signup-guide': 'card-apply',
   'card-apply': 'main-menu',
   'card-form': 'card-apply',

@@ -13,13 +13,21 @@ export interface GuideContent {
 }
 
 type ScreenKey =
-  | 'idle' | 'miryang-main' | 'signup-guide' | 'main-menu'
+  | 'idle' | 'miryang-main' | 'portal' | 'signup-guide' | 'main-menu'
   | 'card-apply' | 'card-form' | 'card-pending' | 'card-complete'
   | 'auth-scan' | 'auth-pin'
   | 'loan-select' | 'loan-confirm' | 'loan-dispense' | 'loan-history' | 'receipt' | 'loan-complete'
   | 'return-insert' | 'return-scanning' | 'return-confirm' | 'return-complete';
 
 export const DEFAULT_GUIDES: Record<ScreenKey, GuideContent> = {
+  'portal': {
+    title: '대기 화면',
+    steps: [
+      '빌리려면 “대출”, 돌려주려면 “반납”을 누릅니다.',
+      '처음이면 “회원가입” 안내를 확인하세요.',
+      '인기 도서를 눌러 상세 정보를 볼 수 있습니다.',
+    ],
+  },
   'miryang-main': {
     title: '도서관 안내',
     steps: [

@@ -16,7 +16,7 @@ type ScreenKey =
   | 'idle' | 'main-menu'
   | 'card-apply' | 'card-form' | 'card-pending' | 'card-complete'
   | 'auth-scan' | 'auth-pin'
-  | 'loan-select' | 'loan-confirm' | 'loan-complete'
+  | 'loan-select' | 'loan-confirm' | 'loan-dispense' | 'loan-history' | 'receipt' | 'loan-complete'
   | 'return-insert' | 'return-scanning' | 'return-confirm' | 'return-complete';
 
 export const DEFAULT_GUIDES: Record<ScreenKey, GuideContent> = {
@@ -107,6 +107,29 @@ export const DEFAULT_GUIDES: Record<ScreenKey, GuideContent> = {
     steps: [
       '대출이 끝났습니다. 반납 날짜를 꼭 확인하세요.',
       '“확인하기”를 누르면 처음으로 돌아갑니다.',
+    ],
+  },
+  'loan-dispense': {
+    title: '도서 수령',
+    steps: [
+      '배출구에서 도서를 한 권씩 수령하세요.',
+      '화면에 나오는 순서대로 받으면 됩니다.',
+      '다 받으면 자동으로 넘어갑니다.',
+    ],
+  },
+  'loan-history': {
+    title: '대출 이력',
+    steps: [
+      '지금 빌린 책과 반납 날짜를 확인하세요.',
+      '돌려줄 책이 있으면 “반납하러 가기”를 누릅니다.',
+    ],
+  },
+  receipt: {
+    title: '영수증 발급',
+    steps: [
+      '영수증이 필요하면 “출력”을 누릅니다.',
+      '필요 없으면 “출력 안 함”을 누릅니다.',
+      '둘 중 하나를 누르면 마무리 화면으로 갑니다.',
     ],
   },
   'return-insert': {

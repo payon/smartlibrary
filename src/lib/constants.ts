@@ -332,7 +332,10 @@ export type KioskViewName =
   | 'auth-pin'
   | 'loan-select'
   | 'loan-confirm'
+  | 'loan-dispense'
   | 'loan-complete'
+  | 'loan-history'
+  | 'receipt'
   | 'return-insert'
   | 'return-scanning'
   | 'return-confirm'
@@ -353,7 +356,10 @@ export const KIOSK_VIEW_NAMES: Record<KioskViewName, string> = {
   'auth-pin': '비밀번호 입력',
   'loan-select': '도서 선택',
   'loan-confirm': '대출 확인',
+  'loan-dispense': '도서 수령',
   'loan-complete': '대출 완료',
+  'loan-history': '대출 이력',
+  'receipt': '영수증 발급',
   'return-insert': '도서 투입',
   'return-scanning': '도서 인식',
   'return-confirm': '반납 확인',
@@ -372,7 +378,10 @@ export const KIOSK_VIEWS = {
   AUTH_PIN: 'auth-pin' as const,
   LOAN_SELECT: 'loan-select' as const,
   LOAN_CONFIRM: 'loan-confirm' as const,
+  LOAN_DISPENSE: 'loan-dispense' as const,
   LOAN_COMPLETE: 'loan-complete' as const,
+  LOAN_HISTORY: 'loan-history' as const,
+  RECEIPT: 'receipt' as const,
   RETURN_INSERT: 'return-insert' as const,
   RETURN_SCANNING: 'return-scanning' as const,
   RETURN_CONFIRM: 'return-confirm' as const,

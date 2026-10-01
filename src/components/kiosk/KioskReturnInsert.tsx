@@ -154,6 +154,16 @@ export default function KioskReturnInsert() {
         )}
       </main>
 
+      {/* 반납 시 유의사항 */}
+      <div className="mx-6 mb-3 rounded-xl bg-white border border-slate-200 p-3 shrink-0">
+        <p className="text-sm font-bold text-violet-500 mb-1.5">반납 시 유의사항</p>
+        <p className="text-xs text-slate-600 leading-relaxed">
+          1. 투입구 크기보다 큰 도서는 가까운 도서관에 반납해 주세요.
+          <br />
+          2. 책을 바르게 넣어주세요.
+        </p>
+      </div>
+
       {/* 하단 취소 버튼 */}
       <footer className="pb-10 px-6 flex gap-3">
         <button

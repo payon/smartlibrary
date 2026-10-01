@@ -199,6 +199,18 @@ interface KioskState {
   setLastReturnSummary: (summary: ReturnSummary | null) => void;
 
   // ------------------------------------------------------------------------
+  // 대출 수령 큐 + 영수증 출력 여부 (ECO 흐름)
+  // ------------------------------------------------------------------------
+  /** 수령 대기 도서 (제목/저자) */
+  dispenseQueue: Array<{ title: string; author: string }>;
+  /** 수령 큐 설정 */
+  setDispenseQueue: (queue: Array<{ title: string; author: string }>) => void;
+  /** 영수증 출력 여부 (기본 true) */
+  receiptPrint: boolean;
+  /** 영수증 출력 여부 설정 */
+  setReceiptPrint: (print: boolean) => void;
+
+  // ------------------------------------------------------------------------
   // 센서 상태 (시뮬레이션)
   // ------------------------------------------------------------------------
   /** 센서 활성화 여부 */
@@ -285,7 +297,10 @@ const PREV_SCREEN_MAP: Partial<Record<KioskViewName, KioskViewName>> = {
   'auth-pin': 'auth-scan',
   'loan-select': 'auth-pin',
   'loan-confirm': 'loan-select',
+  'loan-dispense': 'loan-confirm',
   'loan-complete': 'idle',
+  'loan-history': 'main-menu',
+  'receipt': 'loan-confirm',
   'return-insert': 'main-menu',
   'return-scanning': 'return-insert',
   'return-confirm': 'return-scanning',
@@ -375,6 +390,10 @@ export const useAppStore = create<KioskState>((set, get) => ({
     })),
   lastReturnSummary: null,
   setLastReturnSummary: (summary) => set({ lastReturnSummary: summary }),
+  dispenseQueue: [],
+  setDispenseQueue: (queue) => set({ dispenseQueue: queue }),
+  receiptPrint: true,
+  setReceiptPrint: (print) => set({ receiptPrint: print }),
 
   // ------------------------------------------------------------------------
   // 센서 상태 초기값 및 액션
@@ -449,6 +468,8 @@ export const useAppStore = create<KioskState>((set, get) => ({
       selectedBooks: [],
       returnedLoans: [],
       lastReturnSummary: null,
+      dispenseQueue: [],
+      receiptPrint: true,
       sensorActive: false,
     });
   },

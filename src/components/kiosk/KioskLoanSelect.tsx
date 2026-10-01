@@ -20,6 +20,7 @@ import { BOOK_CATEGORIES, MAX_LOAN_COUNT } from '@/lib/constants';
 import { Search, X, ArrowLeft, Check, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { CmsText } from '@/components/kiosk/CmsText';
+import BookDetailModal from '@/components/kiosk/BookDetailModal';
 import { useScreenTheme } from '@/components/kiosk/CmsMedia';
 import { useCmsText } from '@/hooks/useCmsContent';
 
@@ -33,6 +34,7 @@ export default function KioskLoanSelect() {
   const [category, setCategory] = useState('전체');
   const [loading, setLoading] = useState(true);
   const [activeLoanCount, setActiveLoanCount] = useState<number | null>(null);
+  const [detailBook, setDetailBook] = useState<BookItem | null>(null);
 
   /** 내 활성 대출 권수 조회 (상한 도달 시 반납 유도) */
   useEffect(() => {
@@ -224,8 +226,12 @@ export default function KioskLoanSelect() {
                     isSelected ? 'border-sky-500 shadow-md' : isAtLimit ? 'border-slate-200 opacity-50' : 'border-slate-100'
                   }`}
                 >
-                  {/* 도서 표지 */}
-                  <div className="aspect-[2/3] bg-slate-100 relative">
+                  {/* 도서 표지 (탭 → 상세) */}
+                  <button
+                    onClick={() => setDetailBook(book)}
+                    className="aspect-[2/3] bg-slate-100 relative w-full text-left"
+                    aria-label={`${book.title} 상세 보기`}
+                  >
                     {book.coverUrl ? (
                       <img
                         src={book.coverUrl}
@@ -255,7 +261,7 @@ export default function KioskLoanSelect() {
                         </span>
                       </div>
                     )}
-                  </div>
+                  </button>
 
                   {/* 도서 정보 */}
                   <div className="p-2.5">
@@ -305,6 +311,12 @@ export default function KioskLoanSelect() {
         </button>
       </footer>
       <EcoTicker />
+      <BookDetailModal
+        book={detailBook}
+        books={filteredBooks}
+        onClose={() => setDetailBook(null)}
+        onSelectBook={(b) => setDetailBook(b)}
+      />
     </div>
   );
 }

@@ -76,7 +76,7 @@ export default function KioskReturnConfirm() {
         items: summaryItems,
       });
       toast.success(`${successCount}권 반납이 완료되었습니다`);
-      setScreen('return-complete');
+      setScreen('receipt');
     } else {
       toast.error('반납 처리에 실패했습니다. 다시 시도해주세요.');
     }

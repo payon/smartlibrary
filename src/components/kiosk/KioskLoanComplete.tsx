@@ -26,7 +26,7 @@ export default function KioskLoanComplete() {
   const loanCompleteTitle = useCmsText('loancomplete.title', '대출완료');
   const theme = useScreenTheme('loan-complete');
   useKioskSpeak(`${loanCompleteTitle}. 대출이 완료되었습니다.`);
-  const { authenticatedUser, setScreen, clearSelectedBooks, setAuthenticatedUser } = useAppStore();
+  const { authenticatedUser, setScreen, clearSelectedBooks, setAuthenticatedUser, receiptPrint } = useAppStore();
   const [loans, setLoans] = useState<LoanItem[]>([]);
   const [stats, setStats] = useState({ available: MAX_LOAN_COUNT, current: 0, overdue: 0 });
 
@@ -127,23 +127,30 @@ export default function KioskLoanComplete() {
         </div>
       </div>
 
-      {/* 대출 영수증 */}
+      {/* 대출 영수증 (출력 선택 시에만) */}
       <div className="flex-1 overflow-y-auto kiosk-scroll px-5 pb-4">
-        <div className="mb-2">
-          <KioskReceipt
-            kind="loan"
-            userName={authenticatedUser?.name || ''}
-            cardNumber={authenticatedUser?.cardNumber || ''}
-            phone={authenticatedUser?.phone}
-            books={activeLoans.map((loan) => ({
-              title: loan.book?.title || '도서',
-              author: loan.book?.author || '',
-              loanDate: loan.loanDate,
-              dueDate: loan.dueDate,
-            }))}
-          />
-        </div>
-        {activeLoans.length === 0 && (
+        {receiptPrint ? (
+          <div className="mb-2">
+            <KioskReceipt
+              kind="loan"
+              userName={authenticatedUser?.name || ''}
+              cardNumber={authenticatedUser?.cardNumber || ''}
+              phone={authenticatedUser?.phone}
+              books={activeLoans.map((loan) => ({
+                title: loan.book?.title || '도서',
+                author: loan.book?.author || '',
+                loanDate: loan.loanDate,
+                dueDate: loan.dueDate,
+              }))}
+            />
+          </div>
+        ) : (
+          <div className="eco-card p-6 text-center mb-2">
+            <p className="text-slate-600">영수증을 출력하지 않았습니다.</p>
+            <p className="text-sm text-slate-500 mt-1">반납 예정일을 꼭 기억하세요.</p>
+          </div>
+        )}
+        {receiptPrint && activeLoans.length === 0 && (
           <p className="text-sm text-slate-400 text-center py-4">대출 도서가 없습니다</p>
         )}
       </div>

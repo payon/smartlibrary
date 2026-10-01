@@ -65,8 +65,11 @@ export default function KioskLoanConfirm() {
         const data = await res.json();
         toast.success(`${data.loanedCount}권 대출이 완료되었습니다`);
         setLoanError(null);
+        useAppStore.getState().setDispenseQueue(
+          selectedBooks.map((b) => ({ title: b.title, author: b.author }))
+        );
         useAppStore.getState().clearSelectedBooks();
-        setScreen('loan-complete');
+        setScreen('loan-dispense');
       } else {
         const data = await res.json().catch(() => ({}));
         const message = data.error || '대출 처리에 실패했습니다. 다시 시도해주세요.';

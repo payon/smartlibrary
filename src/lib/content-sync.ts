@@ -196,6 +196,22 @@ export const DEFAULT_CONTENT_ITEMS: DefaultContentItem[] = [
   { key: 'card-complete.background_fit', value: 'cover', type: 'text', screen: 'card-complete', label: '발급완료 배경 맞춤' },
 
   // ── 글로벌 설정 ──
+
+  // ── 대출처리/영수증/이력/도서상세/대기배너 (ECO 흐름) ──
+  { key: 'loandispense.title', value: '대출처리', type: 'text', screen: 'loan-dispense', label: '수령 제목' },
+  { key: 'loanreceipt.title', value: '대출완료', type: 'text', screen: 'receipt', label: '대출 영수증 제목' },
+  { key: 'returnreceipt.title', value: '반납완료', type: 'text', screen: 'receipt', label: '반납 영수증 제목' },
+  { key: 'receipt.print_button', value: '출력', type: 'text', screen: 'receipt', label: '출력 버튼' },
+  { key: 'receipt.skip_button', value: '출력 안 함', type: 'text', screen: 'receipt', label: '출력안함 버튼' },
+  { key: 'loanhistory.title', value: '대출 이력', type: 'text', screen: 'loan-history', label: '이력 제목' },
+  { key: 'bookdetail.add_button', value: '책바구니 담기', type: 'text', screen: 'loan-select', label: '담기 버튼' },
+  { key: 'bookdetail.related_title', value: '연관도서', type: 'text', screen: 'loan-select', label: '연관도서 제목' },
+  { key: 'idle.banner_1', value: '', type: 'image', screen: 'idle', label: '대기 배너 1' },
+  { key: 'idle.banner_2', value: '', type: 'image', screen: 'idle', label: '대기 배너 2' },
+  { key: 'idle.banner_3', value: '', type: 'image', screen: 'idle', label: '대기 배너 3' },
+  { key: 'guide.loan-dispense', value: '{"title":"도서 수령","steps":["배출구에서 도서를 한 권씩 수령하세요.","화면에 나오는 순서대로 받으면 됩니다.","다 받으면 자동으로 넘어갑니다."]}', type: 'json', screen: 'loan-dispense', label: '수령 가이드' },
+  { key: 'guide.receipt', value: '{"title":"영수증 발급","steps":["영수증이 필요하면 “출력”을 누릅니다.","필요 없으면 “출력 안 함”을 누릅니다.","둘 중 하나를 누르면 마무리 화면으로 갑니다."]}', type: 'json', screen: 'receipt', label: '영수증 가이드' },
+  { key: 'guide.loan-history', value: '{"title":"대출 이력","steps":["지금 빌린 책과 반납 날짜를 확인하세요.","돌려줄 책이 있으면 “반납하러 가기”를 누릅니다."]}', type: 'json', screen: 'loan-history', label: '이력 가이드' },
   { key: 'global.library_name', value: '스마트 도서관', type: 'text', screen: 'global', label: '도서관 이름' },
   { key: 'global.library_subtitle', value: '시민과 함께하는 평생학습 도서관', type: 'text', screen: 'global', label: '도서관 부제목' },
   { key: 'global.primary_color', value: '#2563eb', type: 'color', screen: 'global', label: '메인 컬러' },

@@ -21,6 +21,9 @@ import KioskAuthScan from '@/components/kiosk/KioskAuthScan';
 import KioskAuthPin from '@/components/kiosk/KioskAuthPin';
 import KioskLoanSelect from '@/components/kiosk/KioskLoanSelect';
 import KioskLoanConfirm from '@/components/kiosk/KioskLoanConfirm';
+import KioskLoanDispense from '@/components/kiosk/KioskLoanDispense';
+import KioskLoanHistory from '@/components/kiosk/KioskLoanHistory';
+import KioskReceiptPrompt from '@/components/kiosk/KioskReceiptPrompt';
 import KioskLoanComplete from '@/components/kiosk/KioskLoanComplete';
 import KioskReturnInsert from '@/components/kiosk/KioskReturnInsert';
 import KioskReturnScanning from '@/components/kiosk/KioskReturnScanning';
@@ -46,6 +49,12 @@ function ScreenRouter({ screen }: { screen: KioskViewName }) {
       return <KioskLoanSelect />;
     case 'loan-confirm':
       return <KioskLoanConfirm />;
+    case 'loan-dispense':
+      return <KioskLoanDispense />;
+    case 'loan-history':
+      return <KioskLoanHistory />;
+    case 'receipt':
+      return <KioskReceiptPrompt />;
     case 'loan-complete':
       return <KioskLoanComplete />;
     case 'return-insert':

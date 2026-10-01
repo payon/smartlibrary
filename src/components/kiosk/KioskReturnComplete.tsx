@@ -18,7 +18,7 @@ export default function KioskReturnComplete() {
   const returnCompleteTitle = useCmsText('returncomplete.title', '반납완료');
   const theme = useScreenTheme('return-complete');
   useKioskSpeak(`${returnCompleteTitle}. 반납이 완료되었습니다.`);
-  const { authenticatedUser, returnedLoans, setScreen, clearReturnedLoans, setAuthenticatedUser, lastReturnSummary, setLastReturnSummary } = useAppStore();
+  const { authenticatedUser, returnedLoans, setScreen, clearReturnedLoans, setAuthenticatedUser, lastReturnSummary, setLastReturnSummary, receiptPrint } = useAppStore();
 
   const handleConfirm = () => {
     clearReturnedLoans();
@@ -82,7 +82,7 @@ export default function KioskReturnComplete() {
         transition={{ delay: 0.8 }}
         className="w-full max-w-xs mb-8"
       >
-        {lastReturnSummary ? (
+        {lastReturnSummary && receiptPrint ? (
           <KioskReceipt
             kind="return"
             userName={lastReturnSummary.userName}
@@ -91,6 +91,12 @@ export default function KioskReturnComplete() {
             books={lastReturnSummary.items}
             penaltyNote={penaltyNote}
           />
+        ) : lastReturnSummary && !receiptPrint ? (
+          <div className="bg-white rounded-xl p-4 border border-slate-100">
+            <p className="text-sm text-slate-600 text-center">
+              반납 도서 {lastReturnSummary.items.length}권 — 영수증을 출력하지 않았습니다.
+            </p>
+          </div>
         ) : (
           <div className="bg-white rounded-xl p-4 border border-slate-100">
             <p className="text-sm font-semibold text-slate-600 mb-3">

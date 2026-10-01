@@ -265,14 +265,14 @@ export default function KioskPortal() {
       </div>
 
       {/* 부버튼 (관리자 구성 순서대로, 설문조사는 표시 플래그 적용) */}
-      <div className={`px-5 pt-3 grid gap-2 shrink-0 ${visibleSubbuttons.length >= 4 ? 'grid-cols-4' : 'grid-cols-3'}`}>
+      <div className="px-5 pt-3 flex gap-2 shrink-0">
         {visibleSubbuttons.map((id) => {
           const def = SUBBUTTON_DEFS.find((d) => d.id === id)!;
           return (
             <button
               key={id}
               onClick={() => handleSubbutton(id)}
-              className="rounded-xl bg-white border border-slate-200 py-2.5 flex flex-col items-center gap-1 text-slate-600 text-xs font-semibold shadow-sm"
+              className="flex-1 rounded-xl bg-white border border-slate-200 py-2.5 flex flex-col items-center gap-1 text-slate-600 text-xs font-semibold shadow-sm"
             >
               <def.Icon className="w-5 h-5 text-sky-500" />
               {def.label}

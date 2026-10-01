@@ -47,10 +47,10 @@ export default function KioskLoanSelect() {
       .catch(() => {});
   }, [authenticatedUser]);
 
-  /** 반납하러 가기 (대출 상한 도달 시) */
+  /** 반납하러 가기 (대출 상한 도달 시, 회원증 인식부터) */
   const handleGoReturn = () => {
     setKioskMode('return');
-    setScreen('return-insert');
+    setScreen('auth-scan');
   };
 
   /** 도서 목록 조회 */
@@ -96,10 +96,10 @@ export default function KioskLoanSelect() {
     }
   };
 
-  /** 다음 단계로 이동 */
+  /** 다음 단계로 이동 (선택 → 회원인증) */
   const handleNext = () => {
     if (selectedBooks.length === 0) return;
-    setScreen('loan-confirm');
+    setScreen('auth-scan');
   };
 
   return (

@@ -296,7 +296,7 @@ const PREV_SCREEN_MAP: Partial<Record<KioskViewName, KioskViewName>> = {
   'card-complete': 'miryang-main',
   'auth-scan': 'main-menu',
   'auth-pin': 'auth-scan',
-  'loan-select': 'auth-pin',
+  'loan-select': 'main-menu',
   'loan-confirm': 'loan-select',
   'loan-dispense': 'loan-confirm',
   'loan-complete': 'miryang-main',

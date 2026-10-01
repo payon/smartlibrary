@@ -48,15 +48,21 @@ export default function KioskMainMenu() {
     setScreen('card-apply');
   };
 
-  /** 도서 대출 선택 */
+  /** 도서 대출 선택 (먼저 책 고르기 → 다음에서 인증) */
   const handleLoan = () => {
     setKioskMode('loan');
-    setScreen('auth-scan');
+    useAppStore.getState().clearSelectedBooks();
+    useAppStore.getState().clearReturnedLoans();
+    useAppStore.getState().setAuthenticatedUser(null);
+    setScreen('loan-select');
   };
 
   /** 도서 반납 선택 */
   const handleReturn = () => {
     setKioskMode('return');
+    useAppStore.getState().clearSelectedBooks();
+    useAppStore.getState().clearReturnedLoans();
+    useAppStore.getState().setAuthenticatedUser(null);
     setScreen('auth-scan');
   };
 

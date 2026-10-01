@@ -38,28 +38,22 @@ export default function KioskAuthPin() {
   const [isError, setIsError] = useState(false);
   const shakeRef = useRef(false);
 
-  /** kioskMode에 따른 다음 화면 결정 */
+  /** kioskMode에 따른 다음 화면 결정 (대출은 선택 후 인증→확인) */
   const getNextScreen = useCallback(() => {
     switch (kioskMode) {
-      case 'loan': return 'loan-select' as const;
+      case 'loan': return 'loan-confirm' as const;
       case 'return': return 'return-insert' as const;
       case 'card': return 'card-apply' as const;
-      default: return 'loan-select' as const;
+      default: return 'loan-confirm' as const;
     }
   }, [kioskMode]);
 
-  /** PIN 검증 성공 → 이전 플로우 잔여 상태 초기화 후 다음 화면 이동 */
+  /** PIN 검증 성공 → 이전 플로우 잔여 상태는 유지하고 다음 화면 이동 */
   const proceedToNext = useCallback((user: SimUser) => {
-    const next = getNextScreen();
-    // 새로 시작하는 인증이므로 이전 방문의 선택/반납 목록을 버림
-    useAppStore.getState().clearSelectedBooks();
-    if (next === 'return-insert') {
-      useAppStore.getState().clearReturnedLoans();
-    }
     setAuthenticatedUser(user);
     toast.success(`${user.name}님 환영합니다`);
     setTimeout(() => {
-      setScreen(next);
+      setScreen(getNextScreen());
     }, 500);
   }, [setAuthenticatedUser, setScreen, getNextScreen]);
 

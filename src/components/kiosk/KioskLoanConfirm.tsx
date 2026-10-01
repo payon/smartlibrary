@@ -40,7 +40,16 @@ export default function KioskLoanConfirm() {
 
   /** 대출 실행 (한 번에 모든 도서 처리) */
   const handleLoan = async () => {
-    if (!authenticatedUser || selectedBooks.length === 0) return;
+    if (selectedBooks.length === 0) {
+      toast.error('선택된 도서가 없습니다. 도서를 먼저 선택해주세요.');
+      setScreen('loan-select');
+      return;
+    }
+    if (!authenticatedUser) {
+      toast.error('회원인증이 필요합니다');
+      setScreen('auth-scan');
+      return;
+    }
     if (!authenticatedUser.pin) {
       toast.error('PIN 인증이 필요합니다');
       setScreen('auth-pin');

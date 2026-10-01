@@ -47,7 +47,7 @@ export default function KioskIdleScreen() {
       <main className="flex-1 overflow-y-auto kiosk-scroll">
         {/* 상단 안내 이미지 */}
         {img('miryang.hero_image') ? (
-          <img src={img('miryang.hero_image')} alt="스마트도서관 안내" className="w-full object-cover" />
+          <img src={img('miryang.hero_image')} alt="스마트도서관 안내" className="w-full h-64 object-cover object-top" />
         ) : (
           <div className="px-6 pt-10 pb-6 text-center bg-gradient-to-b from-amber-50 to-orange-50">
             <p className="text-lg font-bold text-slate-800">{t('miryang.quote', '"상상이 자라는 공간"')}</p>

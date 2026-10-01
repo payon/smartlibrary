@@ -252,6 +252,9 @@ export const DEFAULT_CONTENT_ITEMS: DefaultContentItem[] = [
   { key: 'signup.background_image_url', value: '', type: 'image', screen: 'signup-guide', label: '가입안내 배경이미지' },
   { key: 'signup.background_fit', value: 'cover', type: 'text', screen: 'signup-guide', label: '가입안내 배경 맞춤' },
   { key: 'guide.signup-guide', value: '{"title":"회원가입 방법","steps":["도서관 방문 회원가입 순서를 확인하세요.","신분증을 지참하고 2층 종합자료실을 방문하세요."]}', type: 'json', screen: 'signup-guide', label: '가입안내 가이드' },
+  // ── 대출/반납 절차 순서 (관리자 편집용, 프론트 단계 스트립과 동일 순서) ──
+  { key: 'loanflow.order', value: '["[대출]선택","책바구니 담기","회원인증","비밀번호 입력","도서확인","대출처리","대출완료"]', type: 'json', screen: 'main-menu', label: '대출 절차 순서' },
+  { key: 'returnflow.order', value: '["[반납]선택","도서인식","도서투입","반납완료"]', type: 'json', screen: 'main-menu', label: '반납 절차 순서' },
   // ── 글로벌 설정 ──
 
   // ── 대출처리/영수증/이력/도서상세/대기배너 (ECO 흐름) ──

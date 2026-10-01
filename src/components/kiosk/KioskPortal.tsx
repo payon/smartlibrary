@@ -83,6 +83,12 @@ export default function KioskPortal() {
     return v.endsWith('.mp4') && (v.startsWith('/') || v.startsWith('https://')) ? v : '';
   })();
 
+  /** 설문조사 버튼 표시 여부 (관리자, 기본 숨김) */
+  const surveyEnabled = (cmsContent['portal.survey_enabled'] || '').trim().toLowerCase() === 'true';
+  const visibleSubbuttons = subbuttonOrder.filter(
+    (id) => id !== 'survey' || surveyEnabled
+  );
+
   const handleSubbutton = (id: string) => {
     switch (id) {
       case 'signup':
@@ -258,9 +264,9 @@ export default function KioskPortal() {
         </motion.button>
       </div>
 
-      {/* 부버튼 (관리자 구성 순서대로) */}
-      <div className={`px-5 pt-3 grid gap-2 shrink-0 ${subbuttonOrder.length >= 4 ? 'grid-cols-4' : 'grid-cols-3'}`}>
-        {subbuttonOrder.map((id) => {
+      {/* 부버튼 (관리자 구성 순서대로, 설문조사는 표시 플래그 적용) */}
+      <div className={`px-5 pt-3 grid gap-2 shrink-0 ${visibleSubbuttons.length >= 4 ? 'grid-cols-4' : 'grid-cols-3'}`}>
+        {visibleSubbuttons.map((id) => {
           const def = SUBBUTTON_DEFS.find((d) => d.id === id)!;
           return (
             <button

@@ -16,6 +16,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
 import type { KioskViewName } from '@/lib/constants';
 import KioskIdleScreen from '@/components/kiosk/KioskIdleScreen';
+import KioskSignupGuide from '@/components/kiosk/KioskSignupGuide';
 import KioskMainMenu from '@/components/kiosk/KioskMainMenu';
 import KioskAuthScan from '@/components/kiosk/KioskAuthScan';
 import KioskAuthPin from '@/components/kiosk/KioskAuthPin';
@@ -39,6 +40,10 @@ function ScreenRouter({ screen }: { screen: KioskViewName }) {
   switch (screen) {
     case 'idle':
       return <KioskIdleScreen />;
+    case 'miryang-main':
+      return <KioskIdleScreen />;
+    case 'signup-guide':
+      return <KioskSignupGuide />;
     case 'main-menu':
       return <KioskMainMenu />;
     case 'auth-scan':
@@ -91,14 +96,14 @@ export default function KioskApp() {
     fetch('/api').catch(() => {});
   }, []);
 
-  /* 유휴 자동 로그아웃: 화면 변경 시 120초 타이머 리셋 */
+  /* 유휴 자동 로그아웃: 화면 변경 시 타이머 리셋 (첫 화면 복귀) */
   useEffect(() => {
     const resetKiosk = () => {
       const { setAuthenticatedUser, clearSelectedBooks, clearReturnedLoans, setScreen } = useAppStore.getState();
       setAuthenticatedUser(null);
       clearSelectedBooks();
       clearReturnedLoans();
-      setScreen('idle');
+      setScreen('miryang-main');
     };
     const timer = setTimeout(() => {
       resetKiosk();

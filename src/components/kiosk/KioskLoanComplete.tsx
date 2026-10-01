@@ -61,7 +61,7 @@ export default function KioskLoanComplete() {
   const handleConfirm = () => {
     clearSelectedBooks();
     setAuthenticatedUser(null);
-    setScreen('idle');
+    setScreen('miryang-main');
   };
 
   const activeLoans = loans.filter((l) => l.status === 'active');

@@ -175,7 +175,7 @@ export default function KioskReturnInsert() {
         </button>
         {noLoans && (
           <button
-            onClick={() => setScreen('idle')}
+            onClick={() => setScreen('miryang-main')}
             className="eco-btn-primary flex-1"
           >
             처음으로

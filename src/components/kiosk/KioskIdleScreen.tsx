@@ -1,276 +1,150 @@
 /**
- * 대기 화면 (ECO 포털형 — 실기기 참조, 세로형)
+ * 밀양시립 스마트도서관 안내 (첫 화면)
  *
  * [기능]
- * - 배너 캐러셀 (CMS 이미지, 자동 순환)
- * - 대출/반납 대버튼 (직접 진입)
- * - 부버튼: 회원가입/대출이력/이용안내
- * - 비콘 대출 안내 스트립
- * - 인기/추천/신착 도서 (탭 → 상세 모달)
- * - 접근성 툴바 + 하단 티커
+ * - 이용안내/대출절차/반납절차/문의처 (전체 CMS 관리, 하드코딩 없음)
+ * - 단계별 삽화는 관리자 미디어 등록 후 URL 지정 (미지정 시 번호 뱃지)
+ * - 시작하기 → idle 포털
  */
 
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
-import type { BookItem } from '@/stores/useAppStore';
 import { useKioskSpeak } from '@/hooks/useKioskSpeak';
-import { useCmsText } from '@/hooks/useCmsContent';
-import { EcoTicker } from '@/components/kiosk/eco/EcoChrome';
-import BookDetailModal from '@/components/kiosk/BookDetailModal';
+import { CmsImage, useScreenTheme } from '@/components/kiosk/CmsMedia';
 import KioskA11yBar from '@/components/kiosk/KioskA11yBar';
-import KioskGuide from '@/components/kiosk/KioskGuide';
-import {
-  BookOpen,
-  ArrowDownToLine,
-  UserPlus,
-  History,
-  CircleHelp,
-  ChevronLeft,
-  ChevronRight,
-  Crown,
-  Radio,
-} from 'lucide-react';
+import { ChevronRight, Phone } from 'lucide-react';
 
-const BANNER_KEYS = ['idle.banner_1', 'idle.banner_2', 'idle.banner_3'];
+const LOAN_STEPS = [1, 2, 3, 4, 5, 6, 7];
+const RETURN_STEPS = [1, 2, 3, 4];
 
 export default function KioskIdleScreen() {
-  const idleTitle = useCmsText('idle.title', 'SMART LIBRARY');
-  useKioskSpeak(`${idleTitle}. 원하시는 서비스를 선택하세요.`);
-  const { setScreen, setKioskMode } = useAppStore();
   const cmsContent = useAppStore((s) => s.cmsContent);
+  const setScreen = useAppStore((s) => s.setScreen);
+  const theme = useScreenTheme('miryang-main', '#f4f1ea');
 
-  const [bannerIdx, setBannerIdx] = useState(0);
-  const [books, setBooks] = useState<BookItem[]>([]);
-  const [detailBook, setDetailBook] = useState<BookItem | null>(null);
-  const [guideOpen, setGuideOpen] = useState(false);
+  /** CMS 텍스트 조회 (없으면 기본값) */
+  const t = (key: string, fallback: string) => cmsContent[key] || fallback;
+  /** CMS 이미지 URL (안전하지 않으면 빈 값) */
+  const img = (key: string) => {
+    const v = cmsContent[key] || '';
+    return v.startsWith('/') && !v.startsWith('//') || v.startsWith('https://') ? v : '';
+  };
 
-  /** 배너 이미지 목록 (CMS, 빈 값 제외) */
-  const banners = BANNER_KEYS.map((k) => cmsContent[k] || '').filter(
-    (v) => v.startsWith('/') || v.startsWith('https://')
-  );
+  useKioskSpeak('밀양시립 스마트도서관 안내입니다. 내용을 확인하고 시작하기를 눌러주세요.');
 
-  /** 배너 자동 순환 (5초) */
-  useEffect(() => {
-    if (banners.length < 2) return;
-    const timer = setInterval(() => {
-      setBannerIdx((i) => (i + 1) % banners.length);
-    }, 5000);
-    return () => clearInterval(timer);
-  }, [banners.length]);
-
-  /** 도서 목록 조회 */
-  useEffect(() => {
-    fetch('/api/books')
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data: BookItem[]) => setBooks(Array.isArray(data) ? data : []))
-      .catch(() => {});
-  }, []);
-
-  const goLoan = useCallback(() => {
-    setKioskMode('loan');
-    setScreen('auth-scan');
-  }, [setKioskMode, setScreen]);
-
-  const goReturn = useCallback(() => {
-    setKioskMode('return');
-    setScreen('auth-scan');
-  }, [setKioskMode, setScreen]);
-
-  const goSignup = useCallback(() => {
-    setKioskMode('card');
-    setScreen('card-apply');
-  }, [setKioskMode, setScreen]);
-
-  const goHistory = useCallback(() => {
-    setScreen('loan-history');
-  }, [setScreen]);
-
-  const popular = books.slice(0, 4);
-  const recommended = books.slice(4, 8);
-  const fresh = [...books]
-    .sort((a, b) => (b.publishYear || 0) - (a.publishYear || 0))
-    .slice(0, 4);
-
-  const sections = [
-    { title: '인기 도서', list: popular },
-    { title: '추천 도서', list: recommended },
-    { title: '신착 도서', list: fresh },
-  ];
+  const loanSteps = LOAN_STEPS.map((n) => ({
+    label: t(`miryang.loan_step_${n}`, `단계${n}`),
+    image: img(`miryang.loan_img_${n}`),
+  }));
+  const returnSteps = RETURN_STEPS.map((n) => ({
+    label: t(`miryang.return_step_${n}`, `단계${n}`),
+    image: img(`miryang.return_img_${n}`),
+  }));
 
   return (
-    <div className="kiosk-screen eco-bg flex flex-col">
-      {/* 상단 배너 캐러셀 */}
-      <div className="relative h-44 shrink-0 overflow-hidden bg-gradient-to-br from-sky-200 via-sky-100 to-emerald-50">
-        <AnimatePresence mode="wait">
-          {banners.length > 0 ? (
-            <motion.img
-              key={bannerIdx}
-              src={banners[bannerIdx % banners.length]}
-              alt="도서관 안내 배너"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.5 }}
-              className="absolute inset-0 w-full h-full object-cover"
-            />
-          ) : (
-            <div className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center">
-              <p className="text-xl font-bold text-slate-700 leading-relaxed">
-                도서관을 방문하지 않아도
-                <br />
-                도서 <span className="text-sky-600">대출</span>과{' '}
-                <span className="text-emerald-600">반납</span>을 한 번에!
-              </p>
-              <p className="text-sm text-slate-500 tracking-[0.3em] mt-2">SMART LIBRARY</p>
-            </div>
-          )}
-        </AnimatePresence>
-        {/* 캐러셀 도트 + 화살표 */}
-        {banners.length > 1 && (
-          <>
-            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5">
-              {banners.map((_, i) => (
-                <span
-                  key={i}
-                  className={`h-1.5 rounded-full transition-all ${i === bannerIdx % banners.length ? 'w-4 bg-sky-500' : 'w-1.5 bg-slate-300'}`}
-                />
-              ))}
-            </div>
-            <button
-              onClick={() => setBannerIdx((i) => (i + banners.length - 1) % banners.length)}
-              className="absolute left-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white/70 text-slate-600 flex items-center justify-center"
-              aria-label="이전 배너"
-            >
-              <ChevronLeft className="w-5 h-5" />
-            </button>
-            <button
-              onClick={() => setBannerIdx((i) => (i + 1) % banners.length)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white/70 text-slate-600 flex items-center justify-center"
-              aria-label="다음 배너"
-            >
-              <ChevronRight className="w-5 h-5" />
-            </button>
-          </>
+    <div className="kiosk-screen flex flex-col" style={theme.style}>
+      <main className="flex-1 overflow-y-auto kiosk-scroll">
+        {/* 상단 안내 이미지 */}
+        {img('miryang.hero_image') ? (
+          <img src={img('miryang.hero_image')} alt="스마트도서관 안내" className="w-full object-cover" />
+        ) : (
+          <div className="px-6 pt-10 pb-6 text-center bg-gradient-to-b from-amber-50 to-orange-50">
+            <p className="text-lg font-bold text-slate-800">{t('miryang.quote', '"상상이 자라는 공간"')}</p>
+            <p className="text-3xl font-black text-slate-800 mt-2 tracking-wide">{t('miryang.title', '스마트 도서관')}</p>
+          </div>
         )}
-        {/* 이용안내 버튼 */}
-        <button
-          onClick={() => setGuideOpen(true)}
-          className="absolute top-2 right-2 min-w-11 min-h-11 px-3 rounded-xl bg-sky-500/90 text-white text-sm font-bold flex items-center gap-1 shadow"
-          aria-label="이용안내 열기"
-        >
-          <CircleHelp className="w-5 h-5" />
-          이용안내
-        </button>
-      </div>
 
-      {/* 대출/반납 대버튼 */}
-      <div className="px-5 pt-3 grid grid-cols-2 gap-3 shrink-0">
-        <motion.button
-          whileTap={{ scale: 0.97 }}
-          onClick={goLoan}
-          className="rounded-2xl py-4 flex flex-col items-center gap-1 text-white font-bold text-xl shadow-lg"
-          style={{ background: 'linear-gradient(180deg, #9db8e8 0%, #7b9bd4 100%)' }}
-          aria-label="도서 대출"
-        >
-          <BookOpen className="w-7 h-7" />
-          대 출
-          <span className="text-xs font-normal opacity-80">Check out</span>
-        </motion.button>
-        <motion.button
-          whileTap={{ scale: 0.97 }}
-          onClick={goReturn}
-          className="rounded-2xl py-4 flex flex-col items-center gap-1 text-white font-bold text-xl shadow-lg"
-          style={{ background: 'linear-gradient(180deg, #7fd4e8 0%, #4fb3d4 100%)' }}
-          aria-label="도서 반납"
-        >
-          <ArrowDownToLine className="w-7 h-7" />
-          반 납
-          <span className="text-xs font-normal opacity-80">Return</span>
-        </motion.button>
-      </div>
+        {/* 리본 제목 */}
+        <div className="mx-6 mt-4 rounded-lg bg-[#0e5a6d] py-2.5 text-center">
+          <p className="text-white text-lg font-bold tracking-[0.3em]">{t('miryang.ribbon', '스마트도서관 이용방법')}</p>
+        </div>
 
-      {/* 부버튼: 회원가입/대출이력/이용안내 */}
-      <div className="px-5 pt-3 grid grid-cols-3 gap-2 shrink-0">
-        <button
-          onClick={goSignup}
-          className="rounded-xl bg-white border border-slate-200 py-2.5 flex flex-col items-center gap-1 text-slate-600 text-xs font-semibold shadow-sm"
-        >
-          <UserPlus className="w-5 h-5 text-sky-500" />
-          회원가입
-        </button>
-        <button
-          onClick={goHistory}
-          className="rounded-xl bg-white border border-slate-200 py-2.5 flex flex-col items-center gap-1 text-slate-600 text-xs font-semibold shadow-sm"
-        >
-          <History className="w-5 h-5 text-sky-500" />
-          대출이력
-        </button>
-        <button
-          onClick={() => setGuideOpen(true)}
-          className="rounded-xl bg-white border border-slate-200 py-2.5 flex flex-col items-center gap-1 text-slate-600 text-xs font-semibold shadow-sm"
-        >
-          <CircleHelp className="w-5 h-5 text-sky-500" />
-          이용안내
-        </button>
-      </div>
-
-      {/* 비콘 대출 안내 스트립 */}
-      <div className="mx-5 mt-3 rounded-xl bg-sky-50 border border-sky-200 px-3 py-2 flex items-center gap-2 shrink-0">
-        <Radio className="w-4 h-4 text-sky-500 shrink-0" />
-        <p className="text-xs text-sky-700">
-          <strong>비콘 대출</strong> — 별도 앱 없이 이 화면에서 바로 대출하세요.
-        </p>
-      </div>
-
-      {/* 도서 섹션 */}
-      <main className="flex-1 overflow-y-auto kiosk-scroll px-5 py-3 space-y-4">
-        {sections.map((sec) => (
-          <section key={sec.title} aria-label={sec.title}>
-            <div className="flex items-center gap-1.5 mb-2">
-              <Crown className="w-4 h-4 text-amber-500" />
-              <h2 className="text-base font-bold text-slate-800">{sec.title}</h2>
+        {/* 이용안내 */}
+        <section className="mx-4 mt-4 rounded-xl bg-slate-100/80 p-4" aria-label={t('miryang.info_title', '이용안내')}>
+          <p className="text-base font-bold text-slate-700 mb-2">ⓘ {t('miryang.info_title', '이용안내')}</p>
+          {[1, 2, 3, 4].map((n) => (
+            <div key={n} className="flex gap-3 py-1 text-sm">
+              <span className="font-bold text-slate-800 shrink-0 w-16">▪ {t(`miryang.info_${n}_label`, '')}</span>
+              <span className="text-slate-600">{t(`miryang.info_${n}_value`, '')}</span>
             </div>
-            {sec.list.length === 0 ? (
-              <p className="text-xs text-slate-400 py-2">도서를 불러오는 중...</p>
-            ) : (
-              <div className="grid grid-cols-4 gap-2">
-                {sec.list.map((book) => (
-                  <button
-                    key={book.id}
-                    onClick={() => setDetailBook(book)}
-                    className="text-center"
-                    aria-label={`${book.title} 상세 보기`}
-                  >
-                    <div className="aspect-[2/3] rounded-md bg-white overflow-hidden border border-slate-200 shadow-sm">
-                      {book.coverUrl ? (
-                        <img src={book.coverUrl} alt="" className="w-full h-full object-cover" />
-                      ) : null}
+          ))}
+        </section>
+
+        {/* 대출 절차 */}
+        <section className="mx-4 mt-4 rounded-xl bg-slate-100/80 p-4" aria-label={t('miryang.loan_title', '대출')}>
+          <p className="text-base font-bold text-slate-700 mb-3">📖 {t('miryang.loan_title', '대출')}</p>
+          <div className="flex items-center gap-1 overflow-x-auto kiosk-scroll pb-1">
+            {loanSteps.map((s, i) => (
+              <div key={i} className="flex items-center gap-1 shrink-0">
+                <div className="w-16 text-center">
+                  {s.image ? (
+                    <img src={s.image} alt={s.label} className="w-16 h-20 object-cover rounded-md border border-slate-200" loading="lazy" />
+                  ) : (
+                    <div className="w-16 h-20 rounded-md bg-sky-100 border border-sky-200 flex items-center justify-center">
+                      <span className="text-xl font-black text-sky-600">{i + 1}</span>
                     </div>
-                    <p className="text-[10px] text-slate-600 truncate mt-1">{book.title}</p>
-                  </button>
-                ))}
+                  )}
+                  <p className="text-[10px] text-slate-600 mt-1 leading-tight">{s.label}</p>
+                </div>
+                {i < loanSteps.length - 1 && <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />}
               </div>
-            )}
-          </section>
-        ))}
+            ))}
+          </div>
+        </section>
+
+        {/* 반납 절차 */}
+        <section className="mx-4 mt-4 rounded-xl bg-slate-100/80 p-4" aria-label={t('miryang.return_title', '반납')}>
+          <p className="text-base font-bold text-slate-700 mb-3">📥 {t('miryang.return_title', '반납')}</p>
+          <div className="flex items-center gap-1 overflow-x-auto kiosk-scroll pb-1">
+            {returnSteps.map((s, i) => (
+              <div key={i} className="flex items-center gap-1 shrink-0">
+                <div className="w-16 text-center">
+                  {s.image ? (
+                    <img src={s.image} alt={s.label} className="w-16 h-20 object-cover rounded-md border border-slate-200" loading="lazy" />
+                  ) : (
+                    <div className="w-16 h-20 rounded-md bg-emerald-50 border border-emerald-200 flex items-center justify-center">
+                      <span className="text-xl font-black text-emerald-600">{i + 1}</span>
+                    </div>
+                  )}
+                  <p className="text-[10px] text-slate-600 mt-1 leading-tight">{s.label}</p>
+                </div>
+                {i < returnSteps.length - 1 && <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />}
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* 로고 + 문의처 */}
+        <div className="px-6 mt-5 flex flex-col items-center">
+          <CmsImage contentKey="miryang.logo_image" alt="밀양시 로고" imgClassName="h-12 object-contain" />
+          <div className="w-full mt-3 rounded-lg border-2 border-[#0e5a6d] overflow-hidden flex">
+            <div className="bg-[#0e5a6d] text-white text-sm font-bold px-3 py-2 flex items-center gap-1 shrink-0">
+              <Phone className="w-4 h-4" />
+              문의처
+            </div>
+            <div className="px-3 py-2 text-xs text-slate-700 leading-relaxed bg-white flex-1">
+              <p>{t('miryang.contact_1', '')}</p>
+              <p>{t('miryang.contact_2', '')}</p>
+            </div>
+          </div>
+        </div>
+        <div className="h-4" />
       </main>
 
-      {/* 접근성 툴바 + 티커 */}
-      <div className="px-5 pb-2 flex justify-center shrink-0">
-        <KioskA11yBar dark={false} />
-      </div>
-      <EcoTicker />
-
-      <BookDetailModal
-        book={detailBook}
-        books={books}
-        onClose={() => setDetailBook(null)}
-        onSelectBook={(b) => setDetailBook(b)}
-      />
-      {guideOpen && <KioskGuide onClose={() => setGuideOpen(false)} />}
+      {/* 접근성 + 시작 */}
+      <footer className="px-5 pb-5 pt-2 shrink-0 bg-white/80 border-t border-slate-200">
+        <div className="flex justify-center py-2">
+          <KioskA11yBar dark={false} />
+        </div>
+        <button
+          onClick={() => setScreen('main-menu')}
+          className="w-full h-14 rounded-2xl bg-[#0e5a6d] text-white text-lg font-bold shadow-lg"
+          aria-label="도서관 이용 시작하기"
+        >
+          {t('miryang.start_button', '시작하기')}
+        </button>
+      </footer>
     </div>
   );
 }

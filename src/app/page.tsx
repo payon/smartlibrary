@@ -20,6 +20,7 @@ import { KIOSK_VIEW_NAMES } from '@/lib/constants';
 import { isSafeColor } from '@/components/kiosk/CmsMedia';
 import type { KioskViewName } from '@/lib/constants';
 import KioskIdleScreen from '@/components/kiosk/KioskIdleScreen';
+import KioskSignupGuide from '@/components/kiosk/KioskSignupGuide';
 import KioskMainMenu from '@/components/kiosk/KioskMainMenu';
 import KioskAuthScan from '@/components/kiosk/KioskAuthScan';
 import KioskAuthPin from '@/components/kiosk/KioskAuthPin';
@@ -45,6 +46,8 @@ import AdminDashboard from '@/components/admin/AdminDashboard';
 function ScreenRouter({ screen }: { screen: KioskViewName }) {
   switch (screen) {
     case 'idle': return <KioskIdleScreen />;
+    case 'miryang-main': return <KioskIdleScreen />;
+    case 'signup-guide': return <KioskSignupGuide />;
     case 'main-menu': return <KioskMainMenu />;
     case 'card-apply': return <KioskCardApply />;
     case 'card-form': return <KioskCardForm />;
@@ -107,9 +110,9 @@ export default function Home() {
      부모 effect가 그 직후 실행되어 멘트를 즉시 죽이는 버그가 있었음.
      겹침 방지는 각 화면 언마운트 cleanup(stopSpeaking)이 담당 */
 
-  /* 유휴 자동 로그아웃: 관리자 설정 시간 무조작 시 대기 화면으로 복귀 */
+  /* 유휴 자동 로그아웃: 관리자 설정 시간 무조작 시 첫 화면으로 복귀 */
   useEffect(() => {
-    if (adminMode || screen === 'idle') return;
+    if (adminMode || screen === 'miryang-main') return;
     const timer = setTimeout(() => {
       resetStore();
     }, idleTimeoutSec * 1000);
@@ -148,8 +151,8 @@ export default function Home() {
 
   const screenKey = screen + '-' + (kioskMode || '');
   const screenName = KIOSK_VIEW_NAMES[screen] || '키오스크';
-  // 대기/메인메뉴에는 툴바 내 도움말 버튼이 있어 FAB 숨김
-  const showGuideFab = !adminMode && screen !== 'idle' && screen !== 'main-menu';
+  // 안내/메인메뉴에는 툴바 내 도움말 버튼이 있어 FAB 숨김
+  const showGuideFab = !adminMode && screen !== 'miryang-main' && screen !== 'main-menu';
 
   // 관리자 모드
   if (adminMode) {

@@ -52,7 +52,7 @@ export default function KioskCardComplete() {
 
   /** 확인 버튼 - 대기 화면으로 */
   const handleConfirm = () => {
-    setScreen('idle');
+    setScreen('miryang-main');
   };
 
   /** 도서 대출하러 가기 */

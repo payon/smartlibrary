@@ -16,7 +16,7 @@
 import { motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
 import { useKioskSpeak } from '@/hooks/useKioskSpeak';
-import { Smartphone, CreditCard, Zap, ArrowLeft } from 'lucide-react';
+import { Smartphone, CreditCard, Zap, ArrowLeft, BookMarked } from 'lucide-react';
 import { CmsText } from '@/components/kiosk/CmsText';
 import { useScreenTheme } from '@/components/kiosk/CmsMedia';
 import { useCmsText } from '@/hooks/useCmsContent';
@@ -205,6 +205,18 @@ export default function KioskCardApply() {
           </div>
         </motion.button>
       </main>
+
+      {/* 오프라인 방문 회원가입 방법 안내 */}
+      <footer className="px-8 pb-8">
+        <button
+          onClick={() => setScreen('signup-guide')}
+          className="w-full h-12 rounded-xl border border-sky-500/40 bg-sky-500/10 text-sky-300 text-sm font-semibold flex items-center justify-center gap-2"
+          aria-label="오프라인 회원가입 방법 보기"
+        >
+          <BookMarked className="w-5 h-5" />
+          오프라인 회원가입 방법 보기
+        </button>
+      </footer>
     </div>
   );
 }

@@ -75,7 +75,7 @@ export default function OverviewSection() {
 
   const handleResetKiosk = () => {
     const store = useAppStore.getState();
-    store.setScreen('idle');
+    store.setScreen('miryang-main');
     store.setKioskMode(null);
     store.setAuthenticatedUser(null);
     store.clearSelectedBooks();

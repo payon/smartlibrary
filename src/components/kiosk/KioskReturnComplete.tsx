@@ -24,7 +24,7 @@ export default function KioskReturnComplete() {
     clearReturnedLoans();
     setLastReturnSummary(null);
     setAuthenticatedUser(null);
-    setScreen('idle');
+    setScreen('miryang-main');
   };
 
   const penaltyNote = lastReturnSummary

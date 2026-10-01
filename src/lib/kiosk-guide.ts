@@ -13,13 +13,27 @@ export interface GuideContent {
 }
 
 type ScreenKey =
-  | 'idle' | 'main-menu'
+  | 'idle' | 'miryang-main' | 'signup-guide' | 'main-menu'
   | 'card-apply' | 'card-form' | 'card-pending' | 'card-complete'
   | 'auth-scan' | 'auth-pin'
   | 'loan-select' | 'loan-confirm' | 'loan-dispense' | 'loan-history' | 'receipt' | 'loan-complete'
   | 'return-insert' | 'return-scanning' | 'return-confirm' | 'return-complete';
 
 export const DEFAULT_GUIDES: Record<ScreenKey, GuideContent> = {
+  'miryang-main': {
+    title: '도서관 안내',
+    steps: [
+      '스마트도서관 이용 방법을 확인하세요.',
+      '준비가 되면 “시작하기”를 눌러 이용을 시작합니다.',
+    ],
+  },
+  'signup-guide': {
+    title: '회원가입 방법',
+    steps: [
+      '도서관 방문 회원가입 순서를 확인하세요.',
+      '신분증을 지참하고 2층 종합자료실을 방문하세요.',
+    ],
+  },
   idle: {
     title: '시작하기',
     steps: [

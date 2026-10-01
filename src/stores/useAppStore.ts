@@ -288,23 +288,24 @@ const screenHistory: KioskViewName[] = [];
 
 /** 이전 화면 매핑 */
 const PREV_SCREEN_MAP: Partial<Record<KioskViewName, KioskViewName>> = {
-  'main-menu': 'idle',
+  'main-menu': 'miryang-main',
+  'signup-guide': 'card-apply',
   'card-apply': 'main-menu',
   'card-form': 'card-apply',
   'card-pending': 'card-form',
-  'card-complete': 'idle',
+  'card-complete': 'miryang-main',
   'auth-scan': 'main-menu',
   'auth-pin': 'auth-scan',
   'loan-select': 'auth-pin',
   'loan-confirm': 'loan-select',
   'loan-dispense': 'loan-confirm',
-  'loan-complete': 'idle',
+  'loan-complete': 'miryang-main',
   'loan-history': 'main-menu',
   'receipt': 'loan-confirm',
   'return-insert': 'main-menu',
   'return-scanning': 'return-insert',
   'return-confirm': 'return-scanning',
-  'return-complete': 'idle',
+  'return-complete': 'miryang-main',
 };
 
 // ============================================================================
@@ -319,7 +320,7 @@ export const useAppStore = create<KioskState>((set, get) => ({
   // ------------------------------------------------------------------------
   // 화면 상태 초기값 및 액션
   // ------------------------------------------------------------------------
-  screen: 'idle',
+  screen: 'miryang-main',
   /** 화면 전환 (이력에 현재 화면을 저장) — 타임아웃은 각 화면에서 useEffect로 관리 */
   setScreen: (newScreen) => {
     const current = get().screen;
@@ -460,7 +461,7 @@ export const useAppStore = create<KioskState>((set, get) => ({
     resetStore: () => {
     screenHistory.length = 0;
     set({
-      screen: 'idle',
+      screen: 'miryang-main',
       kioskMode: null,
       authenticatedUser: null,
       cardApplication: null,

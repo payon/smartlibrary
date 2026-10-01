@@ -323,6 +323,8 @@ export const OVERDUE_BLOCK_MULTIPLIER = 1;
 /** 키오스크 화면 이름 타입 */
 export type KioskViewName =
   | 'idle'
+  | 'miryang-main'
+  | 'signup-guide'
   | 'main-menu'
   | 'card-apply'
   | 'card-form'
@@ -347,6 +349,8 @@ export type KioskMode = 'loan' | 'return' | 'card' | null;
 /** 키오스크 화면 한국어 이름 (스크린리더 안내용) */
 export const KIOSK_VIEW_NAMES: Record<KioskViewName, string> = {
   idle: '대기 화면',
+  'miryang-main': '밀양스마트도서관 안내',
+  'signup-guide': '회원가입 방법',
   'main-menu': '메인 메뉴',
   'card-apply': '도서증 발급 종류 선택',
   'card-form': '개인정보 입력',
@@ -369,6 +373,8 @@ export const KIOSK_VIEW_NAMES: Record<KioskViewName, string> = {
 /** 키오스크 화면 상수 */
 export const KIOSK_VIEWS = {
   IDLE: 'idle' as const,
+  MIRYANG_MAIN: 'miryang-main' as const,
+  SIGNUP_GUIDE: 'signup-guide' as const,
   MAIN_MENU: 'main-menu' as const,
   CARD_APPLY: 'card-apply' as const,
   CARD_FORM: 'card-form' as const,

@@ -252,6 +252,9 @@ export const DEFAULT_CONTENT_ITEMS: DefaultContentItem[] = [
   { key: 'signup.background_image_url', value: '', type: 'image', screen: 'signup-guide', label: '가입안내 배경이미지' },
   { key: 'signup.background_fit', value: 'cover', type: 'text', screen: 'signup-guide', label: '가입안내 배경 맞춤' },
   { key: 'guide.portal', value: '{"title":"대기 화면","steps":["빌리려면 “대출”, 돌려주려면 “반납”을 누릅니다.","처음이면 “회원가입” 안내를 확인하세요.","인기 도서를 눌러 상세 정보를 볼 수 있습니다."]}', type: 'json', screen: 'portal', label: '포털 가이드' },
+  // ── 대기 포털 부버튼/히어로 동영상 (관리자 구성, signup 제외가 기본) ──
+  { key: 'portal.subbuttons', value: '["history","survey","guide"]', type: 'json', screen: 'portal', label: '포털 부버튼 구성' },
+  { key: 'portal.hero_video', value: '', type: 'image', screen: 'portal', label: '포털 히어로 동영상(mp4)' },
   { key: 'guide.signup-guide', value: '{"title":"회원가입 방법","steps":["도서관 방문 회원가입 순서를 확인하세요.","신분증을 지참하고 2층 종합자료실을 방문하세요."]}', type: 'json', screen: 'signup-guide', label: '가입안내 가이드' },
   // ── 대출/반납 절차 순서 (관리자 편집용, 프론트 단계 스트립과 동일 순서) ──
   { key: 'loanflow.order', value: '["[대출]선택","도서확인","회원인증","비밀번호 입력","대출처리","영수증발급","처리완료"]', type: 'json', screen: 'main-menu', label: '대출 절차 순서' },

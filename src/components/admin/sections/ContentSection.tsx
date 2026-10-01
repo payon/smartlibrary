@@ -325,7 +325,7 @@ export default function ContentSection() {
     setLibraryFor(key);
     setLibraryLoading(true);
     try {
-      const res = await fetch('/api/admin/media?mimeType=image&pageSize=24');
+      const res = await fetch(`/api/admin/media?pageSize=24`);
       if (!res.ok) throw new Error();
       const data = await res.json();
       setLibraryItems(data.media || []);
@@ -717,7 +717,7 @@ export default function ContentSection() {
               <input
                 id={inputId}
                 type="file"
-                accept="image/*"
+                accept="image/*,video/mp4"
                 className="hidden"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
@@ -729,14 +729,24 @@ export default function ContentSection() {
             {currentValue && (
               <div>
                 <div className="w-32 h-24 rounded-lg overflow-hidden border border-slate-700 bg-slate-800">
-                  <img
-                    src={currentValue}
-                    alt="콘텐츠 이미지 미리보기"
-                    className="w-full h-full object-contain"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = 'none';
-                    }}
-                  />
+                  {currentValue.endsWith('.mp4') ? (
+                    <video
+                      src={currentValue}
+                      className="w-full h-full object-contain"
+                      muted
+                      playsInline
+                      preload="metadata"
+                    />
+                  ) : (
+                    <img
+                      src={currentValue}
+                      alt="콘텐츠 이미지 미리보기"
+                      className="w-full h-full object-contain"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                  )}
                 </div>
                 <p className="text-[11px] text-slate-500 font-mono mt-1 break-all">{currentValue}</p>
               </div>
@@ -1083,7 +1093,7 @@ export default function ContentSection() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
           <div className="w-full max-w-2xl max-h-[80vh] overflow-hidden rounded-xl border border-slate-700 bg-slate-900 flex flex-col">
             <div className="flex items-center justify-between border-b border-slate-700 px-4 py-3">
-              <p className="text-sm font-medium text-white">미디어 라이브러리 (이미지)</p>
+              <p className="text-sm font-medium text-white">미디어 라이브러리 (이미지·동영상)</p>
               <Button
                 type="button"
                 size="sm"
@@ -1105,27 +1115,40 @@ export default function ContentSection() {
                 </p>
               ) : (
                 <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                  {libraryItems.map((m) => (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => {
-                        handleValueChange(libraryFor, m.path);
-                        setLibraryFor(null);
-                      }}
-                      className="group overflow-hidden rounded-lg border border-slate-700 bg-slate-800 hover:border-sky-500"
-                    >
-                      <img
-                        src={m.path}
-                        alt={m.fileName || m.path}
-                        className="h-24 w-full object-contain"
-                        loading="lazy"
-                      />
-                      <p className="truncate px-1 py-1 text-[10px] text-slate-500 font-mono">
-                        {m.path}
-                      </p>
-                    </button>
-                  ))}
+                  {libraryItems.map((m) => {
+                    const isVideo = (m.mimeType || '').startsWith('video/');
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => {
+                          handleValueChange(libraryFor, m.path);
+                          setLibraryFor(null);
+                        }}
+                        className="group overflow-hidden rounded-lg border border-slate-700 bg-slate-800 hover:border-sky-500"
+                      >
+                        {isVideo ? (
+                          <video
+                            src={m.path}
+                            className="h-24 w-full object-contain"
+                            muted
+                            playsInline
+                            preload="metadata"
+                          />
+                        ) : (
+                          <img
+                            src={m.path}
+                            alt={m.fileName || m.path}
+                            className="h-24 w-full object-contain"
+                            loading="lazy"
+                          />
+                        )}
+                        <p className="truncate px-1 py-1 text-[10px] text-slate-500 font-mono">
+                          {m.path}
+                        </p>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>

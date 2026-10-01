@@ -36,7 +36,11 @@ const ALLOWED_MIME_TYPES: Record<string, string> = {
   'image/gif': '.gif',
   'image/webp': '.webp',
   'image/svg+xml': '.svg',
+  'video/mp4': '.mp4',
 };
+
+/** 리사이즈 제외 (원본 그대로 저장) */
+const NO_RESIZE_TYPES = new Set(['image/gif', 'image/svg+xml', 'video/mp4']);
 
 /** 최대 파일 크기 (10MB) */
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -152,7 +156,7 @@ export async function POST(request: NextRequest) {
           );
         }
       }
-    } else if (file.type !== 'image/gif') {
+    } else if (!NO_RESIZE_TYPES.has(file.type)) {
       // 래스터 이미지 자동 리사이즈 (긴 변 1920px 초과 시 비율 유지 축소)
       try {
         const sharp = (await import('sharp')).default;

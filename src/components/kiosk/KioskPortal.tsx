@@ -30,9 +30,17 @@ import {
   ChevronRight,
   Crown,
   Radio,
-  ClipboardList,
+  FileText,
 } from 'lucide-react';
 import { toast } from 'sonner';
+
+/** 포털 부버튼 정의 (표시 여부·순서는 CMS portal.subbuttons) */
+const SUBBUTTON_DEFS = [
+  { id: 'signup', label: '회원가입', Icon: UserPlus },
+  { id: 'history', label: '대출이력', Icon: History },
+  { id: 'survey', label: '설문조사', Icon: FileText },
+  { id: 'guide', label: '이용안내', Icon: CircleHelp },
+] as const;
 
 const BANNER_KEYS = ['idle.banner_1', 'idle.banner_2', 'idle.banner_3'];
 
@@ -51,6 +59,47 @@ export default function KioskPortal() {
   const banners = BANNER_KEYS.map((k) => cmsContent[k] || '').filter(
     (v) => v.startsWith('/') || v.startsWith('https://')
   );
+
+  /** 부버튼 구성 (CMS, signup 제외가 기본) */
+  const subbuttonOrder = (() => {
+    try {
+      const parsed: unknown = JSON.parse(
+        cmsContent['portal.subbuttons'] || '["history","survey","guide"]'
+      );
+      if (!Array.isArray(parsed)) return ['history', 'survey', 'guide'];
+      const known = SUBBUTTON_DEFS.map((d) => d.id);
+      return (parsed as unknown[]).filter(
+        (v): v is (typeof SUBBUTTON_DEFS)[number]['id'] =>
+          typeof v === 'string' && (known as string[]).includes(v)
+      );
+    } catch {
+      return ['history', 'survey', 'guide'];
+    }
+  })();
+
+  /** 히어로 동영상 (CMS, mp4) */
+  const heroVideo = (() => {
+    const v = cmsContent['portal.hero_video'] || '';
+    return v.endsWith('.mp4') && (v.startsWith('/') || v.startsWith('https://')) ? v : '';
+  })();
+
+  const handleSubbutton = (id: string) => {
+    switch (id) {
+      case 'signup':
+        goSignup();
+        break;
+      case 'history':
+        goHistory();
+        break;
+      case 'survey':
+        toast.info('설문조사 기간이 아닙니다.');
+        break;
+      case 'guide':
+      default:
+        setGuideOpen(true);
+        break;
+    }
+  };
 
   /** 배너 자동 순환 (5초) */
   useEffect(() => {
@@ -105,8 +154,20 @@ export default function KioskPortal() {
 
   return (
     <div className="kiosk-screen eco-bg flex flex-col">
-      {/* 상단 배너 캐러셀 */}
+      {/* 상단 히어로: 동영상 우선, 없으면 배너 캐러셀 */}
       <div className="relative h-44 shrink-0 overflow-hidden bg-gradient-to-br from-sky-200 via-sky-100 to-emerald-50">
+        {heroVideo ? (
+          <video
+            src={heroVideo}
+            className="absolute inset-0 w-full h-full object-cover"
+            autoPlay
+            muted
+            loop
+            playsInline
+            aria-label="도서관 안내 동영상"
+          />
+        ) : (
+        <>
         <AnimatePresence mode="wait">
           {banners.length > 0 ? (
             <motion.img
@@ -167,6 +228,8 @@ export default function KioskPortal() {
           <CircleHelp className="w-5 h-5" />
           이용안내
         </button>
+        </>
+        )}
       </div>
 
       {/* 대출/반납 대버튼 */}
@@ -195,36 +258,21 @@ export default function KioskPortal() {
         </motion.button>
       </div>
 
-      {/* 부버튼: 회원가입/대출이력/설문조사/이용안내 */}
-      <div className="px-5 pt-3 grid grid-cols-4 gap-2 shrink-0">
-        <button
-          onClick={goSignup}
-          className="rounded-xl bg-white border border-slate-200 py-2.5 flex flex-col items-center gap-1 text-slate-600 text-xs font-semibold shadow-sm"
-        >
-          <UserPlus className="w-5 h-5 text-sky-500" />
-          회원가입
-        </button>
-        <button
-          onClick={goHistory}
-          className="rounded-xl bg-white border border-slate-200 py-2.5 flex flex-col items-center gap-1 text-slate-600 text-xs font-semibold shadow-sm"
-        >
-          <History className="w-5 h-5 text-sky-500" />
-          대출이력
-        </button>
-        <button
-          onClick={() => toast.info('설문조사 기간이 아닙니다.')}
-          className="rounded-xl bg-white border border-slate-200 py-2.5 flex flex-col items-center gap-1 text-slate-600 text-xs font-semibold shadow-sm"
-        >
-          <ClipboardList className="w-5 h-5 text-sky-500" />
-          설문조사
-        </button>
-        <button
-          onClick={() => setGuideOpen(true)}
-          className="rounded-xl bg-white border border-slate-200 py-2.5 flex flex-col items-center gap-1 text-slate-600 text-xs font-semibold shadow-sm"
-        >
-          <CircleHelp className="w-5 h-5 text-sky-500" />
-          이용안내
-        </button>
+      {/* 부버튼 (관리자 구성 순서대로) */}
+      <div className={`px-5 pt-3 grid gap-2 shrink-0 ${subbuttonOrder.length >= 4 ? 'grid-cols-4' : 'grid-cols-3'}`}>
+        {subbuttonOrder.map((id) => {
+          const def = SUBBUTTON_DEFS.find((d) => d.id === id)!;
+          return (
+            <button
+              key={id}
+              onClick={() => handleSubbutton(id)}
+              className="rounded-xl bg-white border border-slate-200 py-2.5 flex flex-col items-center gap-1 text-slate-600 text-xs font-semibold shadow-sm"
+            >
+              <def.Icon className="w-5 h-5 text-sky-500" />
+              {def.label}
+            </button>
+          );
+        })}
       </div>
 
       {/* 비콘 대출 안내 스트립 */}

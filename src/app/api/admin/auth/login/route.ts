@@ -95,6 +95,10 @@ export async function POST(request: NextRequest) {
     });
 
     // 쿠키 설정 및 응답
+    // [보안/호환] HTTPS(프록시 경유 포함)일 때만 Secure — HTTP 직결 시 Secure면
+    // 브라우저가 쿠키를 버려 이후 모든 관리자 API가 401이 됨
+    const forwardedProto = request.headers.get('x-forwarded-proto');
+    const isHttps = forwardedProto === 'https';
     const response = NextResponse.json({
       user: {
         id: user.id,
@@ -107,7 +111,7 @@ export async function POST(request: NextRequest) {
 
     response.cookies.set('admin_token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: isHttps,
       sameSite: 'lax',
       maxAge: 60 * 60 * 24, // 24시간
       path: '/',

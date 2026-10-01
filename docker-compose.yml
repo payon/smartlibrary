@@ -1,63 +1,87 @@
 # ============================================================================
-# 무인 도서 대출 반납기 키오스크 시뮬레이터 - Docker Compose
+# 무인 도서 대출 반납기 — 프로덕션 스택 (PostgreSQL + Next.js + Caddy 대체)
 # ============================================================================
 #
 # 사용 방법:
-#   개발 모드:    docker compose up
-#   백그라운드:   docker compose up -d
-#   재빌드:      docker compose up --build
-#   종료:        docker compose down
-#   완전 초기화:  docker compose down -v
+#   1. .env.docker 생성 (아래 값 참고 — 이미 생성되어 있으면 생략)
+#   2. docker compose --env-file .env.docker up --build -d
+#   3. 로그: docker compose logs -f kiosk
 #
-# 접속:
-#   키오스크:    http://localhost:3000
-#   관리자:      http://localhost:3000 (우측 상단 설정 아이콘 클릭)
-#
-# 기본 관리자 계정:
-#   최고관리자:  superadmin@library.go.kr / admin1234
-#   관리자:      admin@library.go.kr / admin1234
-#   운영자:      operator@library.go.kr / admin1234
-#
-# 데모 키오스크 사용자:
-#   PIN: 1234 (또는 임의의 4자리 숫자 - 데모 모드)
+# 도메인(library.inhand.kr) 연결:
+#   80/443은 CloudPanel nginx가 점유 중이므로, CloudPanel 패널에서
+#   library.inhand.kr 리버스 프록시 → http://127.0.0.1:3000 + Let's Encrypt 발급.
+#   doc/cloudpanel-mysql.md "1. CloudPanel 배포 절차" 참조.
 # ============================================================================
 
 services:
-  # ── 키오스크 앱 (Next.js) ──────────────────────────────────────────────
+  # ── PostgreSQL ─────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: library-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-library}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 필요}
+      - POSTGRES_DB=${POSTGRES_DB:-smartlib}
+      - TZ=Asia/Seoul
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-library} -d ${POSTGRES_DB:-smartlib}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - kiosk-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── 키오스크 앱 (Next.js standalone) ───────────────────────────────────
   kiosk:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: library-kiosk
     restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
     ports:
-      - "${KIOSK_PORT:-3000}:3000"
+      # 외부 직접 접속용 (방화벽에서 제어). CloudPanel 프록시 사용 시 127.0.0.1: 로 변경 권장
+      - "${KIOSK_PORT:-3200}:3000"
     environment:
-      # 데이터베이스
-      - DATABASE_URL=file:/app/db/custom.db
-      # JWT 시크릿 (관리자 인증)
-      - JWT_SECRET=${JWT_SECRET:-kiosk-simulator-jwt-secret-2024}
-      # 관리자 시드 비밀번호
-      - ADMIN_SEED_PASSWORD=${ADMIN_SEED_PASSWORD:-admin1234}
+      # 데이터베이스 (PostgreSQL)
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-library}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 필요}@db:5432/${POSTGRES_DB:-smartlib}
+      - PRISMA_SCHEMA=prisma/schema.postgres.prisma
+      # JWT 시크릿 (필수 — 기본값 없음)
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET 필요}
+      # 관리자 시드 비밀번호 (최초 시드에만 사용)
+      - ADMIN_SEED_PASSWORD=${ADMIN_SEED_PASSWORD:?ADMIN_SEED_PASSWORD 필요}
+      # 리버스 프록시 신뢰 (CloudPanel/Caddy 뒤이므로 true)
+      - TRUST_PROXY=true
+      # 리버스 프록시 신뢰 (CloudPanel nginx 뒤이므로 필수)
+      # false이면 전 사용자의 IP가 127.0.0.1로 보여 rate-limit이 공유됨
+      - TRUST_PROXY=true
       # Node 환경
       - NODE_ENV=production
-      # 시드 허용 (최초 실행 시 데이터 초기화, 이후 비활성화 가능)
-      - ALLOW_SEED=${ALLOW_SEED:-true}
       # Next.js
       - NEXT_TELEMETRY_DISABLED=1
-      # 호스트
       - HOSTNAME=0.0.0.0
       - PORT=3000
     volumes:
-      # SQLite 데이터베이스 영속화
-      - kiosk-db:/app/db
-      # 업로드 파일 영속화 (옵션)
+      # 업로드 파일 영속화 (PWA 아이콘 포함 public/icons는 이미지에 포함)
       - kiosk-uploads:/app/public/uploads
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api"]
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api').then(r=>{if(!r.ok)process.exit(1)})"]
       interval: 30s
       timeout: 10s
-      start_period: 60s
+      start_period: 90s
       retries: 3
     networks:
       - kiosk-network
@@ -69,7 +93,7 @@ services:
 
 # ── 볼륨 ──────────────────────────────────────────────────────────────────
 volumes:
-  kiosk-db:
+  pgdata:
     driver: local
   kiosk-uploads:
     driver: local

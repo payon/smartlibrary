@@ -21,10 +21,16 @@
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
+import { useKioskSpeak } from '@/hooks/useKioskSpeak';
 import { CheckCircle2, CreditCard, BookOpen, QrCode, CalendarDays, KeyRound } from 'lucide-react';
 import { CmsText } from '@/components/kiosk/CmsText';
+import { useScreenTheme } from '@/components/kiosk/CmsMedia';
+import { useCmsText } from '@/hooks/useCmsContent';
 
 export default function KioskCardComplete() {
+  const cardCompleteTitle = useCmsText('cardcomplete.title', '도서증 발급이 완료되었습니다!');
+  const theme = useScreenTheme('card-complete', '#0b1120');
+  useKioskSpeak(`${cardCompleteTitle}. 도서증 발급이 완료되었습니다.`);
   const { cardApplication, cardResult, setScreen, setKioskMode } = useAppStore();
 
   const isMobile = cardApplication?.cardType === 'mobile';
@@ -46,7 +52,7 @@ export default function KioskCardComplete() {
 
   /** 확인 버튼 - 대기 화면으로 */
   const handleConfirm = () => {
-    setScreen('idle');
+    setScreen('miryang-main');
   };
 
   /** 도서 대출하러 가기 */
@@ -58,7 +64,7 @@ export default function KioskCardComplete() {
   return (
     <div
       className="flex flex-col h-screen"
-      style={{ background: '#0b1120' }}
+      style={theme.style}
     >
       {/* 성공 타이틀 영역 */}
       <header className="text-center pt-12 pb-6 px-6">

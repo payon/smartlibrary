@@ -20,7 +20,7 @@ export interface DefaultContentItem {
   label: string; // Korean display name for admin UI
 }
 
-/** 키오스크 기본 콘텐츠 아이템 목록 (11개 화면 + 글로벌, 총 47개) */
+/** 키오스크 기본 콘텐츠 아이템 목록 (15개 화면 + 글로벌, 텍스트/배경/이미지) */
 export const DEFAULT_CONTENT_ITEMS: DefaultContentItem[] = [
   // ── 대기 화면 (idle) ──
   { key: 'idle.title', value: '스마트 도서관에 오신 것을 환영합니다', type: 'text', screen: 'idle', label: '대기 화면 제목' },
@@ -31,10 +31,12 @@ export const DEFAULT_CONTENT_ITEMS: DefaultContentItem[] = [
 
   // ── 메인 메뉴 (main-menu) ──
   { key: 'mainmenu.title', value: '이용하실 서비스를 선택해주세요', type: 'text', screen: 'main-menu', label: '메인 메뉴 제목' },
+  { key: 'mainmenu.card_button_text', value: '도서카드 발급', type: 'text', screen: 'main-menu', label: '카드발급 버튼 텍스트' },
   { key: 'mainmenu.loan_button_text', value: '도서 대여', type: 'text', screen: 'main-menu', label: '대여 버튼 텍스트' },
   { key: 'mainmenu.return_button_text', value: '도서 반납', type: 'text', screen: 'main-menu', label: '반납 버튼 텍스트' },
   { key: 'mainmenu.loan_button_icon', value: 'BookOpen', type: 'text', screen: 'main-menu', label: '대여 버튼 아이콘' },
   { key: 'mainmenu.return_button_icon', value: 'BookCheck', type: 'text', screen: 'main-menu', label: '반납 버튼 아이콘' },
+  { key: 'mainmenu.button_order', value: '["card","loan","return"]', type: 'json', screen: 'main-menu', label: '메인 버튼 순서' },
 
   // ── 인증 스캔 (auth-scan) ──
   { key: 'authscan.title', value: '도서증을 스캔해주세요', type: 'text', screen: 'auth-scan', label: '스캔 인증 제목' },
@@ -50,7 +52,9 @@ export const DEFAULT_CONTENT_ITEMS: DefaultContentItem[] = [
   { key: 'loanselect.title', value: '대여할 도서를 선택해주세요', type: 'text', screen: 'loan-select', label: '도서 선택 제목' },
   { key: 'loanselect.instruction', value: '도서를 스캔하거나 검색하세요', type: 'text', screen: 'loan-select', label: '도서 선택 안내' },
   { key: 'loanselect.max_books_text', value: '최대 2권까지 대여 가능합니다', type: 'text', screen: 'loan-select', label: '최대 대여 안내' },
+  { key: 'loanselect.max_selection_warning', value: '최대 2권까지 대출할 수 있습니다', type: 'text', screen: 'loan-select', label: '초과 선택 경고' },
   { key: 'loanselect.search_placeholder', value: '도서명 또는 ISBN 검색', type: 'text', screen: 'loan-select', label: '검색 입력 안내' },
+  { key: 'loanselect.confirm_button_text', value: '다음 단계', type: 'text', screen: 'loan-select', label: '다음 단계 버튼' },
 
   // ── 대여 확인 (loan-confirm) ──
   { key: 'loanconfirm.title', value: '대여 내역을 확인해주세요', type: 'text', screen: 'loan-confirm', label: '대여 확인 제목' },
@@ -61,15 +65,25 @@ export const DEFAULT_CONTENT_ITEMS: DefaultContentItem[] = [
   { key: 'loancomplete.title', value: '대여가 완료되었습니다', type: 'text', screen: 'loan-complete', label: '대여 완료 제목' },
   { key: 'loancomplete.message', value: '도서 대여가 정상적으로 처리되었습니다', type: 'text', screen: 'loan-complete', label: '대여 완료 메시지' },
   { key: 'loancomplete.receipt_text', value: '영수증을 출력하시겠습니까?', type: 'text', screen: 'loan-complete', label: '영수증 출력 안내' },
+  { key: 'loancomplete.list_title', value: '대출 도서 목록', type: 'text', screen: 'loan-complete', label: '대출 목록 제목' },
+  { key: 'loancomplete.confirm_button_text', value: '확인하기', type: 'text', screen: 'loan-complete', label: '확인 버튼' },
 
   // ── 반납 투입 (return-insert) ──
   { key: 'returninsert.title', value: '반납할 도서를 투입구에 넣어주세요', type: 'text', screen: 'return-insert', label: '반납 투입 제목' },
   { key: 'returninsert.instruction', value: '도서를 투입구에 한 권씩 넣어주세요', type: 'text', screen: 'return-insert', label: '반납 투입 안내' },
+  { key: 'returninsert.instruction_sub', value: '도서를 넣으면 자동으로 인식됩니다', type: 'text', screen: 'return-insert', label: '반납 투입 보조 안내' },
+  { key: 'returninsert.no_loans_title', value: '반납할 도서가 없습니다', type: 'text', screen: 'return-insert', label: '대출없음 제목' },
+  { key: 'returninsert.no_loans_desc', value: '대출 중인 도서가 없습니다.', type: 'text', screen: 'return-insert', label: '대출없음 설명' },
+  { key: 'returninsert.detected_text', value: '도서가 감지되었습니다', type: 'text', screen: 'return-insert', label: '도서 감지 문구' },
   { key: 'returninsert.sensor_image_url', value: '/images/book-sensor.svg', type: 'image', screen: 'return-insert', label: '센서 안내 이미지' },
 
   // ── 반납 스캔 (return-scanning) ──
   { key: 'returnscanning.title', value: '도서를 스캔하고 있습니다', type: 'text', screen: 'return-scanning', label: '반납 스캔 제목' },
   { key: 'returnscanning.instruction', value: '잠시만 기다려주세요', type: 'text', screen: 'return-scanning', label: '반납 스캔 안내' },
+  { key: 'returnscanning.scanning_text', value: '도서가 인식되었습니다. 잠시 기다려주세요.', type: 'text', screen: 'return-scanning', label: '스캔 중 문구' },
+  { key: 'returnscanning.complete_text', value: '스캔이 완료되었습니다', type: 'text', screen: 'return-scanning', label: '스캔 완료 문구' },
+  { key: 'returnscanning.more_button_text', value: '더 넣기', type: 'text', screen: 'return-scanning', label: '더 넣기 버튼' },
+  { key: 'returnscanning.complete_button_text', value: '반납 완료하기', type: 'text', screen: 'return-scanning', label: '반납 완료 버튼' },
 
   // ── 반납 확인 (return-confirm) ──
   { key: 'returnconfirm.title', value: '반납 도서를 확인해주세요', type: 'text', screen: 'return-confirm', label: '반납 확인 제목' },
@@ -79,12 +93,196 @@ export const DEFAULT_CONTENT_ITEMS: DefaultContentItem[] = [
   // ── 반납 완료 (return-complete) ──
   { key: 'returncomplete.title', value: '반납이 완료되었습니다', type: 'text', screen: 'return-complete', label: '반납 완료 제목' },
   { key: 'returncomplete.message', value: '도서 반납이 정상적으로 처리되었습니다', type: 'text', screen: 'return-complete', label: '반납 완료 메시지' },
+  { key: 'returncomplete.confirm_button_text', value: '확인하기', type: 'text', screen: 'return-complete', label: '확인 버튼' },
 
+  // ── 도서증 발급 종류 선택 (card-apply) ──
+  { key: 'cardapply.title', value: '도서증 발급', type: 'text', screen: 'card-apply', label: '발급 종류 제목' },
+  { key: 'cardapply.subtitle', value: '발급 종류를 선택해주세요', type: 'text', screen: 'card-apply', label: '발급 종류 부제목' },
+  { key: 'cardapply.mobile_title', value: '모바일 도서증 발급', type: 'text', screen: 'card-apply', label: '모바일 발급 제목' },
+  { key: 'cardapply.mobile_desc', value: '즉시 발급, 자동 승인', type: 'text', screen: 'card-apply', label: '모바일 발급 설명' },
+  { key: 'cardapply.physical_title', value: '실물 도서증 발급', type: 'text', screen: 'card-apply', label: '실물 발급 제목' },
+  { key: 'cardapply.physical_desc', value: '담당자 승인 후 발급', type: 'text', screen: 'card-apply', label: '실물 발급 설명' },
+  { key: 'cardapply.auto_title', value: '자동 발급 신청', type: 'text', screen: 'card-apply', label: '자동 발급 제목' },
+  { key: 'cardapply.auto_desc', value: '개인정보 입력 후 자동 승인', type: 'text', screen: 'card-apply', label: '자동 발급 설명' },
+
+  // ── 도서증 개인정보 입력 (card-form) ──
+  { key: 'cardform.title', value: '개인정보 입력', type: 'text', screen: 'card-form', label: '개인정보 제목' },
+  { key: 'cardform.name_label', value: '이름', type: 'text', screen: 'card-form', label: '이름 라벨' },
+  { key: 'cardform.birthdate_label', value: '생년월일', type: 'text', screen: 'card-form', label: '생년월일 라벨' },
+  { key: 'cardform.phone_label', value: '전화번호', type: 'text', screen: 'card-form', label: '전화번호 라벨' },
+  { key: 'cardform.address_label', value: '주소', type: 'text', screen: 'card-form', label: '주소 라벨' },
+  { key: 'cardform.submit_button_text', value: '신청하기', type: 'text', screen: 'card-form', label: '신청 버튼' },
+
+  // ── 도서증 승인 대기 (card-pending) ──
+  { key: 'cardpending.title', value: '발급 신청이 완료되었습니다', type: 'text', screen: 'card-pending', label: '신청 완료 제목' },
+  { key: 'cardpending.approved_title', value: '승인이 완료되었습니다!', type: 'text', screen: 'card-pending', label: '승인 완료 제목' },
+  { key: 'cardpending.wait_message', value: '담당자 승인을 기다려주세요', type: 'text', screen: 'card-pending', label: '승인 대기 문구' },
+  { key: 'cardpending.approved_message', value: '발급 처리 중...', type: 'text', screen: 'card-pending', label: '승인 진행 문구' },
+  { key: 'cardpending.summary_title', value: '신청 내역', type: 'text', screen: 'card-pending', label: '신청 내역 제목' },
+  { key: 'cardpending.cancel_button_text', value: '취소', type: 'text', screen: 'card-pending', label: '취소 버튼' },
+
+  // ── 도서증 발급 완료 (card-complete) ──
+  { key: 'cardcomplete.title', value: '도서증 발급이 완료되었습니다!', type: 'text', screen: 'card-complete', label: '발급 완료 제목' },
+  { key: 'cardcomplete.mobile_message', value: '모바일 도서증이 발급되었습니다', type: 'text', screen: 'card-complete', label: '모바일 완료 문구' },
+  { key: 'cardcomplete.physical_message', value: '실물 도서증은 3영업일 내 발급됩니다', type: 'text', screen: 'card-complete', label: '실물 완료 문구' },
+  { key: 'cardcomplete.go_loan_button_text', value: '도서 대출하러 가기', type: 'text', screen: 'card-complete', label: '대출 이동 버튼' },
+  { key: 'cardcomplete.confirm_button_text', value: '확인', type: 'text', screen: 'card-complete', label: '확인 버튼' },
+
+  // ── 화면별 배경 테마 (빈 값 = 기본 테마 유지) ──
+  // 관리자가 배경색/배경이미지를 지정하면 프론트에 즉시 반영 (useScreenTheme)
+  { key: 'idle.background_image_url', value: '', type: 'image', screen: 'idle', label: '대기 화면 배경이미지' },
+  { key: 'main-menu.background_color', value: '', type: 'color', screen: 'main-menu', label: '메인 메뉴 배경색' },
+  { key: 'main-menu.background_image_url', value: '', type: 'image', screen: 'main-menu', label: '메인 메뉴 배경이미지' },
+  { key: 'auth-scan.background_color', value: '', type: 'color', screen: 'auth-scan', label: '스캔 화면 배경색' },
+  { key: 'auth-scan.background_image_url', value: '', type: 'image', screen: 'auth-scan', label: '스캔 화면 배경이미지' },
+  { key: 'auth-pin.background_color', value: '', type: 'color', screen: 'auth-pin', label: 'PIN 화면 배경색' },
+  { key: 'auth-pin.background_image_url', value: '', type: 'image', screen: 'auth-pin', label: 'PIN 화면 배경이미지' },
+  { key: 'loan-select.background_color', value: '', type: 'color', screen: 'loan-select', label: '도서선택 배경색' },
+  { key: 'loan-select.background_image_url', value: '', type: 'image', screen: 'loan-select', label: '도서선택 배경이미지' },
+  { key: 'loan-confirm.background_color', value: '', type: 'color', screen: 'loan-confirm', label: '대여확인 배경색' },
+  { key: 'loan-confirm.background_image_url', value: '', type: 'image', screen: 'loan-confirm', label: '대여확인 배경이미지' },
+  { key: 'loan-complete.background_color', value: '', type: 'color', screen: 'loan-complete', label: '대여완료 배경색' },
+  { key: 'loan-complete.background_image_url', value: '', type: 'image', screen: 'loan-complete', label: '대여완료 배경이미지' },
+  { key: 'return-insert.background_color', value: '', type: 'color', screen: 'return-insert', label: '반납투입 배경색' },
+  { key: 'return-insert.background_image_url', value: '', type: 'image', screen: 'return-insert', label: '반납투입 배경이미지' },
+  { key: 'return-scanning.background_color', value: '', type: 'color', screen: 'return-scanning', label: '반납스캔 배경색' },
+  { key: 'return-scanning.background_image_url', value: '', type: 'image', screen: 'return-scanning', label: '반납스캔 배경이미지' },
+  { key: 'return-confirm.background_color', value: '', type: 'color', screen: 'return-confirm', label: '반납확인 배경색' },
+  { key: 'return-confirm.background_image_url', value: '', type: 'image', screen: 'return-confirm', label: '반납확인 배경이미지' },
+  { key: 'return-complete.background_color', value: '', type: 'color', screen: 'return-complete', label: '반납완료 배경색' },
+  { key: 'return-complete.background_image_url', value: '', type: 'image', screen: 'return-complete', label: '반납완료 배경이미지' },
+  { key: 'card-apply.background_color', value: '', type: 'color', screen: 'card-apply', label: '발급선택 배경색' },
+  { key: 'card-apply.background_image_url', value: '', type: 'image', screen: 'card-apply', label: '발급선택 배경이미지' },
+  { key: 'card-form.background_color', value: '', type: 'color', screen: 'card-form', label: '개인정보 배경색' },
+  { key: 'card-form.background_image_url', value: '', type: 'image', screen: 'card-form', label: '개인정보 배경이미지' },
+  { key: 'card-pending.background_color', value: '', type: 'color', screen: 'card-pending', label: '승인대기 배경색' },
+  { key: 'card-pending.background_image_url', value: '', type: 'image', screen: 'card-pending', label: '승인대기 배경이미지' },
+  { key: 'card-complete.background_color', value: '', type: 'color', screen: 'card-complete', label: '발급완료 배경색' },
+  { key: 'card-complete.background_image_url', value: '', type: 'image', screen: 'card-complete', label: '발급완료 배경이미지' },
+
+  // ── 화면별 따라하기 가이드 (JSON: {"title": "...", "steps": [...]}) ──
+  // 프론트 도움말(?) 패널 + 음성 안내에 사용. 파싱 실패 시 기본 가이드 사용
+  { key: 'guide.idle', value: '{"title": "시작하기", "steps": ["화면 아무 곳이나 손가락으로 가볍게 터치하세요.", "다음 화면에서 원하시는 서비스를 고릅니다.", "소리가 나오지 않으면 하단 스피커 버튼을 켜세요."]}', type: 'json', screen: 'idle', label: '대기 따라하기 가이드' },
+  { key: 'guide.main-menu', value: '{"title": "서비스 선택", "steps": ["처음 오셨다면 “도서카드 발급”부터 연습해 보세요.", "책을 빌리려면 “도서 대출”을 누릅니다.", "빌린 책을 돌려주려면 “도서 반납”을 누릅니다."]}', type: 'json', screen: 'main-menu', label: '메인메뉴 따라하기 가이드' },
+  { key: 'guide.card-apply', value: '{"title": "도서증 종류 고르기", "steps": ["핸드폰으로 바로 쓰는 도서증은 “모바일”을 고릅니다.", "플라스틱 카드를 받으려면 “실물”을 고릅니다.", "연습이므로 편한 것을 고르셔도 됩니다."]}', type: 'json', screen: 'card-apply', label: '발급선택 따라하기 가이드' },
+  { key: 'guide.card-form', value: '{"title": "개인정보 입력 (연습용)", "steps": ["이 화면은 연습용입니다. 진짜 개인정보를 쓰지 마세요.", "“데모 정보로 채우기” 버튼을 누르면 연습용 정보가 자동 입력됩니다.", "직접 입력해도 됩니다. 생년월일은 숫자 8자리입니다.", "다 썼으면 “신청하기”를 누릅니다."]}', type: 'json', screen: 'card-form', label: '개인정보 따라하기 가이드' },
+  { key: 'guide.card-pending', value: '{"title": "승인 대기", "steps": ["실물 도서증은 담당자 승인이 필요합니다.", "연습 화면에서는 잠시 후 자동으로 넘어갑니다.", "그만두려면 “취소”를 누릅니다."]}', type: 'json', screen: 'card-pending', label: '승인대기 따라하기 가이드' },
+  { key: 'guide.card-complete', value: '{"title": "발급 완료", "steps": ["도서증 번호를 확인하세요.", "바로 책을 빌리려면 “도서 대출하러 가기”를 누릅니다.", "끝내려면 “확인”을 누릅니다."]}', type: 'json', screen: 'card-complete', label: '발급완료 따라하기 가이드' },
+  { key: 'guide.auth-scan', value: '{"title": "회원증 대기", "steps": ["실제 기기에서는 회원증을 리더기에 갖다 댑니다.", "연습 화면에서는 잠시 후 자동으로 넘어갑니다.", "바로 넘어가려면 “회원증 없이 이용하기”를 누릅니다."]}', type: 'json', screen: 'auth-scan', label: '스캔 따라하기 가이드' },
+  { key: 'guide.auth-pin', value: '{"title": "비밀번호 입력", "steps": ["숫자 버튼을 눌러 4자리를 입력합니다.", "4자리가 되면 자동으로 확인됩니다.", "틀렸으면 지우기 버튼으로 지우고 다시 입력합니다."]}', type: 'json', screen: 'auth-pin', label: 'PIN 따라하기 가이드' },
+  { key: 'guide.loan-select', value: '{"title": "도서 선택", "steps": ["빌리고 싶은 책의 “선택” 버튼을 누릅니다.", "한 번에 최대 2권까지 빌릴 수 있습니다.", "위 검색창에 제목이나 저자를 쳐서 찾을 수 있습니다.", "다 골랐으면 “다음 단계”를 누릅니다."]}', type: 'json', screen: 'loan-select', label: '도서선택 따라하기 가이드' },
+  { key: 'guide.loan-confirm', value: '{"title": "대출 확인", "steps": ["빌릴 책과 반납 날짜를 확인하세요.", "맞으면 “대출하기”를 누릅니다.", "바꾸려면 “이전”을 눌러 다시 고릅니다."]}', type: 'json', screen: 'loan-confirm', label: '대여확인 따라하기 가이드' },
+  { key: 'guide.loan-complete', value: '{"title": "대출 완료", "steps": ["대출이 끝났습니다. 반납 날짜를 꼭 확인하세요.", "“확인하기”를 누르면 처음으로 돌아갑니다."]}', type: 'json', screen: 'loan-complete', label: '대여완료 따라하기 가이드' },
+  { key: 'guide.return-insert', value: '{"title": "도서 투입", "steps": ["실제 기기에서는 책을 반납구에 한 권씩 넣습니다.", "연습 화면에서는 잠시 후 자동으로 인식됩니다.", "빌린 책이 없으면 안내 문구가 나옵니다."]}', type: 'json', screen: 'return-insert', label: '반납투입 따라하기 가이드' },
+  { key: 'guide.return-scanning', value: '{"title": "도서 인식", "steps": ["인식된 책 목록을 확인하세요.", "책을 더 넣으려면 “더 넣기”를 누릅니다.", "다 넣었으면 “반납하기”를 누릅니다."]}', type: 'json', screen: 'return-scanning', label: '반납스캔 따라하기 가이드' },
+  { key: 'guide.return-confirm', value: '{"title": "반납 확인", "steps": ["돌려줄 책 목록을 확인하세요.", "맞으면 “반납하기”를 누릅니다.", "바꾸려면 “이전”을 누릅니다."]}', type: 'json', screen: 'return-confirm', label: '반납확인 따라하기 가이드' },
+  { key: 'guide.return-complete', value: '{"title": "반납 완료", "steps": ["반납이 끝났습니다.", "“확인하기”를 누르면 처음으로 돌아갑니다."]}', type: 'json', screen: 'return-complete', label: '반납완료 따라하기 가이드' },
+
+  // ── 화면별 배경 맞춤 방식 (cover: 화면 채우기 / contain: 잘림 없이 맞춤) ──
+  { key: 'idle.background_fit', value: 'cover', type: 'text', screen: 'idle', label: '대기 배경 맞춤' },
+  { key: 'main-menu.background_fit', value: 'cover', type: 'text', screen: 'main-menu', label: '메인메뉴 배경 맞춤' },
+  { key: 'auth-scan.background_fit', value: 'cover', type: 'text', screen: 'auth-scan', label: '스캔 배경 맞춤' },
+  { key: 'auth-pin.background_fit', value: 'cover', type: 'text', screen: 'auth-pin', label: 'PIN 배경 맞춤' },
+  { key: 'loan-select.background_fit', value: 'cover', type: 'text', screen: 'loan-select', label: '도서선택 배경 맞춤' },
+  { key: 'loan-confirm.background_fit', value: 'cover', type: 'text', screen: 'loan-confirm', label: '대여확인 배경 맞춤' },
+  { key: 'loan-complete.background_fit', value: 'cover', type: 'text', screen: 'loan-complete', label: '대여완료 배경 맞춤' },
+  { key: 'return-insert.background_fit', value: 'cover', type: 'text', screen: 'return-insert', label: '반납투입 배경 맞춤' },
+  { key: 'return-scanning.background_fit', value: 'cover', type: 'text', screen: 'return-scanning', label: '반납스캔 배경 맞춤' },
+  { key: 'return-confirm.background_fit', value: 'cover', type: 'text', screen: 'return-confirm', label: '반납확인 배경 맞춤' },
+  { key: 'return-complete.background_fit', value: 'cover', type: 'text', screen: 'return-complete', label: '반납완료 배경 맞춤' },
+  { key: 'card-apply.background_fit', value: 'cover', type: 'text', screen: 'card-apply', label: '발급선택 배경 맞춤' },
+  { key: 'card-form.background_fit', value: 'cover', type: 'text', screen: 'card-form', label: '개인정보 배경 맞춤' },
+  { key: 'card-pending.background_fit', value: 'cover', type: 'text', screen: 'card-pending', label: '승인대기 배경 맞춤' },
+  { key: 'card-complete.background_fit', value: 'cover', type: 'text', screen: 'card-complete', label: '발급완료 배경 맞춤' },
+
+  // ── 밀양스마트도서관 안내 (첫 화면) ──
+  { key: 'miryang.hero_image', value: '', type: 'image', screen: 'miryang-main', label: '상단 안내 이미지' },
+  { key: 'miryang.quote', value: '"상상이 자라는 공간"', type: 'text', screen: 'miryang-main', label: '상단 문구' },
+  { key: 'miryang.title', value: '스마트 도서관', type: 'text', screen: 'miryang-main', label: '도서관 제목' },
+  { key: 'miryang.ribbon', value: '스마트도서관 이용방법', type: 'text', screen: 'miryang-main', label: '리본 제목' },
+  { key: 'miryang.info_title', value: '이용안내', type: 'text', screen: 'miryang-main', label: '이용안내 제목' },
+  { key: 'miryang.info_1_label', value: '이용대상', type: 'text', screen: 'miryang-main', label: '안내1 라벨' },
+  { key: 'miryang.info_1_value', value: '밀양시립도서관 정회원 (대출카드 소지자)', type: 'text', screen: 'miryang-main', label: '안내1 내용' },
+  { key: 'miryang.info_2_label', value: '대출기한', type: 'text', screen: 'miryang-main', label: '안내2 라벨' },
+  { key: 'miryang.info_2_value', value: '14일 (2주)', type: 'text', screen: 'miryang-main', label: '안내2 내용' },
+  { key: 'miryang.info_3_label', value: '대출권수', type: 'text', screen: 'miryang-main', label: '안내3 라벨' },
+  { key: 'miryang.info_3_value', value: '1인당 월 2권', type: 'text', screen: 'miryang-main', label: '안내3 내용' },
+  { key: 'miryang.info_4_label', value: '이용시간', type: 'text', screen: 'miryang-main', label: '안내4 라벨' },
+  { key: 'miryang.info_4_value', value: '해당 공간 오픈시간', type: 'text', screen: 'miryang-main', label: '안내4 내용' },
+  { key: 'miryang.loan_title', value: '대출', type: 'text', screen: 'miryang-main', label: '대출 섹션 제목' },
+  { key: 'miryang.loan_step_1', value: '[대출]선택', type: 'text', screen: 'miryang-main', label: '대출 1단계' },
+  { key: 'miryang.loan_step_2', value: '도서확인', type: 'text', screen: 'miryang-main', label: '대출 2단계' },
+  { key: 'miryang.loan_step_3', value: '회원인증', type: 'text', screen: 'miryang-main', label: '대출 3단계' },
+  { key: 'miryang.loan_step_4', value: '비밀번호 입력', type: 'text', screen: 'miryang-main', label: '대출 4단계' },
+  { key: 'miryang.loan_step_5', value: '대출처리', type: 'text', screen: 'miryang-main', label: '대출 5단계' },
+  { key: 'miryang.loan_step_6', value: '영수증발급', type: 'text', screen: 'miryang-main', label: '대출 6단계' },
+  { key: 'miryang.loan_step_7', value: '처리완료', type: 'text', screen: 'miryang-main', label: '대출 7단계' },
+  { key: 'miryang.loan_img_1', value: '', type: 'image', screen: 'miryang-main', label: '대출 1단계 이미지' },
+  { key: 'miryang.loan_img_2', value: '', type: 'image', screen: 'miryang-main', label: '대출 2단계 이미지' },
+  { key: 'miryang.loan_img_3', value: '', type: 'image', screen: 'miryang-main', label: '대출 3단계 이미지' },
+  { key: 'miryang.loan_img_4', value: '', type: 'image', screen: 'miryang-main', label: '대출 4단계 이미지' },
+  { key: 'miryang.loan_img_5', value: '', type: 'image', screen: 'miryang-main', label: '대출 5단계 이미지' },
+  { key: 'miryang.loan_img_6', value: '', type: 'image', screen: 'miryang-main', label: '대출 6단계 이미지' },
+  { key: 'miryang.loan_img_7', value: '', type: 'image', screen: 'miryang-main', label: '대출 7단계 이미지' },
+  { key: 'miryang.return_title', value: '반납', type: 'text', screen: 'miryang-main', label: '반납 섹션 제목' },
+  { key: 'miryang.return_step_1', value: '[반납]선택', type: 'text', screen: 'miryang-main', label: '반납 1단계' },
+  { key: 'miryang.return_step_2', value: '도서인식', type: 'text', screen: 'miryang-main', label: '반납 2단계' },
+  { key: 'miryang.return_step_3', value: '도서투입', type: 'text', screen: 'miryang-main', label: '반납 3단계' },
+  { key: 'miryang.return_step_4', value: '반납완료', type: 'text', screen: 'miryang-main', label: '반납 4단계' },
+  { key: 'miryang.return_img_1', value: '', type: 'image', screen: 'miryang-main', label: '반납 1단계 이미지' },
+  { key: 'miryang.return_img_2', value: '', type: 'image', screen: 'miryang-main', label: '반납 2단계 이미지' },
+  { key: 'miryang.return_img_3', value: '', type: 'image', screen: 'miryang-main', label: '반납 3단계 이미지' },
+  { key: 'miryang.return_img_4', value: '', type: 'image', screen: 'miryang-main', label: '반납 4단계 이미지' },
+  { key: 'miryang.logo_image', value: '', type: 'image', screen: 'miryang-main', label: '밀양시 로고' },
+  { key: 'miryang.contact_1', value: '대출 / 반납: 055-359-6026 (밀양시립도서관)', type: 'text', screen: 'miryang-main', label: '문의처 1' },
+  { key: 'miryang.contact_2', value: '시스템장애: 02-2024-9999(내선4번) (주)이씨오', type: 'text', screen: 'miryang-main', label: '문의처 2' },
+  { key: 'miryang.start_button', value: '시작하기', type: 'text', screen: 'miryang-main', label: '시작 버튼' },
+  { key: 'miryang.background_color', value: '', type: 'color', screen: 'miryang-main', label: '안내 배경색' },
+  { key: 'miryang.background_image_url', value: '', type: 'image', screen: 'miryang-main', label: '안내 배경이미지' },
+  { key: 'miryang.background_fit', value: 'cover', type: 'text', screen: 'miryang-main', label: '안내 배경 맞춤' },
+  { key: 'guide.miryang-main', value: '{"title":"도서관 안내","steps":["스마트도서관 이용 방법을 확인하세요.","준비가 되면 “시작하기”를 눌러 이용을 시작합니다."]}', type: 'json', screen: 'miryang-main', label: '안내 가이드' },
+  // ── 방문 회원가입 방법 ──
+  { key: 'signup.title', value: '도서관 방문 회원가입 방법', type: 'text', screen: 'signup-guide', label: '가입안내 제목' },
+  { key: 'signup.step_1', value: '신분증 필수 지참(밀양거주자만 발급가능)', type: 'text', screen: 'signup-guide', label: '가입 1단계' },
+  { key: 'signup.step_2', value: '2층 종합자료실 도서관 사서에게 신분증 제출', type: 'text', screen: 'signup-guide', label: '가입 2단계' },
+  { key: 'signup.step_3', value: '밀양거주 인증', type: 'text', screen: 'signup-guide', label: '가입 3단계' },
+  { key: 'signup.step_4', value: '도서관 사서 우측 자료검색대 키오스크에서 회원가입', type: 'text', screen: 'signup-guide', label: '가입 4단계' },
+  { key: 'signup.step_5', value: '도서관 사서에게 말하고 사진찍고 회원카드 발급 받기', type: 'text', screen: 'signup-guide', label: '가입 5단계' },
+  { key: 'signup.background_color', value: '', type: 'color', screen: 'signup-guide', label: '가입안내 배경색' },
+  { key: 'signup.background_image_url', value: '', type: 'image', screen: 'signup-guide', label: '가입안내 배경이미지' },
+  { key: 'signup.background_fit', value: 'cover', type: 'text', screen: 'signup-guide', label: '가입안내 배경 맞춤' },
+  { key: 'guide.portal', value: '{"title":"대기 화면","steps":["빌리려면 “대출”, 돌려주려면 “반납”을 누릅니다.","처음이면 “회원가입” 안내를 확인하세요.","인기 도서를 눌러 상세 정보를 볼 수 있습니다."]}', type: 'json', screen: 'portal', label: '포털 가이드' },
+  // ── 대기 포털 부버튼/히어로 동영상 (관리자 구성, signup 제외가 기본) ──
+  { key: 'portal.subbuttons', value: '["history","survey","guide"]', type: 'json', screen: 'portal', label: '포털 부버튼 구성' },
+  { key: 'portal.survey_enabled', value: 'false', type: 'text', screen: 'portal', label: '설문조사 버튼 표시(true/false)' },
+  { key: 'portal.hero_video', value: '', type: 'image', screen: 'portal', label: '포털 히어로 동영상(mp4)' },
+  { key: 'guide.signup-guide', value: '{"title":"회원가입 방법","steps":["도서관 방문 회원가입 순서를 확인하세요.","신분증을 지참하고 2층 종합자료실을 방문하세요."]}', type: 'json', screen: 'signup-guide', label: '가입안내 가이드' },
+  // ── 대출/반납 절차 순서 (관리자 편집용, 프론트 단계 스트립과 동일 순서) ──
+  { key: 'loanflow.order', value: '["[대출]선택","도서확인","회원인증","비밀번호 입력","대출처리","영수증발급","처리완료"]', type: 'json', screen: 'main-menu', label: '대출 절차 순서' },
+  { key: 'returnflow.order', value: '["[반납]선택","도서인식","도서투입","반납완료"]', type: 'json', screen: 'main-menu', label: '반납 절차 순서' },
   // ── 글로벌 설정 ──
+
+  // ── 대출처리/영수증/이력/도서상세/대기배너 (ECO 흐름) ──
+  { key: 'loandispense.title', value: '대출처리', type: 'text', screen: 'loan-dispense', label: '수령 제목' },
+  { key: 'loanreceipt.title', value: '대출완료', type: 'text', screen: 'receipt', label: '대출 영수증 제목' },
+  { key: 'returnreceipt.title', value: '반납완료', type: 'text', screen: 'receipt', label: '반납 영수증 제목' },
+  { key: 'receipt.print_button', value: '출력', type: 'text', screen: 'receipt', label: '출력 버튼' },
+  { key: 'receipt.skip_button', value: '출력 안 함', type: 'text', screen: 'receipt', label: '출력안함 버튼' },
+  { key: 'loanhistory.title', value: '대출 이력', type: 'text', screen: 'loan-history', label: '이력 제목' },
+  { key: 'bookdetail.add_button', value: '책바구니 담기', type: 'text', screen: 'loan-select', label: '담기 버튼' },
+  { key: 'bookdetail.related_title', value: '연관도서', type: 'text', screen: 'loan-select', label: '연관도서 제목' },
+  { key: 'idle.banner_1', value: '', type: 'image', screen: 'idle', label: '대기 배너 1' },
+  { key: 'idle.banner_2', value: '', type: 'image', screen: 'idle', label: '대기 배너 2' },
+  { key: 'idle.banner_3', value: '', type: 'image', screen: 'idle', label: '대기 배너 3' },
+  { key: 'guide.loan-dispense', value: '{"title":"도서 수령","steps":["배출구에서 도서를 한 권씩 수령하세요.","화면에 나오는 순서대로 받으면 됩니다.","다 받으면 자동으로 넘어갑니다."]}', type: 'json', screen: 'loan-dispense', label: '수령 가이드' },
+  { key: 'guide.receipt', value: '{"title":"영수증 발급","steps":["영수증이 필요하면 “출력”을 누릅니다.","필요 없으면 “출력 안 함”을 누릅니다.","둘 중 하나를 누르면 마무리 화면으로 갑니다."]}', type: 'json', screen: 'receipt', label: '영수증 가이드' },
+  { key: 'guide.loan-history', value: '{"title":"대출 이력","steps":["지금 빌린 책과 반납 날짜를 확인하세요.","돌려줄 책이 있으면 “반납하러 가기”를 누릅니다."]}', type: 'json', screen: 'loan-history', label: '이력 가이드' },
   { key: 'global.library_name', value: '스마트 도서관', type: 'text', screen: 'global', label: '도서관 이름' },
   { key: 'global.library_subtitle', value: '시민과 함께하는 평생학습 도서관', type: 'text', screen: 'global', label: '도서관 부제목' },
   { key: 'global.primary_color', value: '#2563eb', type: 'color', screen: 'global', label: '메인 컬러' },
   { key: 'global.accent_color', value: '#16a34a', type: 'color', screen: 'global', label: '강조 컬러' },
+  { key: 'ticker.weather', value: '맑음/13.0℃', type: 'text', screen: 'global', label: '티커 날씨' },
+  { key: 'ticker.notice', value: '24시간 도서 대출/반납이 가능한 스마트도서관입니다.', type: 'text', screen: 'global', label: '티커 공지' },
 ];
 
 /**

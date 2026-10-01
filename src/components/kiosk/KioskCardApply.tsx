@@ -15,8 +15,11 @@
 
 import { motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
-import { Smartphone, CreditCard, Zap, ArrowLeft } from 'lucide-react';
+import { useKioskSpeak } from '@/hooks/useKioskSpeak';
+import { Smartphone, CreditCard, Zap, ArrowLeft, BookMarked } from 'lucide-react';
 import { CmsText } from '@/components/kiosk/CmsText';
+import { useScreenTheme } from '@/components/kiosk/CmsMedia';
+import { useCmsText } from '@/hooks/useCmsContent';
 
 /** 버튼 진입 애니메이션 variants */
 const cardVariants = {
@@ -29,6 +32,9 @@ const cardVariants = {
 };
 
 export default function KioskCardApply() {
+  const cardApplyTitle = useCmsText('cardapply.title', '도서증 발급');
+  const theme = useScreenTheme('card-apply', '#0b1120');
+  useKioskSpeak(`${cardApplyTitle}. 발급받을 도서증 종류를 선택해주세요.`);
   const { setScreen, setKioskMode, setCardApplication } = useAppStore();
 
   /** 뒤로가기 */
@@ -78,7 +84,7 @@ export default function KioskCardApply() {
   return (
     <div
       className="flex flex-col h-screen"
-      style={{ background: '#0b1120' }}
+      style={theme.style}
     >
       {/* 상단 헤더 */}
       <header className="flex items-center px-6 pt-8 pb-4">
@@ -199,6 +205,18 @@ export default function KioskCardApply() {
           </div>
         </motion.button>
       </main>
+
+      {/* 오프라인 방문 회원가입 방법 안내 */}
+      <footer className="px-8 pb-8">
+        <button
+          onClick={() => setScreen('signup-guide')}
+          className="w-full h-12 rounded-xl border border-sky-500/40 bg-sky-500/10 text-sky-300 text-sm font-semibold flex items-center justify-center gap-2"
+          aria-label="오프라인 회원가입 방법 보기"
+        >
+          <BookMarked className="w-5 h-5" />
+          오프라인 회원가입 방법 보기
+        </button>
+      </footer>
     </div>
   );
 }

@@ -1167,7 +1167,7 @@
 │  │                          │  │
 │  │  테스트 계정 안내        │  │ ← 개발 환경에서만 표시
 │  │  이메일: superadmin@...  │  │
-│  │  비밀번호: admin1234     │  │
+│  │  비밀번호: 서버 설정값    │  │ ← ADMIN_SEED_PASSWORD (하드코딩 금지)
 │  └─────────────────────────┘  │
 │                               │
 └───────────────────────────────┘
@@ -1189,13 +1189,13 @@
 | 기본 | "로그인" (LogIn 아이콘) | — |
 | 로딩 | 회전 스피너 + "로그인 중..." | 버튼 disabled, 입력 disabled |
 
-#### 기본 관리자 계정
+#### 기본 관리자 계정 (비밀번호 = `ADMIN_SEED_PASSWORD` 환경변수, 하드코딩 없음)
 
-| 이메일 | 비밀번호 | 역할 |
-|---|---|---|
-| `superadmin@library.go.kr` | `admin1234` | super_admin |
-| `admin@library.go.kr` | `admin1234` | admin |
-| `operator@library.go.kr` | `admin1234` | operator |
+| 이메일 | 역할 |
+|---|---|
+| `superadmin@library.go.kr` | super_admin |
+| `admin@library.go.kr` | admin |
+| `operator@library.go.kr` | operator |
 
 ---
 

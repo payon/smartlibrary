@@ -13,18 +13,45 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
-import type { BookItem } from '@/stores/useAppStore';
+import { EcoHeader, EcoSteps, EcoUserPill, EcoTicker, LOAN_STEPS } from '@/components/kiosk/eco/EcoChrome';
+import { useKioskSpeak } from '@/hooks/useKioskSpeak';
+import type { BookItem, LoanItem } from '@/stores/useAppStore';
 import { BOOK_CATEGORIES, MAX_LOAN_COUNT } from '@/lib/constants';
 import { Search, X, ArrowLeft, Check, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { CmsText } from '@/components/kiosk/CmsText';
+import BookDetailModal from '@/components/kiosk/BookDetailModal';
+import { useScreenTheme } from '@/components/kiosk/CmsMedia';
+import { useCmsText } from '@/hooks/useCmsContent';
 
 export default function KioskLoanSelect() {
-  const { selectedBooks, addBook, removeBook, setScreen, prevScreen } = useAppStore();
+  const loanSelectTitle = useCmsText('loanselect.title', '도서를 선택해주세요');
+  const theme = useScreenTheme('loan-select');
+  useKioskSpeak(`${loanSelectTitle}. 도서를 선택해주세요. 최대 2권까지 대출할 수 있습니다.`);
+  const { selectedBooks, addBook, removeBook, setScreen, prevScreen, authenticatedUser, setKioskMode } = useAppStore();
   const [books, setBooks] = useState<BookItem[]>([]);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('전체');
   const [loading, setLoading] = useState(true);
+  const [activeLoanCount, setActiveLoanCount] = useState<number | null>(null);
+  const [detailBook, setDetailBook] = useState<BookItem | null>(null);
+
+  /** 내 활성 대출 권수 조회 (상한 도달 시 반납 유도) */
+  useEffect(() => {
+    if (!authenticatedUser) return;
+    fetch(`/api/loans?userId=${authenticatedUser.id}`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((loans: LoanItem[]) => {
+        setActiveLoanCount(loans.filter((l) => l.status === 'active').length);
+      })
+      .catch(() => {});
+  }, [authenticatedUser]);
+
+  /** 반납하러 가기 (대출 상한 도달 시, 회원증 인식부터) */
+  const handleGoReturn = () => {
+    setKioskMode('return');
+    setScreen('auth-scan');
+  };
 
   /** 도서 목록 조회 */
   useEffect(() => {
@@ -69,17 +96,20 @@ export default function KioskLoanSelect() {
     }
   };
 
-  /** 다음 단계로 이동 */
+  /** 다음 단계로 이동 (선택 → 도서확인) */
   const handleNext = () => {
     if (selectedBooks.length === 0) return;
     setScreen('loan-confirm');
   };
 
   return (
-    <div className="kiosk-screen kiosk-light-bg flex flex-col">
+    <div className="kiosk-screen eco-bg flex flex-col" style={theme.style}>
+      <EcoHeader title="도서대출" />
+      <EcoSteps steps={LOAN_STEPS} current={1} />
+      <EcoUserPill />
       {/* 상단 타이틀 */}
       <header className="px-5 pt-6 pb-3">
-        <h1 className="text-xl font-bold text-slate-800">
+        <h1 className="text-3xl font-bold text-center eco-title-text">
           <CmsText contentKey="loanselect.title" fallback="도서를 선택해주세요" />
         </h1>
         <div className="flex items-center justify-between mt-1">
@@ -100,6 +130,21 @@ export default function KioskLoanSelect() {
           </div>
         </div>
       </header>
+
+      {/* 대출 상한 도달 안내 (이미 빌린 경우 반납 유도) */}
+      {activeLoanCount !== null && activeLoanCount >= MAX_LOAN_COUNT && (
+        <div className="mx-5 mb-3 rounded-xl border border-amber-300 bg-amber-50 p-3 flex items-center gap-2">
+          <p className="flex-1 text-sm text-amber-700">
+            이미 {activeLoanCount}권을 대출 중입니다. 새로 빌리려면 먼저 반납해주세요.
+          </p>
+          <button
+            onClick={handleGoReturn}
+            className="shrink-0 h-10 px-4 rounded-lg bg-amber-500 text-white text-sm font-semibold"
+          >
+            반납하러 가기
+          </button>
+        </div>
+      )}
 
       {/* 검색 바 */}
       <div className="px-5 mb-3">
@@ -181,8 +226,12 @@ export default function KioskLoanSelect() {
                     isSelected ? 'border-sky-500 shadow-md' : isAtLimit ? 'border-slate-200 opacity-50' : 'border-slate-100'
                   }`}
                 >
-                  {/* 도서 표지 */}
-                  <div className="aspect-[2/3] bg-slate-100 relative">
+                  {/* 도서 표지 (탭 → 상세) */}
+                  <button
+                    onClick={() => setDetailBook(book)}
+                    className="aspect-[2/3] bg-slate-100 relative w-full text-left"
+                    aria-label={`${book.title} 상세 보기`}
+                  >
                     {book.coverUrl ? (
                       <img
                         src={book.coverUrl}
@@ -212,7 +261,7 @@ export default function KioskLoanSelect() {
                         </span>
                       </div>
                     )}
-                  </div>
+                  </button>
 
                   {/* 도서 정보 */}
                   <div className="p-2.5">
@@ -247,7 +296,7 @@ export default function KioskLoanSelect() {
       <footer className="pb-8 px-5 flex gap-3">
         <button
           onClick={prevScreen}
-          className="kiosk-btn bg-slate-200 hover:bg-slate-300 text-slate-700 flex-1"
+          className="eco-btn-secondary flex-1"
         >
           <ArrowLeft className="w-5 h-5" />
           이전
@@ -255,12 +304,19 @@ export default function KioskLoanSelect() {
         <button
           onClick={handleNext}
           disabled={selectedBooks.length === 0}
-          className="kiosk-btn bg-slate-800 hover:bg-slate-700 text-white flex-1 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="eco-btn-primary flex-1 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <CmsText contentKey="loanselect.confirm_button_text" fallback="다음 단계" />
           <ChevronRight className="w-5 h-5" />
         </button>
       </footer>
+      <EcoTicker />
+      <BookDetailModal
+        book={detailBook}
+        books={filteredBooks}
+        onClose={() => setDetailBook(null)}
+        onSelectBook={(b) => setDetailBook(b)}
+      />
     </div>
   );
 }

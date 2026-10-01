@@ -53,6 +53,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { toast } from 'sonner';
+import AdminHero from '@/components/admin/AdminHero';
 import Image from 'next/image';
 
 // ============================================================================
@@ -542,22 +543,7 @@ export default function CardsSection() {
   return (
     <div className="space-y-5">
       {/* ──────── Hero Banner ──────── */}
-      <div className="relative w-full h-[100px] rounded-xl overflow-hidden border border-slate-700 mb-2">
-        <Image
-          src="/images/admin/card-process.png"
-          alt="카드 발급 배너"
-          fill
-          className="object-cover"
-          priority
-        />
-        <div className="absolute inset-0 bg-gradient-to-r from-slate-900/90 via-slate-900/60 to-transparent" />
-        <div className="absolute inset-0 flex items-center px-6">
-          <div>
-            <p className="text-lg font-bold text-white">도서카드 발급 관리</p>
-            <p className="text-sm text-slate-300">신청부터 발급까지 전체 프로세스를 관리합니다</p>
-          </div>
-        </div>
-      </div>
+      <AdminHero icon={CreditCard} title="도서카드 발급 관리" subtitle="신청부터 발급까지 전체 프로세스를 관리합니다" accent="amber" />
 
       {/* ── 섹션 헤더 (키오스크 스타일) ─────────────────────────────── */}
       <div className="relative">
@@ -566,17 +552,6 @@ export default function CardsSection() {
           도서카드 발급 관리
         </h2>
         <div className="mt-1.5 h-[3px] w-32 rounded-full" style={{ background: 'linear-gradient(90deg, #0ea5e9, #38bdf8, transparent)' }} />
-      </div>
-
-      {/* ── 카드 발급 프로세스 비주얼 ─────────────────────────────── */}
-      <div className="relative w-full h-[80px] rounded-xl overflow-hidden border border-slate-700/50">
-        <Image
-          src="/images/admin/card-process.png"
-          alt="카드 발급 프로세스"
-          fill
-          className="object-cover opacity-50"
-        />
-        <div className="absolute inset-0 bg-gradient-to-r from-slate-900/70 via-transparent to-slate-900/70" />
       </div>
 
       {/* ── 발급 워크플로우 파이프라인 ─────────────────────────────── */}

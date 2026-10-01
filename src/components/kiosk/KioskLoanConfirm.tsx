@@ -9,17 +9,45 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
+import { EcoHeader, EcoSteps, EcoUserPill, EcoTicker, LOAN_STEPS } from '@/components/kiosk/eco/EcoChrome';
+import { useKioskSpeak } from '@/hooks/useKioskSpeak';
 import { LOAN_PERIOD_DAYS } from '@/lib/constants';
 import { ArrowLeft, CheckCircle2, User } from 'lucide-react';
 import { toast } from 'sonner';
 import { CmsText } from '@/components/kiosk/CmsText';
+import { useScreenTheme } from '@/components/kiosk/CmsMedia';
+import { useCmsText } from '@/hooks/useCmsContent';
 
 export default function KioskLoanConfirm() {
-  const { selectedBooks, authenticatedUser, setScreen, prevScreen } = useAppStore();
+  const loanConfirmTitle = useCmsText('loanconfirm.title', '대출 정보를 확인해주세요');
+  const theme = useScreenTheme('loan-confirm');
+  useKioskSpeak(`${loanConfirmTitle}. 대출 정보를 확인한 뒤 대출하기를 눌러주세요.`);
+  const { selectedBooks, authenticatedUser, setScreen, prevScreen, autoLoan, setAutoLoan } = useAppStore();
   const [isProcessing, setIsProcessing] = useState(false);
+  const [loanError, setLoanError] = useState<{
+    message: string;
+    overdueDays?: number;
+    blockDays?: number;
+  } | null>(null);
+
+  const autoFiredRef = useRef(false);
+
+  /** 인증 후 복귀 시 자동 대출 실행 (확인→인증→처리 흐름) */
+  useEffect(() => {
+    if (autoLoan && !autoFiredRef.current && authenticatedUser?.pin && selectedBooks.length > 0) {
+      autoFiredRef.current = true;
+      setAutoLoan(false);
+      handleLoan();
+    }
+    return () => {
+      setAutoLoan(false);
+      autoFiredRef.current = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoLoan, authenticatedUser, selectedBooks.length]);
 
   /** 반납 예정일 계산 */
   const dueDate = new Date();
@@ -28,7 +56,22 @@ export default function KioskLoanConfirm() {
 
   /** 대출 실행 (한 번에 모든 도서 처리) */
   const handleLoan = async () => {
-    if (!authenticatedUser || selectedBooks.length === 0) return;
+    if (selectedBooks.length === 0) {
+      toast.error('선택된 도서가 없습니다. 도서를 먼저 선택해주세요.');
+      setScreen('loan-select');
+      return;
+    }
+    if (!authenticatedUser) {
+      toast.success('도서 확인 완료. 회원인증을 진행합니다.');
+      setAutoLoan(true);
+      setScreen('auth-scan');
+      return;
+    }
+    if (!authenticatedUser.pin) {
+      toast.error('PIN 인증이 필요합니다');
+      setScreen('auth-pin');
+      return;
+    }
 
     setIsProcessing(true);
 
@@ -47,10 +90,25 @@ export default function KioskLoanConfirm() {
       if (res.ok) {
         const data = await res.json();
         toast.success(`${data.loanedCount}권 대출이 완료되었습니다`);
-        setScreen('loan-complete');
+        setLoanError(null);
+        useAppStore.getState().setDispenseQueue(
+          selectedBooks.map((b) => ({ title: b.title, author: b.author }))
+        );
+        useAppStore.getState().clearSelectedBooks();
+        setScreen('loan-dispense');
       } else {
         const data = await res.json().catch(() => ({}));
-        toast.error(data.error || '대출 처리에 실패했습니다. 다시 시도해주세요.');
+        const message = data.error || '대출 처리에 실패했습니다. 다시 시도해주세요.';
+        if (data.code === 'OVERDUE_BLOCKED') {
+          setLoanError({
+            message,
+            overdueDays: data.overdueDays,
+            blockDays: data.blockDays ?? data.penaltyRemainingDays,
+          });
+        } else {
+          setLoanError({ message });
+        }
+        toast.error(message);
       }
     } catch {
       toast.error('네트워크 오류가 발생했습니다. 다시 시도해주세요.');
@@ -60,10 +118,13 @@ export default function KioskLoanConfirm() {
   };
 
   return (
-    <div className="kiosk-screen kiosk-light-bg flex flex-col">
+    <div className="kiosk-screen eco-bg flex flex-col" style={theme.style}>
+      <EcoHeader title="도서대출" />
+      <EcoSteps steps={LOAN_STEPS} current={2} />
+      <EcoUserPill />
       {/* 상단 타이틀 */}
       <header className="px-5 pt-6 pb-3">
-        <h1 className="text-xl font-bold text-slate-800">
+        <h1 className="text-3xl font-bold text-center eco-title-text">
           <CmsText contentKey="loanconfirm.title" fallback="대출 정보를 확인해주세요" />
         </h1>
       </header>
@@ -71,7 +132,7 @@ export default function KioskLoanConfirm() {
       {/* 콘텐츠 영역 */}
       <div className="flex-1 overflow-y-auto kiosk-scroll px-5 pb-4">
         {/* 사용자 정보 카드 */}
-        <div className="bg-slate-50 rounded-xl p-4 mb-4 flex items-center gap-3">
+        <div className="eco-card p-4 mb-4 flex items-center gap-3">
           <div className="w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center">
             <User className="w-6 h-6 text-slate-500" />
           </div>
@@ -113,6 +174,26 @@ export default function KioskLoanConfirm() {
           </div>
         </div>
 
+        {/* 연체 차단 안내 (서버가 대출을 거부한 경우) */}
+        {loanError && (
+          <div
+            className={`rounded-xl p-4 mb-3 ${loanError.overdueDays ? 'bg-red-50 border border-red-200' : 'bg-slate-100 border border-slate-200'}`}
+            role="alert"
+          >
+            <p className={`text-sm font-semibold ${loanError.overdueDays ? 'text-red-700' : 'text-slate-700'}`}>
+              ⚠ 대출할 수 없습니다
+            </p>
+            <p className={`text-sm mt-1 ${loanError.overdueDays ? 'text-red-600' : 'text-slate-600'}`}>
+              {loanError.message}
+            </p>
+            {loanError.overdueDays ? (
+              <p className="text-xs text-red-500 mt-1">
+                연체 {loanError.overdueDays}일 → 연체일수만큼 대여가 제한됩니다. 연체 도서를 먼저 반납해주세요.
+              </p>
+            ) : null}
+          </div>
+        )}
+
         {/* 요약 */}
         <div className="bg-sky-50 rounded-xl p-4">
           <div className="flex justify-between items-center">
@@ -130,7 +211,7 @@ export default function KioskLoanConfirm() {
       <footer className="pb-8 px-5 flex gap-3">
         <button
           onClick={prevScreen}
-          className="kiosk-btn bg-slate-200 hover:bg-slate-300 text-slate-700 flex-1"
+          className="eco-btn-secondary flex-1"
           disabled={isProcessing}
         >
           <ArrowLeft className="w-5 h-5" />
@@ -139,7 +220,7 @@ export default function KioskLoanConfirm() {
         <button
           onClick={handleLoan}
           disabled={isProcessing}
-          className="kiosk-btn bg-slate-800 hover:bg-slate-700 text-white flex-[2] disabled:opacity-60"
+          className="eco-btn-primary flex-[2] disabled:opacity-60"
         >
           {isProcessing ? (
             <>
@@ -154,6 +235,7 @@ export default function KioskLoanConfirm() {
           )}
         </button>
       </footer>
+      <EcoTicker />
     </div>
   );
 }

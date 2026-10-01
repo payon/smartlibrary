@@ -18,8 +18,12 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
-import { ArrowLeft, User, CalendarDays, Phone, MapPin, CreditCard, Send, AlertCircle } from 'lucide-react';
+import { useKioskSpeak } from '@/hooks/useKioskSpeak';
+import { ArrowLeft, User, CalendarDays, Phone, MapPin, CreditCard, Send, AlertCircle, Info, Sparkles } from 'lucide-react';
+import { toast } from 'sonner';
 import { CmsText } from '@/components/kiosk/CmsText';
+import { useScreenTheme } from '@/components/kiosk/CmsMedia';
+import { useCmsText } from '@/hooks/useCmsContent';
 
 /** 폼 에러 타입 */
 interface FormErrors {
@@ -29,6 +33,9 @@ interface FormErrors {
 }
 
 export default function KioskCardForm() {
+  const cardFormTitle = useCmsText('cardform.title', '개인정보 입력');
+  const theme = useScreenTheme('card-form', '#0b1120');
+  useKioskSpeak(`${cardFormTitle}. 개인정보를 입력해주세요.`);
   const { cardApplication, setCardApplication, setCardResult, setScreen } = useAppStore();
 
   const [name, setName] = useState(cardApplication?.applicantName ?? '');
@@ -45,6 +52,18 @@ export default function KioskCardForm() {
   /** 뒤로가기 */
   const handleBack = () => {
     setScreen('card-apply');
+  };
+
+  /** 데모 정보로 채우기 (시뮬레이터 연습용 가상 정보) */
+  const handleDemoFill = () => {
+    setName('데모연습');
+    setBirthDate('19900101');
+    setPhone('01012345678');
+    setAddress('서울시 연습구 따라하기로 123');
+    setErrors({});
+    toast.success('연습용 정보가 입력되었습니다', {
+      description: '실제 개인정보가 아닙니다. 그대로 신청하기를 눌러보세요.',
+    });
   };
 
   /** 폼 유효성 검증 */
@@ -101,12 +120,12 @@ export default function KioskCardForm() {
 
       if (res.ok) {
         const data = await res.json();
-        // API 응답에서 PIN 및 카드번호 저장
+        // API 응답에서 PIN 및 카드번호 저장 (백엔드는 PIN을 반환하지 않을 수 있음)
         if (data.user) {
           setCardResult({
             cardId: data.card?.id || null,
             cardNumber: data.card?.cardNumber || data.user.cardNumber || null,
-            pin: data.user.pin || null,
+            pin: data.user?.pin ?? null,
             userId: data.user.id || null,
           });
         } else if (data.card) {
@@ -154,7 +173,7 @@ export default function KioskCardForm() {
   return (
     <div
       className="flex flex-col h-screen"
-      style={{ background: '#0b1120' }}
+      style={theme.style}
     >
       {/* 상단 헤더 */}
       <header className="flex items-center px-6 pt-8 pb-4">
@@ -201,6 +220,26 @@ export default function KioskCardForm() {
 
       {/* 입력 폼 */}
       <main className="flex-1 overflow-y-auto px-8 space-y-5">
+        {/* 연습용 안내 박스 (시뮬레이터 — 실제 개인정보 입력 불필요) */}
+        <div
+          className="rounded-xl border border-sky-500/30 bg-sky-500/10 p-3 flex items-start gap-2"
+          role="note"
+          aria-label="연습 안내"
+        >
+          <Info className="w-5 h-5 text-sky-400 shrink-0 mt-0.5" />
+          <p className="text-sky-200/90 text-sm leading-relaxed">
+            연습용 화면입니다. 진짜 개인정보를 입력하지 마세요.
+            아래 <strong>데모 정보로 채우기</strong>를 누르면 연습용 정보가 자동 입력됩니다.
+          </p>
+        </div>
+        <button
+          onClick={handleDemoFill}
+          className="w-full h-12 rounded-xl bg-sky-600/20 border border-sky-500/40 text-sky-300 font-semibold flex items-center justify-center gap-2"
+          aria-label="데모 정보로 채우기"
+        >
+          <Sparkles className="w-5 h-5" />
+          데모 정보로 채우기
+        </button>
         {/* 이름 */}
         <motion.div
           initial={{ opacity: 0, x: -15 }}

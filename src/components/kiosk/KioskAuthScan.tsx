@@ -3,9 +3,9 @@
  *
  * [기능]
  * - 회원증 RFID 스캔 안내 (CMS 관리)
- * - 2초 후 자동 인식 시뮬레이션 → DB에서 사용자 조회 → authenticatedUser 설정
- * - 인식 성공 메시지 표시 후 PIN 입력으로 이동
- * - 회원증 없이 이용하기 옵션 (데모용) → PIN 입력으로 이동
+ * - 카드 태그 시뮬레이션: 데모 회원증 인식 → authenticatedUser 설정
+ * - 대출 모드 → PIN 입력으로 이동 (본인 확인)
+ * - 반납 모드 → PIN 없이 바로 반납 투입으로 이동 (실제 기기와 동일)
  */
 
 'use client';
@@ -13,80 +13,80 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
-import { CreditCard, CheckCircle2, X } from 'lucide-react';
-import { toast } from 'sonner';
 import type { SimUser } from '@/stores/useAppStore';
+import { EcoHeader, EcoSteps, EcoUserPill, EcoTicker, LOAN_STEPS, RETURN_STEPS } from '@/components/kiosk/eco/EcoChrome';
+import { useKioskSpeak } from '@/hooks/useKioskSpeak';
+import { CreditCard, CheckCircle2, X } from 'lucide-react';
 import { CmsText } from '@/components/kiosk/CmsText';
+import { useScreenTheme } from '@/components/kiosk/CmsMedia';
+import { useCmsText } from '@/hooks/useCmsContent';
 
 export default function KioskAuthScan() {
-  const { setScreen, prevScreen, setAuthenticatedUser } = useAppStore();
+  const authScanTitle = useCmsText('authscan.title', '회원인증');
+  const theme = useScreenTheme('auth-scan');
+  useKioskSpeak(`${authScanTitle}. 회원증을 카드 리더기에 가져다 대세요. 회원증이 없으면 회원증 없이 이용하기를 눌러주세요.`);
+  const { setScreen, prevScreen, kioskMode, setAuthenticatedUser } = useAppStore();
   const [status, setStatus] = useState<'scanning' | 'recognized' | 'skipped'>('scanning');
 
-  /** DB에서 데모 사용자를 조회하여 authenticatedUser에 설정 */
-  const fetchAndSetDemoUser = async (): Promise<boolean> => {
+  const flowTitle = kioskMode === 'return' ? '도서반납' : '도서대출';
+  const flowSteps = kioskMode === 'return' ? RETURN_STEPS : LOAN_STEPS;
+
+  /** 데모 회원증 인식 (RFID 태그 시뮬레이션 — PIN 입력 없음) */
+  const recognizeDemoCard = async (): Promise<void> => {
     try {
-      // PIN 1234로 사용자 조회
       const res = await fetch('/api/users', { headers: { 'X-PIN': '1234' } });
       if (res.ok) {
         const users: SimUser[] = await res.json();
         if (users.length > 0) {
           setAuthenticatedUser({ ...users[0], pin: '1234' });
-          return true;
-        }
-      }
-
-      // 다른 PIN으로 재시도 (0001~0010)
-      for (let i = 1; i <= 10; i++) {
-        const tryPin = String(i).padStart(4, '0');
-        const retryRes = await fetch('/api/users', { headers: { 'X-PIN': tryPin } });
-        if (retryRes.ok) {
-          const retryUsers: SimUser[] = await retryRes.json();
-          if (retryUsers.length > 0) {
-            setAuthenticatedUser({ ...retryUsers[0], pin: tryPin });
-            return true;
-          }
         }
       }
     } catch {
-      // 네트워크 오류 - 데모 모드로 계속 진행
+      // 인식 실패 시에도 화면은 진행 (다음 화면에서 안내)
     }
-    return false;
   };
+
+  /** 다음 화면 결정 (반납은 PIN 없이 바로 투입 — 실제 기기와 동일) */
+  const getNextScreen = () => (kioskMode === 'return' ? 'return-insert' as const : 'auth-pin' as const);
 
   /** 2초 후 자동 인식 시뮬레이션 */
   useEffect(() => {
+    let cancelled = false;
     const timer = setTimeout(() => {
-      setStatus('recognized');
+      if (!cancelled) setStatus('recognized');
     }, 2000);
     const moveTimer = setTimeout(async () => {
-      // 스캔 인식 후 DB에서 사용자 조회
-      await fetchAndSetDemoUser();
-      // PIN 화면으로 이동 (사용자가 있든 없든 PIN 화면에서 처리)
-      setScreen('auth-pin');
+      if (cancelled) return;
+      await recognizeDemoCard();
+      if (!cancelled) setScreen(getNextScreen());
     }, 3500);
     return () => {
+      cancelled = true;
       clearTimeout(timer);
       clearTimeout(moveTimer);
     };
-  }, [setScreen, setAuthenticatedUser]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setScreen, kioskMode]);
 
-  /** 회원증 없이 이용하기 (데모 모드) → PIN 입력으로 이동 */
+  /** 회원증 없이 이용하기 → 다음 화면으로 이동 */
   const handleSkip = async () => {
     setStatus('skipped');
-    // 데모 사용자를 찾아서 설정 (있으면 좋고, 없어도 PIN 화면에서 처리)
-    await fetchAndSetDemoUser();
+    await recognizeDemoCard();
     setTimeout(() => {
-      setScreen('auth-pin');
+      setScreen(getNextScreen());
     }, 500);
   };
 
   return (
-    <div className="kiosk-screen kiosk-dark-bg flex flex-col">
+    <div className="kiosk-screen eco-bg flex flex-col" style={theme.style}>
+      <EcoHeader title={flowTitle} />
+      <EcoSteps steps={flowSteps} current={0} />
+      <EcoUserPill />
       {/* 상단 타이틀 */}
-      <header className="px-6 pt-8 pb-4">
-        <h1 className="text-2xl font-bold text-white">
+      <header className="px-6 pt-6 pb-2">
+        <h2 className="text-3xl font-bold text-center eco-title-text">
           <CmsText contentKey="authscan.title" fallback="회원인증" />
-        </h1>
+        </h2>
       </header>
 
       {/* 메인 스캔 영역 */}
@@ -94,28 +94,28 @@ export default function KioskAuthScan() {
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="text-center"
+          className="eco-card w-full max-w-sm px-6 py-8 text-center"
         >
           {/* 카드 아이콘 및 스캔 애니메이션 */}
-          <div className="relative mb-8">
-            <div className="w-32 h-32 mx-auto rounded-2xl bg-white/5 border-2 border-sky-400/30 flex items-center justify-center">
+          <div className="relative mb-6">
+            <div className="w-28 h-28 mx-auto rounded-2xl bg-sky-50 border-2 border-sky-300/60 flex items-center justify-center">
               {status === 'scanning' ? (
-                <CreditCard className="w-14 h-14 text-sky-400" />
+                <CreditCard className="w-12 h-12 text-sky-500" />
               ) : (
-                <CheckCircle2 className="w-14 h-14 text-emerald-400" />
+                <CheckCircle2 className="w-12 h-12 text-emerald-500" />
               )}
             </div>
 
             {/* 스캔 링 애니메이션 */}
             {status === 'scanning' && (
-              <div className="absolute inset-0 w-32 h-32 mx-auto rounded-2xl card-scan-ring" />
+              <div className="absolute inset-0 w-28 h-28 mx-auto rounded-2xl card-scan-ring" />
             )}
           </div>
 
           {/* 안내 메시지 */}
           {status === 'scanning' && (
             <motion.p
-              className="text-slate-300 text-lg mb-2"
+              className="text-slate-700 text-lg font-semibold mb-2"
               animate={{ opacity: [0.6, 1, 0.6] }}
               transition={{ duration: 2, repeat: Infinity }}
             >
@@ -127,7 +127,7 @@ export default function KioskAuthScan() {
             <motion.p
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="text-emerald-400 text-lg font-semibold"
+              className="text-emerald-600 text-lg font-semibold"
             >
               인식되었습니다
             </motion.p>
@@ -137,39 +137,38 @@ export default function KioskAuthScan() {
             <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="text-sky-300 text-base"
+              className="text-sky-600 text-base"
             >
-              데모 모드로 진행합니다
+              {kioskMode === 'return' ? '반납으로 이동합니다' : 'PIN 입력으로 이동합니다'}
             </motion.p>
           )}
 
           <p className="text-slate-500 text-sm mt-3">
             RFID 카드 리더기에 회원증을 대주세요
           </p>
+
+          {/* 취소 버튼 */}
+          <button
+            onClick={prevScreen}
+            className="eco-btn-secondary w-full mt-6"
+          >
+            <X className="w-5 h-5" />
+            취소
+          </button>
+
+          {/* 데모 모드 스킵 버튼 */}
+          {status === 'scanning' && (
+            <button
+              onClick={handleSkip}
+              className="text-slate-500 hover:text-slate-700 text-sm py-2 mt-1 transition-colors"
+            >
+              <CmsText contentKey="authscan.demo_button_text" fallback="회원증 없이 이용하기" />
+            </button>
+          )}
         </motion.div>
       </main>
 
-      {/* 하단 버튼 영역 */}
-      <footer className="pb-10 px-6 flex flex-col gap-3">
-        {/* 취소 버튼 */}
-        <button
-          onClick={prevScreen}
-          className="kiosk-btn bg-slate-700 hover:bg-slate-600 text-white"
-        >
-          <X className="w-5 h-5" />
-          취소
-        </button>
-
-        {/* 데모 모드 스킵 버튼 */}
-        {status === 'scanning' && (
-          <button
-            onClick={handleSkip}
-            className="text-slate-500 hover:text-slate-300 text-sm py-2 transition-colors"
-          >
-            <CmsText contentKey="authscan.demo_button_text" fallback="회원증 없이 이용하기" />
-          </button>
-        )}
-      </footer>
+      <EcoTicker />
     </div>
   );
 }

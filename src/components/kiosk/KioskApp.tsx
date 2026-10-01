@@ -4,22 +4,28 @@
  * [역할]
  * - page.tsx에서 dynamic(ssr:false)로 불러옴
  * - Zustand 스토어 기반 화면 라우팅
- * - 시드 데이터 초기화
+ * - API 상태 확인 (health check)
+ * - 유휴 자동 로그아웃 (120초)
  * - PWA 상태 표시
  */
 
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
 import type { KioskViewName } from '@/lib/constants';
 import KioskIdleScreen from '@/components/kiosk/KioskIdleScreen';
+import KioskPortal from '@/components/kiosk/KioskPortal';
+import KioskSignupGuide from '@/components/kiosk/KioskSignupGuide';
 import KioskMainMenu from '@/components/kiosk/KioskMainMenu';
 import KioskAuthScan from '@/components/kiosk/KioskAuthScan';
 import KioskAuthPin from '@/components/kiosk/KioskAuthPin';
 import KioskLoanSelect from '@/components/kiosk/KioskLoanSelect';
 import KioskLoanConfirm from '@/components/kiosk/KioskLoanConfirm';
+import KioskLoanDispense from '@/components/kiosk/KioskLoanDispense';
+import KioskLoanHistory from '@/components/kiosk/KioskLoanHistory';
+import KioskReceiptPrompt from '@/components/kiosk/KioskReceiptPrompt';
 import KioskLoanComplete from '@/components/kiosk/KioskLoanComplete';
 import KioskReturnInsert from '@/components/kiosk/KioskReturnInsert';
 import KioskReturnScanning from '@/components/kiosk/KioskReturnScanning';
@@ -35,6 +41,12 @@ function ScreenRouter({ screen }: { screen: KioskViewName }) {
   switch (screen) {
     case 'idle':
       return <KioskIdleScreen />;
+    case 'miryang-main':
+      return <KioskIdleScreen />;
+    case 'portal':
+      return <KioskPortal />;
+    case 'signup-guide':
+      return <KioskSignupGuide />;
     case 'main-menu':
       return <KioskMainMenu />;
     case 'auth-scan':
@@ -45,6 +57,12 @@ function ScreenRouter({ screen }: { screen: KioskViewName }) {
       return <KioskLoanSelect />;
     case 'loan-confirm':
       return <KioskLoanConfirm />;
+    case 'loan-dispense':
+      return <KioskLoanDispense />;
+    case 'loan-history':
+      return <KioskLoanHistory />;
+    case 'receipt':
+      return <KioskReceiptPrompt />;
     case 'loan-complete':
       return <KioskLoanComplete />;
     case 'return-insert':
@@ -72,17 +90,29 @@ function ScreenRouter({ screen }: { screen: KioskViewName }) {
 export default function KioskApp() {
   const screen = useAppStore((s) => s.screen);
   const kioskMode = useAppStore((s) => s.kioskMode);
-  const seededRef = useRef(false);
 
   /* 고유 키: 화면명 + 모드 조합으로 AnimatePresence가 컴포넌트를 재생성하도록 함 */
   const screenKey = screen + '-' + (kioskMode || '');
 
-  /* 시드 데이터 초기화 */
+  /* API 상태 확인 (health check, 실패 무시) */
   useEffect(() => {
-    if (seededRef.current) return;
-    seededRef.current = true;
-    fetch('/api/seed', { method: 'POST' }).catch(() => {});
+    fetch('/api').catch(() => {});
   }, []);
+
+  /* 유휴 자동 로그아웃: 화면 변경 시 타이머 리셋 (첫 화면 복귀) */
+  useEffect(() => {
+    const resetKiosk = () => {
+      const { setAuthenticatedUser, clearSelectedBooks, clearReturnedLoans, setScreen } = useAppStore.getState();
+      setAuthenticatedUser(null);
+      clearSelectedBooks();
+      clearReturnedLoans();
+      setScreen('miryang-main');
+    };
+    const timer = setTimeout(() => {
+      resetKiosk();
+    }, 120000);
+    return () => clearTimeout(timer);
+  }, [screen]);
 
   return (
     <div className="kiosk-frame">

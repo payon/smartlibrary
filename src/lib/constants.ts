@@ -281,7 +281,7 @@ export const SCENARIOS = [
     orderIndex: 5,
     stepsJson: JSON.stringify([
       { step: 1, title: '키오스크 시작하기', description: '키오스크 화면을 터치하여 도서 대여를 선택합니다.' },
-      { step: 2, title: '책 선택하기', description: '빌릴 책을 최대 10권까지 선택합니다. 자동으로 바코드가 스캔됩니다.' },
+      { step: 2, title: '책 선택하기', description: '빌릴 책을 최대 2권까지 선택합니다. 자동으로 바코드가 스캔됩니다.' },
       { step: 3, title: '도서증 바코드 스캔', description: '모바일 도서증 또는 실물 도서증의 바코드를 스캔합니다.' },
       { step: 4, title: '비밀번호 입력', description: '설정한 4자리 비밀번호를 입력합니다.' },
       { step: 5, title: '대여 완료 확인', description: '대여 내역을 확인하고 완료를 누릅니다.' },
@@ -323,6 +323,9 @@ export const OVERDUE_BLOCK_MULTIPLIER = 1;
 /** 키오스크 화면 이름 타입 */
 export type KioskViewName =
   | 'idle'
+  | 'miryang-main'
+  | 'portal'
+  | 'signup-guide'
   | 'main-menu'
   | 'card-apply'
   | 'card-form'
@@ -332,7 +335,10 @@ export type KioskViewName =
   | 'auth-pin'
   | 'loan-select'
   | 'loan-confirm'
+  | 'loan-dispense'
   | 'loan-complete'
+  | 'loan-history'
+  | 'receipt'
   | 'return-insert'
   | 'return-scanning'
   | 'return-confirm'
@@ -341,9 +347,37 @@ export type KioskViewName =
 /** 키오스크 모드 타입 */
 export type KioskMode = 'loan' | 'return' | 'card' | null;
 
+/** 키오스크 화면 한국어 이름 (스크린리더 안내용) */
+export const KIOSK_VIEW_NAMES: Record<KioskViewName, string> = {
+  idle: '대기 화면',
+  'miryang-main': '밀양스마트도서관 안내',
+  'portal': '대기 메인 포털',
+  'signup-guide': '회원가입 방법',
+  'main-menu': '메인 메뉴',
+  'card-apply': '도서증 발급 종류 선택',
+  'card-form': '개인정보 입력',
+  'card-pending': '발급 승인 대기',
+  'card-complete': '도서증 발급 완료',
+  'auth-scan': '회원증 인증',
+  'auth-pin': '비밀번호 입력',
+  'loan-select': '도서 선택',
+  'loan-confirm': '대출 확인',
+  'loan-dispense': '도서 수령',
+  'loan-complete': '대출 완료',
+  'loan-history': '대출 이력',
+  'receipt': '영수증 발급',
+  'return-insert': '도서 투입',
+  'return-scanning': '도서 인식',
+  'return-confirm': '반납 확인',
+  'return-complete': '반납 완료',
+};
+
 /** 키오스크 화면 상수 */
 export const KIOSK_VIEWS = {
   IDLE: 'idle' as const,
+  MIRYANG_MAIN: 'miryang-main' as const,
+  PORTAL: 'portal' as const,
+  SIGNUP_GUIDE: 'signup-guide' as const,
   MAIN_MENU: 'main-menu' as const,
   CARD_APPLY: 'card-apply' as const,
   CARD_FORM: 'card-form' as const,
@@ -353,7 +387,10 @@ export const KIOSK_VIEWS = {
   AUTH_PIN: 'auth-pin' as const,
   LOAN_SELECT: 'loan-select' as const,
   LOAN_CONFIRM: 'loan-confirm' as const,
+  LOAN_DISPENSE: 'loan-dispense' as const,
   LOAN_COMPLETE: 'loan-complete' as const,
+  LOAN_HISTORY: 'loan-history' as const,
+  RECEIPT: 'receipt' as const,
   RETURN_INSERT: 'return-insert' as const,
   RETURN_SCANNING: 'return-scanning' as const,
   RETURN_CONFIRM: 'return-confirm' as const,

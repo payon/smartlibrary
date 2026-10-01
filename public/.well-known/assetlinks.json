@@ -10,13 +10,3 @@
     }
   }
 ]
-/*
- * TWA (Trusted Web Activity) 지원을 위한 Digital Asset Links 파일입니다.
- * Android 앱에서 이 웹사이트를 TWA로 래핑할 때 사용됩니다.
- *
- * [배포 시 필수 작업]
- * 1. package_name을 실제 Android 앱 패키지명으로 변경하세요
- * 2. sha256_cert_fingerprints에 실제 앱 서명 키의 SHA256 지문을 입력하세요
- *    (키스토어에서 다음 명령어로 확인: keytool -list -v -keystore your.keystore -alias youralias)
- * 3. 이 파일은 반드시 https://yourdomain.com/.well-known/assetlinks.json 에 배포되어야 합니다
- */

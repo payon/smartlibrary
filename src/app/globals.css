@@ -108,10 +108,20 @@
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  min-height: 100dvh;
   max-height: 100vh;
+  max-height: 100dvh;
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
+}
+
+/* 시작 버튼 등 핵심 액션 고정 푸터 (모바일 사파리 대응) */
+.kiosk-sticky-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 /* ======================================================================== */
@@ -314,4 +324,222 @@
 
 .qr-glow {
   animation: qrPulse 1.5s ease-in-out infinite;
+}
+
+/* ======================================================================== */
+/* 배리어프리 — 글자 크기 (스토어 fontSize → .kiosk-frame data-fontsize)       */
+/* ======================================================================== */
+
+.kiosk-frame[data-fontsize='large'] {
+  font-size: 112.5%;
+}
+
+.kiosk-frame[data-fontsize='large'] .kiosk-btn {
+  font-size: 1.25rem;
+  min-height: 60px;
+}
+
+.kiosk-frame[data-fontsize='xlarge'] {
+  font-size: 125%;
+}
+
+.kiosk-frame[data-fontsize='xlarge'] .kiosk-btn {
+  font-size: 1.375rem;
+  min-height: 64px;
+}
+
+/* ======================================================================== */
+/* 배리어프리 — 고대비 모드 (data-contrast='high')                             */
+/* ======================================================================== */
+
+.kiosk-frame[data-contrast='high'] .kiosk-dark-bg {
+  background: #000000;
+  color: #ffffff;
+}
+
+.kiosk-frame[data-contrast='high'] .kiosk-light-bg {
+  background: #ffffff;
+  color: #000000;
+}
+
+.kiosk-frame[data-contrast='high'] .text-slate-400,
+.kiosk-frame[data-contrast='high'] .text-slate-500,
+.kiosk-frame[data-contrast='high'] .text-slate-600 {
+  color: inherit;
+  opacity: 0.9;
+}
+
+.kiosk-frame[data-contrast='high'] button:focus-visible,
+.kiosk-frame[data-contrast='high'] a:focus-visible,
+.kiosk-frame[data-contrast='high'] input:focus-visible {
+  outline: 3px solid #facc15;
+  outline-offset: 2px;
+}
+
+/* ======================================================================== */
+/* 배리어프리 — 명확한 키보드 포커스 (기본)                                    */
+/* ======================================================================== */
+
+.kiosk-frame button:focus-visible,
+.kiosk-frame a:focus-visible,
+.kiosk-frame input:focus-visible {
+  outline: 3px solid #38bdf8;
+  outline-offset: 2px;
+}
+
+/* ======================================================================== */
+/* 배리어프리 — 모션 최소화 요청 시 애니메이션 비활성화                         */
+/* ======================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .kiosk-frame *,
+  .kiosk-frame *::before,
+  .kiosk-frame *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ======================================================================== */
+/* 배리어프리 — 스크린리더 전용 시각 숨김 텍스트                               */
+/* ======================================================================== */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ======================================================================== */
+/* 반응형 키오스크 프레임 — 디스플레이 크기별 자동 조정                         */
+/*   모바일/태블릿 세로: 480px (기본)                                          */
+/*   데스크톱·21인치: 560px / 24인치 이상: 640px / 32인치 이상: 680px          */
+/* ======================================================================== */
+
+@media (min-width: 1024px) {
+  .kiosk-frame {
+    max-width: 560px;
+  }
+}
+
+@media (min-width: 1600px) {
+  .kiosk-frame {
+    max-width: 640px;
+  }
+}
+
+@media (min-width: 2000px) {
+  .kiosk-frame {
+    max-width: 680px;
+  }
+}
+
+/* ======================================================================== */
+/* ECO 테마 (실기기 참조, 세로형) — 밝은 하늘색 + 도트 배경                     */
+/* ======================================================================== */
+
+.eco-bg {
+  background-color: #eaf3fd;
+  background-image: radial-gradient(rgba(120, 170, 220, 0.18) 1.5px, transparent 1.5px);
+  background-size: 18px 18px;
+  color: #1e3a5f;
+}
+
+.eco-header-bar {
+  background: linear-gradient(180deg, #7ba7d9 0%, #6b9bd1 100%);
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(30, 58, 95, 0.4);
+}
+
+.eco-card {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(140, 180, 220, 0.5);
+  border-radius: 1rem;
+  box-shadow: 0 2px 12px rgba(90, 140, 190, 0.15);
+}
+
+.eco-btn-primary {
+  background: linear-gradient(180deg, #8ec3ef 0%, #5ea3dd 100%);
+  border-bottom: 3px solid #3d7fb8;
+  color: #0f2f52;
+  font-weight: 700;
+  border-radius: 0.75rem;
+  min-height: 56px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.eco-btn-primary:active {
+  transform: translateY(1px);
+  border-bottom-width: 2px;
+}
+
+.eco-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.eco-btn-secondary {
+  background: linear-gradient(180deg, #a9cdf0 0%, #7fb0e3 100%);
+  border-bottom: 3px solid #5b8fc4;
+  color: #173a5e;
+  font-weight: 600;
+  border-radius: 0.75rem;
+  min-height: 56px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.eco-btn-secondary:active {
+  transform: translateY(1px);
+  border-bottom-width: 2px;
+}
+
+.eco-step-pill {
+  border-radius: 9999px;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #5b7a99;
+  white-space: nowrap;
+}
+
+.eco-step-pill-active {
+  background: #8e8ed6;
+  color: #ffffff;
+  box-shadow: 0 1px 6px rgba(142, 142, 214, 0.5);
+}
+
+.eco-user-pill {
+  background: #ffffff;
+  border: 1px solid rgba(140, 180, 220, 0.6);
+  border-radius: 9999px;
+  box-shadow: 0 1px 4px rgba(90, 140, 190, 0.12);
+}
+
+.eco-ticker-bar {
+  background: #eef6ee;
+  border-top: 1px solid rgba(140, 180, 160, 0.4);
+}
+
+.eco-title-text {
+  color: #3b5bdb;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.8);
 }

@@ -15,6 +15,22 @@
 /** TTS 활성화 상태 (기본값: 활성) */
 let ttsEnabled = true;
 
+/** TTS 기본 음량 (0~1, 관리자 kiosk.volume 설정 반영) */
+let defaultVolume = 1.0;
+
+/**
+ * TTS 기본 음량 설정 (관리자 설정 0~100 → 0~1 변환값)
+ */
+export function setDefaultVolume(volume: number) {
+  if (typeof volume !== 'number' || Number.isNaN(volume)) return;
+  defaultVolume = Math.min(1, Math.max(0, volume));
+}
+
+/** TTS 기본 음량 조회 */
+export function getDefaultVolume() {
+  return defaultVolume;
+}
+
 /**
  * TTS 활성화/비활성화 설정
  * @param enabled - 활성화 여부
@@ -56,7 +72,7 @@ export function speak(text: string, onEnd?: () => void) {
   utterance.lang = 'ko-KR';
   utterance.rate = 0.85; // 시니어 친화적 약간 느린 속도
   utterance.pitch = 1.0;
-  utterance.volume = 1.0;
+  utterance.volume = defaultVolume;
 
   // 한국어 음성 우선 선택
   const voices = window.speechSynthesis.getVoices();

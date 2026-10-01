@@ -21,7 +21,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Search, Loader2, Users, UserCheck, UserPlus } from 'lucide-react';
+import { Plus, Search, Loader2, Users, UserCheck, UserPlus, Pencil, KeyRound, Trash2 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -47,7 +47,8 @@ import {
 } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
-import Image from 'next/image';
+import AdminHero from '@/components/admin/AdminHero';
+import { useAdminStore } from '@/stores/useAdminStore';
 
 interface AdminUser {
   id: string;
@@ -64,6 +65,7 @@ interface KioskUser {
   name: string;
   phone: string;
   cardNumber: string | null;
+  address?: string | null;
   isActive: boolean;
   activeLoans: number;
   totalLoans: number;
@@ -100,6 +102,10 @@ function UserAvatar({ name, role }: { name: string; role?: string }) {
 }
 
 export default function UsersSection() {
+  const currentAdmin = useAdminStore((s) => s.adminUser);
+  const canManageAdmins = currentAdmin?.role === 'super_admin';
+  const canManageKiosk = useAdminStore((s) => s.hasPermission)('kiosk-users:write');
+
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
   const [kioskUsers, setKioskUsers] = useState<KioskUser[]>([]);
   const [adminLoading, setAdminLoading] = useState(true);
@@ -111,6 +117,18 @@ export default function UsersSection() {
   const [activeTab, setActiveTab] = useState('admins');
   const [form, setForm] = useState({ email: '', name: '', password: '', role: 'operator' });
   const [kioskForm, setKioskForm] = useState({ name: '', birthDate: '', phone: '', address: '', pin: '' });
+
+  // ─── 행 액션 다이얼로그 상태 ───
+  const [editAdminTarget, setEditAdminTarget] = useState<AdminUser | null>(null);
+  const [editAdminName, setEditAdminName] = useState('');
+  const [resetPwTarget, setResetPwTarget] = useState<AdminUser | null>(null);
+  const [resetPwValue, setResetPwValue] = useState('');
+  const [editKioskTarget, setEditKioskTarget] = useState<KioskUser | null>(null);
+  const [editKioskName, setEditKioskName] = useState('');
+  const [editKioskAddress, setEditKioskAddress] = useState('');
+  const [pinResetTarget, setPinResetTarget] = useState<KioskUser | null>(null);
+  const [pinResetValue, setPinResetValue] = useState('');
+  const [actionSaving, setActionSaving] = useState(false);
 
   const fetchAdminUsers = useCallback(async () => {
     try {
@@ -227,11 +245,14 @@ export default function UsersSection() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isActive: !user.isActive }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || '상태 변경에 실패했습니다.');
+      }
       toast.success(user.isActive ? '계정이 비활성화되었습니다.' : '계정이 활성화되었습니다.');
       await fetchAdminUsers();
-    } catch {
-      toast.error('상태 변경에 실패했습니다.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '상태 변경에 실패했습니다.');
     }
   };
 
@@ -242,33 +263,193 @@ export default function UsersSection() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ role: newRole }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || '역할 변경에 실패했습니다.');
+      }
       toast.success('역할이 변경되었습니다.');
       await fetchAdminUsers();
-    } catch {
-      toast.error('역할 변경에 실패했습니다.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '역할 변경에 실패했습니다.');
     }
   };
+
+  // ─── 관리자 행 액션 ───
+  const openEditAdminName = (user: AdminUser) => {
+    setEditAdminTarget(user);
+    setEditAdminName(user.name);
+  };
+
+  const handleEditAdminName = async () => {
+    if (!editAdminTarget) return;
+    const trimmed = editAdminName.trim();
+    if (!trimmed) {
+      toast.error('이름을 입력해주세요.');
+      return;
+    }
+    setActionSaving(true);
+    try {
+      const res = await fetch(`/api/admin/users/${editAdminTarget.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: trimmed }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || '이름 변경에 실패했습니다.');
+      toast.success(data.message || '이름이 변경되었습니다.');
+      setEditAdminTarget(null);
+      await fetchAdminUsers();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '이름 변경에 실패했습니다.');
+    } finally {
+      setActionSaving(false);
+    }
+  };
+
+  const openResetAdminPassword = (user: AdminUser) => {
+    setResetPwTarget(user);
+    setResetPwValue('');
+  };
+
+  const handleResetAdminPassword = async () => {
+    if (!resetPwTarget) return;
+    if (!resetPwValue) {
+      toast.error('새 비밀번호를 입력해주세요.');
+      return;
+    }
+    setActionSaving(true);
+    try {
+      const res = await fetch(`/api/admin/users/${resetPwTarget.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: resetPwValue }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || '비밀번호 초기화에 실패했습니다.');
+      toast.success(data.message || '비밀번호가 초기화되었습니다.');
+      setResetPwTarget(null);
+      setResetPwValue('');
+      await fetchAdminUsers();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '비밀번호 초기화에 실패했습니다.');
+    } finally {
+      setActionSaving(false);
+    }
+  };
+
+  const handleDeleteAdmin = async (user: AdminUser) => {
+    if (!window.confirm(`${user.name}(${user.email}) 계정을 비활성화하시겠습니까?`)) return;
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || '비활성화에 실패했습니다.');
+      toast.success(data.message || '계정이 비활성화되었습니다.');
+      await fetchAdminUsers();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '비활성화에 실패했습니다.');
+    }
+  };
+
+  // ─── 키오스크 행 액션 ───
+  const openEditKiosk = (user: KioskUser) => {
+    setEditKioskTarget(user);
+    setEditKioskName(user.name);
+    setEditKioskAddress(user.address ?? '');
+  };
+
+  const handleEditKiosk = async () => {
+    if (!editKioskTarget) return;
+    const trimmed = editKioskName.trim();
+    if (!trimmed) {
+      toast.error('이름을 입력해주세요.');
+      return;
+    }
+    setActionSaving(true);
+    try {
+      const res = await fetch(`/api/admin/kiosk-users/${editKioskTarget.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: trimmed, address: editKioskAddress.trim() || null }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || '수정에 실패했습니다.');
+      toast.success(data.message || '이용자 정보가 수정되었습니다.');
+      setEditKioskTarget(null);
+      await fetchKioskUsers(kioskSearch || undefined);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '수정에 실패했습니다.');
+    } finally {
+      setActionSaving(false);
+    }
+  };
+
+  const openResetKioskPin = (user: KioskUser) => {
+    setPinResetTarget(user);
+    setPinResetValue('');
+  };
+
+  const handleResetKioskPin = async () => {
+    if (!pinResetTarget) return;
+    if (!/^\d{4}$/.test(pinResetValue)) {
+      toast.error('PIN은 4자리 숫자여야 합니다.');
+      return;
+    }
+    setActionSaving(true);
+    try {
+      const res = await fetch(`/api/admin/kiosk-users/${pinResetTarget.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: pinResetValue }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'PIN 초기화에 실패했습니다.');
+      toast.success(data.message || 'PIN이 초기화되었습니다.');
+      setPinResetTarget(null);
+      setPinResetValue('');
+      await fetchKioskUsers(kioskSearch || undefined);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'PIN 초기화에 실패했습니다.');
+    } finally {
+      setActionSaving(false);
+    }
+  };
+
+  const handleToggleKioskActive = async (user: KioskUser) => {
+    try {
+      const res = await fetch(`/api/admin/kiosk-users/${user.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive: !user.isActive }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || '상태 변경에 실패했습니다.');
+      toast.success(data.message || (user.isActive ? '이용자가 비활성화되었습니다.' : '이용자가 활성화되었습니다.'));
+      await fetchKioskUsers(kioskSearch || undefined);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '상태 변경에 실패했습니다.');
+    }
+  };
+
+  const handleDeleteKiosk = async (user: KioskUser) => {
+    if (!window.confirm(`${user.name} 이용자를 삭제하시겠습니까?`)) return;
+    try {
+      const res = await fetch(`/api/admin/kiosk-users/${user.id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || '삭제에 실패했습니다.');
+      toast.success(data.message || '이용자가 삭제되었습니다.');
+      await fetchKioskUsers(kioskSearch || undefined);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '삭제에 실패했습니다.');
+    }
+  };
+
+  const adminColSpan = canManageAdmins ? 6 : 5;
+  const kioskColSpan = canManageKiosk ? 7 : 6;
 
   return (
     <div className="space-y-4">
       {/* ──────── Hero Banner ──────── */}
-      <div className="relative w-full h-[100px] rounded-xl overflow-hidden border border-slate-700 mb-2">
-        <Image
-          src="/images/admin/users-hero.png"
-          alt="이용자 배너"
-          fill
-          className="object-cover"
-          priority
-        />
-        <div className="absolute inset-0 bg-gradient-to-r from-slate-900/90 via-slate-900/60 to-transparent" />
-        <div className="absolute inset-0 flex items-center px-6">
-          <div>
-            <p className="text-lg font-bold text-white">이용자 계정 관리</p>
-            <p className="text-sm text-slate-300">관리자 및 키오스크 이용자 정보를 관리합니다</p>
-          </div>
-        </div>
-      </div>
+      <AdminHero icon={Users} title="이용자 계정 관리" subtitle="관리자 및 키오스크 이용자 정보를 관리합니다" accent="teal" />
 
       {/* ──────── Section Header with sky-blue gradient underline ──────── */}
       <div className="flex items-center gap-3 mb-2">
@@ -307,15 +488,17 @@ export default function UsersSection() {
       {/* ──────── 관리자 계정 탭 ──────── */}
       {activeTab === 'admins' && (
         <div className="space-y-3">
-          <div className="flex justify-end">
-            <button
-              onClick={() => setDialogOpen(true)}
-              className="h-10 px-4 flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-sky-600 to-sky-700 text-white text-sm font-medium hover:from-sky-500 hover:to-sky-600 transition-all shadow-md shadow-sky-500/20 hover:shadow-lg hover:scale-[1.01] active:scale-[0.99]"
-            >
-              <Plus className="w-4 h-4" />
-              관리자 추가
-            </button>
-          </div>
+          {canManageAdmins && (
+            <div className="flex justify-end">
+              <button
+                onClick={() => setDialogOpen(true)}
+                className="h-10 px-4 flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-sky-600 to-sky-700 text-white text-sm font-medium hover:from-sky-500 hover:to-sky-600 transition-all shadow-md shadow-sky-500/20 hover:shadow-lg hover:scale-[1.01] active:scale-[0.99]"
+              >
+                <Plus className="w-4 h-4" />
+                관리자 추가
+              </button>
+            </div>
+          )}
 
           <Card className="bg-slate-900 text-white border-slate-700 shadow-lg">
             <CardContent className="p-0">
@@ -328,60 +511,97 @@ export default function UsersSection() {
                       <TableHead className="text-slate-300">역할</TableHead>
                       <TableHead className="text-center text-slate-300">활성</TableHead>
                       <TableHead className="hidden md:table-cell text-slate-300">마지막 로그인</TableHead>
+                      {canManageAdmins && <TableHead className="text-center text-slate-300">작업</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {adminLoading ? (
                       Array.from({ length: 3 }).map((_, i) => (
                         <TableRow key={i} className="border-slate-700">
-                          <TableCell colSpan={5}><Skeleton className="h-8 w-full bg-slate-800" /></TableCell>
+                          <TableCell colSpan={adminColSpan}><Skeleton className="h-8 w-full bg-slate-800" /></TableCell>
                         </TableRow>
                       ))
                     ) : adminUsers.length === 0 ? (
                       <TableRow className="border-slate-700">
-                        <TableCell colSpan={5} className="text-center py-8 text-slate-400">
+                        <TableCell colSpan={adminColSpan} className="text-center py-8 text-slate-400">
                           관리자 계정이 없습니다.
                         </TableCell>
                       </TableRow>
                     ) : (
-                      adminUsers.map((user) => (
-                        <TableRow key={user.id} className="border-slate-700 hover:bg-slate-800/60 transition-colors duration-150">
-                          <TableCell className="font-medium text-sm">
-                            <div className="flex items-center gap-2">
-                              <UserAvatar name={user.name} role={user.role} />
-                              <span className="text-white">{user.name}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-sm text-slate-300">{user.email}</TableCell>
-                          <TableCell>
-                            <Select
-                              value={user.role}
-                              onValueChange={(v) => handleUpdateRole(user, v)}
-                            >
-                              <SelectTrigger className="h-7 w-28 bg-slate-800 border-slate-600 text-slate-200 focus:ring-sky-500">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent className="bg-slate-800 border-slate-700">
-                                <SelectItem value="super_admin" className="text-slate-200 focus:bg-slate-700 focus:text-white">최고관리자</SelectItem>
-                                <SelectItem value="admin" className="text-slate-200 focus:bg-slate-700 focus:text-white">관리자</SelectItem>
-                                <SelectItem value="operator" className="text-slate-200 focus:bg-slate-700 focus:text-white">운영자</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <Switch
-                              checked={user.isActive}
-                              onCheckedChange={() => handleToggleActive(user)}
-                              className="data-[state=checked]:bg-sky-500"
-                            />
-                          </TableCell>
-                          <TableCell className="hidden md:table-cell text-xs text-slate-400">
-                            {user.lastLoginAt
-                              ? new Date(user.lastLoginAt).toLocaleDateString('ko-KR')
-                              : '없음'}
-                          </TableCell>
-                        </TableRow>
-                      ))
+                      adminUsers.map((user) => {
+                        const isSelf = currentAdmin?.id === user.id;
+                        return (
+                          <TableRow key={user.id} className="border-slate-700 hover:bg-slate-800/60 transition-colors duration-150">
+                            <TableCell className="font-medium text-sm">
+                              <div className="flex items-center gap-2">
+                                <UserAvatar name={user.name} role={user.role} />
+                                <span className="text-white">{user.name}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-sm text-slate-300">{user.email}</TableCell>
+                            <TableCell>
+                              <Select
+                                value={user.role}
+                                onValueChange={(v) => handleUpdateRole(user, v)}
+                              >
+                                <SelectTrigger className="h-7 w-28 bg-slate-800 border-slate-600 text-slate-200 focus:ring-sky-500">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent className="bg-slate-800 border-slate-700">
+                                  <SelectItem value="super_admin" className="text-slate-200 focus:bg-slate-700 focus:text-white">최고관리자</SelectItem>
+                                  <SelectItem value="admin" className="text-slate-200 focus:bg-slate-700 focus:text-white">관리자</SelectItem>
+                                  <SelectItem value="operator" className="text-slate-200 focus:bg-slate-700 focus:text-white">운영자</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Switch
+                                checked={user.isActive}
+                                onCheckedChange={() => handleToggleActive(user)}
+                                className="data-[state=checked]:bg-sky-500"
+                              />
+                            </TableCell>
+                            <TableCell className="hidden md:table-cell text-xs text-slate-400">
+                              {user.lastLoginAt
+                                ? new Date(user.lastLoginAt).toLocaleDateString('ko-KR')
+                                : '없음'}
+                            </TableCell>
+                            {canManageAdmins && (
+                              <TableCell className="text-center">
+                                <div className="flex items-center justify-center gap-1">
+                                  <button
+                                    onClick={() => openEditAdminName(user)}
+                                    disabled={isSelf}
+                                    title={isSelf ? '자신의 계정은 변경할 수 없습니다' : '이름 수정'}
+                                    aria-label={`${user.name} 이름 수정`}
+                                    className="p-1.5 rounded-md text-slate-400 hover:text-sky-400 hover:bg-slate-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-slate-400 disabled:hover:bg-transparent"
+                                  >
+                                    <Pencil className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => openResetAdminPassword(user)}
+                                    disabled={isSelf}
+                                    title={isSelf ? '자신의 계정은 변경할 수 없습니다' : '비밀번호 초기화'}
+                                    aria-label={`${user.name} 비밀번호 초기화`}
+                                    className="p-1.5 rounded-md text-slate-400 hover:text-amber-400 hover:bg-slate-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-slate-400 disabled:hover:bg-transparent"
+                                  >
+                                    <KeyRound className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteAdmin(user)}
+                                    disabled={isSelf}
+                                    title={isSelf ? '자신의 계정은 변경할 수 없습니다' : '계정 비활성화'}
+                                    aria-label={`${user.name} 계정 비활성화`}
+                                    className="p-1.5 rounded-md text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-slate-400 disabled:hover:bg-transparent"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </TableCell>
+                            )}
+                          </TableRow>
+                        );
+                      })
                     )}
                   </TableBody>
                 </Table>
@@ -395,13 +615,15 @@ export default function UsersSection() {
       {activeTab === 'kiosk' && (
         <div className="space-y-3">
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => setKioskDialogOpen(true)}
-              className="h-10 px-4 flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-sky-600 to-sky-700 text-white text-sm font-medium hover:from-sky-500 hover:to-sky-600 transition-all shadow-md shadow-sky-500/20 hover:shadow-lg hover:scale-[1.01] active:scale-[0.99]"
-            >
-              <UserPlus className="w-4 h-4" />
-              키오스크 이용자 등록
-            </button>
+            {canManageKiosk && (
+              <button
+                onClick={() => setKioskDialogOpen(true)}
+                className="h-10 px-4 flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-sky-600 to-sky-700 text-white text-sm font-medium hover:from-sky-500 hover:to-sky-600 transition-all shadow-md shadow-sky-500/20 hover:shadow-lg hover:scale-[1.01] active:scale-[0.99]"
+              >
+                <UserPlus className="w-4 h-4" />
+                키오스크 이용자 등록
+              </button>
+            )}
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <Input
@@ -427,18 +649,19 @@ export default function UsersSection() {
                       <TableHead className="text-center text-slate-300">활성</TableHead>
                       <TableHead className="text-center text-slate-300">활성 대출</TableHead>
                       <TableHead className="text-center hidden sm:table-cell text-slate-300">총 대출</TableHead>
+                      {canManageKiosk && <TableHead className="text-center text-slate-300">작업</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {kioskLoading ? (
                       Array.from({ length: 5 }).map((_, i) => (
                         <TableRow key={i} className="border-slate-700">
-                          <TableCell colSpan={6}><Skeleton className="h-8 w-full bg-slate-800" /></TableCell>
+                          <TableCell colSpan={kioskColSpan}><Skeleton className="h-8 w-full bg-slate-800" /></TableCell>
                         </TableRow>
                       ))
                     ) : kioskUsers.length === 0 ? (
                       <TableRow className="border-slate-700">
-                        <TableCell colSpan={6} className="text-center py-8 text-slate-400">
+                        <TableCell colSpan={kioskColSpan} className="text-center py-8 text-slate-400">
                           키오스크 이용자가 없습니다.
                         </TableCell>
                       </TableRow>
@@ -456,9 +679,18 @@ export default function UsersSection() {
                             {user.cardNumber || '-'}
                           </TableCell>
                           <TableCell className="text-center">
-                            <Badge className={`text-xs ${user.isActive ? 'bg-emerald-500 text-white' : 'bg-slate-700 text-slate-300'}`}>
-                              {user.isActive ? '활성' : '비활성'}
-                            </Badge>
+                            {canManageKiosk ? (
+                              <Switch
+                                checked={user.isActive}
+                                onCheckedChange={() => handleToggleKioskActive(user)}
+                                aria-label={`${user.name} 활성 전환`}
+                                className="data-[state=checked]:bg-sky-500"
+                              />
+                            ) : (
+                              <Badge className={`text-xs ${user.isActive ? 'bg-emerald-500 text-white' : 'bg-slate-700 text-slate-300'}`}>
+                                {user.isActive ? '활성' : '비활성'}
+                              </Badge>
+                            )}
                           </TableCell>
                           <TableCell className="text-center">
                             <Badge className={`text-xs ${user.activeLoans > 0 ? 'bg-sky-500 text-white' : 'bg-slate-700 text-slate-300'}`}>
@@ -468,6 +700,36 @@ export default function UsersSection() {
                           <TableCell className="text-center hidden sm:table-cell text-sm text-slate-300">
                             {user.totalLoans}건
                           </TableCell>
+                          {canManageKiosk && (
+                            <TableCell className="text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  onClick={() => openEditKiosk(user)}
+                                  title="이용자 정보 수정"
+                                  aria-label={`${user.name} 정보 수정`}
+                                  className="p-1.5 rounded-md text-slate-400 hover:text-sky-400 hover:bg-slate-800 transition-colors"
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => openResetKioskPin(user)}
+                                  title="PIN 초기화"
+                                  aria-label={`${user.name} PIN 초기화`}
+                                  className="p-1.5 rounded-md text-slate-400 hover:text-amber-400 hover:bg-slate-800 transition-colors"
+                                >
+                                  <KeyRound className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteKiosk(user)}
+                                  title="이용자 삭제"
+                                  aria-label={`${user.name} 삭제`}
+                                  className="p-1.5 rounded-md text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </TableCell>
+                          )}
                         </TableRow>
                       ))
                     )}
@@ -478,6 +740,193 @@ export default function UsersSection() {
           </Card>
         </div>
       )}
+
+      {/* ─── 관리자 이름 수정 다이얼로그 ─── */}
+      <Dialog open={!!editAdminTarget} onOpenChange={(open) => { if (!open) setEditAdminTarget(null); }}>
+        <DialogContent className="sm:max-w-md bg-slate-900 border-slate-700 text-white">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <Pencil className="w-5 h-5 text-sky-400" />
+              관리자 이름 수정
+            </DialogTitle>
+            <DialogDescription className="text-slate-400">
+              {editAdminTarget?.email} 계정의 이름을 수정합니다.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-slate-300">이름</Label>
+              <Input
+                value={editAdminName}
+                onChange={(e) => setEditAdminName(e.target.value)}
+                placeholder="이름 입력"
+                className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 focus:ring-sky-500"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setEditAdminTarget(null)}
+              disabled={actionSaving}
+              className="border-slate-600 text-slate-300 hover:bg-slate-800 hover:text-white"
+            >
+              취소
+            </Button>
+            <button
+              onClick={handleEditAdminName}
+              disabled={actionSaving}
+              className="h-10 px-4 flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-sky-600 to-sky-700 text-white text-sm font-medium hover:from-sky-500 hover:to-sky-600 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {actionSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+              저장
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── 관리자 비밀번호 초기화 다이얼로그 ─── */}
+      <Dialog open={!!resetPwTarget} onOpenChange={(open) => { if (!open) { setResetPwTarget(null); setResetPwValue(''); } }}>
+        <DialogContent className="sm:max-w-md bg-slate-900 border-slate-700 text-white">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <KeyRound className="w-5 h-5 text-amber-400" />
+              비밀번호 초기화
+            </DialogTitle>
+            <DialogDescription className="text-slate-400">
+              {resetPwTarget?.email} 계정의 새 비밀번호를 입력합니다.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-slate-300">새 비밀번호</Label>
+              <Input
+                type="password"
+                value={resetPwValue}
+                onChange={(e) => setResetPwValue(e.target.value)}
+                placeholder="새 비밀번호 입력"
+                className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 focus:ring-sky-500"
+              />
+              <p className="text-xs text-slate-500">8자 이상·영문 대소문자/숫자/특수문자 중 3종 이상 포함</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => { setResetPwTarget(null); setResetPwValue(''); }}
+              disabled={actionSaving}
+              className="border-slate-600 text-slate-300 hover:bg-slate-800 hover:text-white"
+            >
+              취소
+            </Button>
+            <button
+              onClick={handleResetAdminPassword}
+              disabled={actionSaving}
+              className="h-10 px-4 flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-sky-600 to-sky-700 text-white text-sm font-medium hover:from-sky-500 hover:to-sky-600 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {actionSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+              초기화
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── 키오스크 이용자 수정 다이얼로그 ─── */}
+      <Dialog open={!!editKioskTarget} onOpenChange={(open) => { if (!open) setEditKioskTarget(null); }}>
+        <DialogContent className="sm:max-w-md bg-slate-900 border-slate-700 text-white">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <Pencil className="w-5 h-5 text-sky-400" />
+              키오스크 이용자 수정
+            </DialogTitle>
+            <DialogDescription className="text-slate-400">이름과 주소를 수정합니다.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-slate-300">이름</Label>
+              <Input
+                value={editKioskName}
+                onChange={(e) => setEditKioskName(e.target.value)}
+                placeholder="이름 입력"
+                className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 focus:ring-sky-500"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-slate-300">주소</Label>
+              <Input
+                value={editKioskAddress}
+                onChange={(e) => setEditKioskAddress(e.target.value)}
+                placeholder="주소 입력 (비우면 삭제)"
+                className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 focus:ring-sky-500"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setEditKioskTarget(null)}
+              disabled={actionSaving}
+              className="border-slate-600 text-slate-300 hover:bg-slate-800 hover:text-white"
+            >
+              취소
+            </Button>
+            <button
+              onClick={handleEditKiosk}
+              disabled={actionSaving}
+              className="h-10 px-4 flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-sky-600 to-sky-700 text-white text-sm font-medium hover:from-sky-500 hover:to-sky-600 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {actionSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+              저장
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── 키오스크 PIN 초기화 다이얼로그 ─── */}
+      <Dialog open={!!pinResetTarget} onOpenChange={(open) => { if (!open) { setPinResetTarget(null); setPinResetValue(''); } }}>
+        <DialogContent className="sm:max-w-md bg-slate-900 border-slate-700 text-white">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <KeyRound className="w-5 h-5 text-amber-400" />
+              PIN 초기화
+            </DialogTitle>
+            <DialogDescription className="text-slate-400">
+              {pinResetTarget?.name} 이용자의 새 4자리 PIN을 입력합니다.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-slate-300">새 PIN (4자리 숫자)</Label>
+              <Input
+                type="password"
+                value={pinResetValue}
+                onChange={(e) => setPinResetValue(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                placeholder="1234"
+                maxLength={4}
+                className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 focus:ring-sky-500"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => { setPinResetTarget(null); setPinResetValue(''); }}
+              disabled={actionSaving}
+              className="border-slate-600 text-slate-300 hover:bg-slate-800 hover:text-white"
+            >
+              취소
+            </Button>
+            <button
+              onClick={handleResetKioskPin}
+              disabled={actionSaving}
+              className="h-10 px-4 flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-sky-600 to-sky-700 text-white text-sm font-medium hover:from-sky-500 hover:to-sky-600 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {actionSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+              초기화
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ──────── 키오스크 이용자 등록 다이얼로그 ──────── */}
       <Dialog open={kioskDialogOpen} onOpenChange={setKioskDialogOpen}>

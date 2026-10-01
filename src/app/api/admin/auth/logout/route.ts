@@ -35,14 +35,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 쿠키 삭제 및 응답
+    // 쿠키 삭제 및 응답 (로그인과 동일 Secure 조건이어야 삭제됨)
+    const forwardedProto = request.headers.get('x-forwarded-proto');
+    const isHttps = forwardedProto === 'https';
     const response = NextResponse.json({
       message: '로그아웃 성공',
     });
 
     response.cookies.set('admin_token', '', {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: isHttps,
       sameSite: 'lax',
       maxAge: 0,
       path: '/',

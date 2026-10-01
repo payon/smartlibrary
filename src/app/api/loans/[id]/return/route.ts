@@ -11,13 +11,13 @@
  * - 레이트 리미팅
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
 import { OVERDUE_BLOCK_MULTIPLIER } from '@/lib/constants';
+import { json } from '@/lib/api-helpers';
 import {
   validateCuid,
   checkRateLimit,
-  validateJsonContentType,
   validateRequestBodySize,
   validateDateRange,
   getClientIp,
@@ -41,9 +41,9 @@ export async function POST(
 
     // [보안] CUID 형식 ID 검증
     if (!validateCuid(id)) {
-      return NextResponse.json(
+      return json(
         { error: '잘못된 대출 ID 형식입니다.' },
-        { status: 400 }
+        400
       );
     }
 
@@ -51,37 +51,48 @@ export async function POST(
     const clientIp = getClientIp(request);
     const rateLimit = checkRateLimit(`${RATE_LIMIT_PREFIX}${clientIp}`, 60000, 30);
     if (!rateLimit.allowed) {
-      return NextResponse.json(
+      return json(
         { error: '너무 많은 요청입니다. 잠시 후 다시 시도해주세요.' },
-        { status: 429 }
+        429
       );
     }
 
-    // [보안] Content-Type 검증
-    if (!validateJsonContentType(request)) {
-      return NextResponse.json(
-        { error: '잘못된 요청 형식입니다.' },
-        { status: 415 }
-      );
+    // 본문은 선택적 (키오스크는 빈 JSON 전송). 있으면 크기만 검사
+    let body: { returnDate?: string; userId?: string } = {};
+    const contentLength = request.headers.get('content-length');
+    if (contentLength && contentLength !== '0') {
+      if (!(await validateRequestBodySize(request))) {
+        return json(
+          { error: '요청 크기가 너무 큽니다.' },
+          413
+        );
+      }
+      try {
+        body = await request.json();
+      } catch {
+        body = {};
+      }
     }
-
-    // [보안] 요청 본문 크기 검증
-    if (!(await validateRequestBodySize(request))) {
-      return NextResponse.json(
-        { error: '요청 크기가 너무 큽니다.' },
-        { status: 413 }
-      );
-    }
-
-    const body = await request.json();
     const returnDateStr = body.returnDate ?? new Date().toISOString().split('T')[0];
 
     // [보안] 반납일 형식 검증
     if (typeof returnDateStr !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(returnDateStr)) {
-      return NextResponse.json(
+      return json(
         { error: '올바른 반납일 형식이 아닙니다.' },
-        { status: 400 }
+        400
       );
+    }
+    if (!validateDateRange('2000-01-01', returnDateStr)) {
+      return json({ error: '올바른 반납일 형식이 아닙니다.' }, 400);
+    }
+    {
+      const todayStr = new Date().toISOString().split('T')[0];
+      if (!validateDateRange(returnDateStr, todayStr) && returnDateStr !== todayStr) {
+        // 미래 반납일 거부 (당일은 허용)
+        if (returnDateStr > todayStr) {
+          return json({ error: '반납일은 오늘 이후일 수 없습니다.' }, 400);
+        }
+      }
     }
 
     // [데이터베이스] Prisma ORM 파라미터화 쿼리
@@ -91,17 +102,22 @@ export async function POST(
     });
 
     if (!loan) {
-      return NextResponse.json(
+      return json(
         { error: '대출 기록을 찾을 수 없습니다.' },
-        { status: 404 }
+        404
       );
     }
 
     if (loan.status === 'returned') {
-      return NextResponse.json(
+      return json(
         { error: '이미 반납된 도서입니다.' },
-        { status: 400 }
+        400
       );
+    }
+
+    // [보안] 소유권 검사 (userId가 제공되면 일치해야 함)
+    if (body.userId && body.userId !== loan.userId) {
+      return json({ error: '본인의 대출만 반납할 수 있습니다.' }, 403);
     }
 
     // 연체 일수 및 페널티 계산
@@ -115,32 +131,54 @@ export async function POST(
     // 연체일수만큼 대여 정지 (연체료 없음)
     const penaltyDays = overdueDays * OVERDUE_BLOCK_MULTIPLIER;
 
-    // [데이터베이스] 반납 처리
-    const updatedLoan = await db.simLoan.update({
-      where: { id },
-      data: {
-        status: 'returned',
-        returnDate: returnDateStr,
-      },
-      include: { book: true },
+    // [데이터베이스] 반납 처리 (원자적: active 상태일 때만 전이 + 재고 복구 상한)
+    const result = await db.$transaction(async (tx) => {
+      const updated = await tx.simLoan.updateMany({
+        where: { id, status: 'active' },
+        data: {
+          status: 'returned',
+          returnDate: returnDateStr,
+        },
+      });
+      if (updated.count === 0) {
+        throw new Error('이미 반납된 도서입니다.');
+      }
+      const book = await tx.book.findUnique({ where: { id: loan.bookId } });
+      if (book && book.availableCopies < book.totalCopies) {
+        await tx.book.update({
+          where: { id: loan.bookId },
+          data: { availableCopies: { increment: 1 } },
+        });
+      }
+      return tx.simLoan.findUnique({ where: { id }, include: { book: true } });
     });
+    const updatedLoan = result!;
 
-    // 본수 복구
-    await db.book.update({
-      where: { id: loan.bookId },
-      data: { availableCopies: { increment: 1 } },
-    });
-
-    return NextResponse.json({
+    return json({
       loan: updatedLoan,
       overdueDays,
       penaltyDays,
+      penalty:
+        overdueDays > 0
+          ? {
+              overdueDays,
+              blockDays: penaltyDays,
+              blockUntil: new Date(Date.now() + penaltyDays * 86400000).toISOString(),
+            }
+          : null,
+      message:
+        overdueDays > 0
+          ? `반납이 완료되었습니다. (${overdueDays}일 연체로 ${penaltyDays}일간 대출이 제한됩니다.)`
+          : '반납이 완료되었습니다.',
     });
   } catch (error) {
     console.error('반납 오류:', error);
-    return NextResponse.json(
+    if (error instanceof Error && error.message === '이미 반납된 도서입니다.') {
+      return json({ error: '이미 반납된 도서입니다.' }, 400);
+    }
+    return json(
       { error: '도서 반납 중 오류가 발생했습니다.' },
-      { status: 500 }
+      500
     );
   }
 }

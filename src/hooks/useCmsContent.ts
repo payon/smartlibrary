@@ -8,7 +8,8 @@ import { useAppStore } from '@/stores/useAppStore';
  *
  * [기능]
  * - 마운트 시 /api/content에서 전체 콘텐츠 조회
- * - 30초 간격으로 버전 비교 후 변경 시에만 스토어 업데이트
+ * - 5초 간격으로 경량 버전 확인 후 변경 시에만 전체 재조회
+ * - 관리자가 저장하면 수초 내 프론트에 즉시 반영
  * - 관리자 모드에서는 폴링하지 않음 (관리자가 자체 데이터 관리)
  *
  * [주의]
@@ -16,7 +17,7 @@ import { useAppStore } from '@/stores/useAppStore';
  * - 대신 ref로 최신 버전을 추적하여 비교
  */
 
-const POLL_INTERVAL = 30_000; // 30초
+const VERSION_POLL_INTERVAL = 5_000; // 5초 (경량 버전 확인)
 
 export function useCmsContent() {
   const adminMode = useAppStore((s) => s.adminMode);
@@ -34,28 +35,45 @@ export function useCmsContent() {
       return;
     }
 
-    /** 콘텐츠 조회 함수 */
-    const fetchContent = async () => {
+    /** 전체 콘텐츠 조회 후 스토어 반영 */
+    const fetchFullContent = async () => {
       try {
         const res = await fetch('/api/content');
         if (res.ok) {
           const data = await res.json();
-          // 버전이 변경된 경우에만 스토어 업데이트
-          if (data.version !== undefined && data.version !== versionRef.current) {
+          if (data.version !== undefined) {
             versionRef.current = data.version;
-            setCmsContent(data.content || {}, data.version);
           }
+          setCmsContent(data.content || {}, data.version ?? versionRef.current);
         }
       } catch {
         // 조회 실패 시 무시 (기존 콘텐츠 유지)
       }
     };
 
-    // 최초 1회 조회
-    fetchContent();
+    /** 경량 버전 확인 → 변경 시에만 전체 조회 */
+    const pollVersion = async () => {
+      try {
+        const res = await fetch('/api/content/version');
+        if (!res.ok) {
+          // 버전 API 실패 시 전체 조회로 폴백
+          await fetchFullContent();
+          return;
+        }
+        const data = await res.json();
+        if (data.version !== undefined && data.version !== versionRef.current) {
+          await fetchFullContent();
+        }
+      } catch {
+        // 조회 실패 시 무시 (기존 콘텐츠 유지)
+      }
+    };
 
-    // 30초 간격 폴링
-    intervalRef.current = setInterval(fetchContent, POLL_INTERVAL);
+    // 최초 1회 전체 조회
+    fetchFullContent();
+
+    // 5초 간격 버전 폴링
+    intervalRef.current = setInterval(pollVersion, VERSION_POLL_INTERVAL);
 
     return () => {
       if (intervalRef.current) {

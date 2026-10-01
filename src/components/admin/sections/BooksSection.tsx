@@ -12,7 +12,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { Plus, Pencil, Trash2, Search, Loader2, BookOpen, LayoutGrid, List } from 'lucide-react';
-import Image from 'next/image';
+import AdminHero from '@/components/admin/AdminHero';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -259,32 +259,7 @@ export default function BooksSection() {
   return (
     <div className="space-y-4">
       {/* Section Header with hero banner + gradient underline */}
-      <div className="relative w-full h-[100px] rounded-xl overflow-hidden border border-slate-700">
-        <Image
-          src="/images/admin/books-hero.png"
-          alt="도서 배너"
-          fill
-          className="object-cover"
-          priority
-        />
-        <div className="absolute inset-0 bg-gradient-to-r from-slate-900/90 via-slate-900/60 to-transparent" />
-        <div className="absolute inset-0 flex items-center px-6">
-          <div>
-            <p className="text-lg font-bold text-white">도서 관리</p>
-            <p className="text-sm text-slate-300">도서 등록, 수정, 재고 관리</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Loan process decorative illustration */}
-      <div className="relative w-full h-[50px] rounded-lg overflow-hidden border border-slate-700/50">
-        <Image
-          src="/images/admin/loan-process.png"
-          alt="대출 프로세스"
-          fill
-          className="object-cover opacity-30"
-        />
-      </div>
+      <AdminHero icon={BookOpen} title="도서 관리" subtitle="도서 등록, 수정, 재고 관리" accent="emerald" />
 
       {/* 상단 바: 검색 + 필터 + 뷰 토글 + 추가 */}
       <div className="flex items-center gap-3 flex-wrap">

@@ -20,7 +20,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Search, Filter, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
+import { Search, Filter, ChevronLeft, ChevronRight, FileText, ScrollText } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -36,7 +36,6 @@ import {
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
-import Image from 'next/image';
 
 interface AuditLog {
   id: string;
@@ -167,15 +166,7 @@ export default function AuditSection() {
     <div className="space-y-4">
       {/* ──────── Section Header with sky-blue gradient underline ──────── */}
       <div className="flex items-center gap-3 mb-2">
-        <div className="shrink-0 w-8 h-8 rounded-lg overflow-hidden border border-slate-700/50 bg-slate-800">
-          <Image
-            src="/images/admin/kiosk-device.png"
-            alt="키오스크 단말기"
-            width={32}
-            height={32}
-            className="w-full h-full object-contain"
-          />
-        </div>
+        <div className="shrink-0 w-8 h-8 rounded-lg border border-slate-700/50 bg-slate-800 flex items-center justify-center"><ScrollText className="w-4 h-4 text-sky-400" /></div>
         <h2 className="text-xl font-bold text-white flex items-center gap-2">
           감사 로그
           <span className="block w-16 h-0.5 bg-gradient-to-r from-sky-500 via-sky-400 to-transparent rounded-full" />

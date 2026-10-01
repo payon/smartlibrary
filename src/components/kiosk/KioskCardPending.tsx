@@ -20,10 +20,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAppStore } from '@/stores/useAppStore';
+import { useKioskSpeak } from '@/hooks/useKioskSpeak';
 import { Clock, User, CalendarDays, Phone, XCircle, CreditCard, CheckCircle2 } from 'lucide-react';
 import { CmsText } from '@/components/kiosk/CmsText';
+import { useScreenTheme } from '@/components/kiosk/CmsMedia';
+import { useCmsText } from '@/hooks/useCmsContent';
 
 export default function KioskCardPending() {
+  const cardPendingTitle = useCmsText('cardpending.title', '발급 신청이 완료되었습니다');
+  const theme = useScreenTheme('card-pending', '#0b1120');
+  useKioskSpeak(`${cardPendingTitle}. 발급 신청이 완료되었습니다. 담당자 승인을 기다려주세요.`);
   const { cardApplication, cardResult, setCardResult, setScreen, setCardApplication } = useAppStore();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [autoApproved, setAutoApproved] = useState(false);
@@ -102,7 +108,7 @@ export default function KioskCardPending() {
   return (
     <div
       className="flex flex-col h-screen"
-      style={{ background: '#0b1120' }}
+      style={theme.style}
     >
       {/* 상단 안내 영역 */}
       <header className="text-center pt-16 pb-6 px-6">

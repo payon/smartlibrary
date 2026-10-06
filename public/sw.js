@@ -11,23 +11,29 @@
  */
 
 // 캐시 버전 - 빌드 시마다 업데이트하여 이전 캐시 무효화
-const CACHE_NAME = 'smartlib-sim-v1';
+const CACHE_NAME = 'smartlib-sim-v2';
 
 // 사전 캐싱할 정적 에셋 목록 (서비스 워커 설치 시 캐시)
 const PRECACHE_URLS = [
   '/',
+  '/offline.html',
   '/manifest.json',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
+  '/icons/icon-1024.png',
   '/icons/icon-180.png',
   '/icons/favicon-32.png',
+  '/icons/maskable-icon-192.png',
+  '/icons/maskable-icon-512.png',
 ];
 
 // 정적 에셋 매칭 패턴 (Cache First 전략 적용)
 const STATIC_PATTERNS = [
   /\/icons\//,
+  /\/screenshots\//,
   /\/_next\/static\//,
   /\/\.well-known\//,
+  /\/offline\.html$/,
 ];
 
 // API 요청 매칭 패턴 (Network First 전략 적용)
@@ -152,26 +158,64 @@ async function networkFirstStrategy(event) {
  * Stale While Revalidate 전략
  * 캐시에서 즉시 반환하면서 백그라운드에서 네트워크에서 업데이트.
  * HTML 페이지 등 사용자 경험을 빠르게 하면서 최신 데이터 유지에 적합합니다.
+ * 캐시도 없고 네트워크도 실패하면 /offline.html 폴백을 반환합니다.
  * @param {FetchEvent} event - fetch 이벤트
  */
 async function staleWhileRevalidateStrategy(event) {
   const cache = await caches.open(CACHE_NAME);
   const cachedResponse = await cache.match(event.request);
 
+  // 네비게이션 요청은 네트워크 우선으로 시도 (최신 HTML 보장)
+  if (event.request.mode === 'navigate') {
+    try {
+      const networkResponse = await fetch(event.request);
+      if (networkResponse.ok) {
+        cache.put(event.request, networkResponse.clone());
+      }
+      return networkResponse;
+    } catch (error) {
+      // 네트워크 실패 시 캐시 → 오프라인 페이지 순으로 폴백
+      if (cachedResponse) return cachedResponse;
+      const offlinePage = await cache.match('/offline.html');
+      if (offlinePage) return offlinePage;
+      return new Response('오프라인 상태입니다. 네트워크 연결을 확인해주세요.', {
+        status: 503,
+        statusText: 'Service Unavailable',
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+      });
+    }
+  }
+
+  // 정적/기타 GET 요청: 캐시 즉시 반환 + 백그라운드 업데이트
   // 백그라운드에서 네트워크 업데이트 (실패해도 무시)
   const fetchPromise = fetch(event.request)
     .then((networkResponse) => {
-      if (networkResponse.ok) {
+      if (networkResponse && networkResponse.ok) {
         cache.put(event.request, networkResponse.clone());
       }
       return networkResponse;
     })
     .catch(() => {
       // 네트워크 실패는 무시 (캐시된 버전 사용)
+      return undefined;
     });
 
   // 캐시에 있으면 즉시 반환, 없으면 네트워크 응답 대기
-  return cachedResponse || fetchPromise;
+  if (cachedResponse) {
+    // 백그라운드 업데이트는 fire-and-forget (await 하지 않음)
+    if (fetchPromise && typeof fetchPromise.catch === 'function') {
+      fetchPromise.catch(() => {});
+    }
+    return cachedResponse;
+  }
+  const networkResponse = await fetchPromise;
+  if (networkResponse) return networkResponse;
+  // 둘 다 실패하면 오프라인 텍스트 폴백 (절대 undefined 반환 금지)
+  return new Response('오프라인 상태입니다. 네트워크 연결을 확인해주세요.', {
+    status: 503,
+    statusText: 'Service Unavailable',
+    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+  });
 }
 
 /**

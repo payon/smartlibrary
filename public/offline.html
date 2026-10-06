@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" content="#0f172a" />
+<title>오프라인 | SMART LIBRARY</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+<link rel="manifest" href="/manifest.json" />
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0f172a; color: #fff; font-family: system-ui, -apple-system, "Noto Sans KR", sans-serif; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+  .card { max-width: 420px; width: 100%; text-align: center; background: #1e293b; border-radius: 20px; padding: 40px 28px; box-shadow: 0 20px 60px rgba(0,0,0,.4); }
+  .icon { width: 72px; height: 72px; border-radius: 18px; background: #0e5a6d; display: flex; align-items: center; justify-content: center; font-size: 36px; margin: 0 auto 20px; }
+  h1 { font-size: 22px; font-weight: 800; margin-bottom: 12px; }
+  p { font-size: 15px; color: #94a3b8; line-height: 1.7; margin-bottom: 24px; }
+  button { width: 100%; height: 52px; border: 0; border-radius: 14px; background: #0e5a6d; color: #fff; font-size: 17px; font-weight: 700; cursor: pointer; }
+  button:hover { background: #0c4a5a; }
+</style>
+</head>
+<body>
+  <main class="card">
+    <div class="icon">📚</div>
+    <h1>오프라인 상태입니다</h1>
+    <p>네트워크 연결이 끊어졌습니다.<br />연결 후 다시 시도해 주세요.<br />캐시된 화면은 계속 이용할 수 있습니다.</p>
+    <button onclick="location.reload()">다시 시도</button>
+  </main>
+</body>
+</html>

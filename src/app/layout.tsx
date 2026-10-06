@@ -11,6 +11,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Toaster } from "sonner";
+import PwaStatus from "@/components/PwaStatus";
 
 /** PWA 테마 컬러 */
 const THEME_COLOR = "#0f172a";
@@ -73,6 +74,7 @@ export default function RootLayout({
         <div id="app-root" className="h-screen w-screen overflow-hidden">
           {children}
         </div>
+        <PwaStatus />
         <Toaster position="top-center" richColors closeButton />
       </body>
     </html>

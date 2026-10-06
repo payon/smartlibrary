@@ -235,6 +235,17 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // 크로스 오리진 요청은 가로채지 않음
+  // (외부 이미지/CDN 등을 SW가 fetch하면 SW 자신의 CSP에 막혀
+  // 합성 503을 반환하게 되므로 브라우저에 그대로 맡김)
+  try {
+    if (new URL(event.request.url).origin !== self.location.origin) {
+      return;
+    }
+  } catch (e) {
+    return;
+  }
+
   const url = event.request.url;
 
   // 전략 분기

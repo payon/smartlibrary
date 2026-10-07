@@ -53,8 +53,8 @@ services:
       db:
         condition: service_healthy
     ports:
-      # 외부 직접 접속용 (방화벽에서 제어). CloudPanel 프록시 사용 시 127.0.0.1: 로 변경 권장
-      - "${KIOSK_PORT:-3200}:3000"
+      # CloudPanel nginx 리버스 프록시 경유만 허용 (외부 직접 포트 접속 차단)
+      - "127.0.0.1:${KIOSK_PORT:-3200}:3000"
     environment:
       # 데이터베이스 (PostgreSQL)
       - DATABASE_URL=postgresql://${POSTGRES_USER:-library}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 필요}@db:5432/${POSTGRES_DB:-smartlib}
